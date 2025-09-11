@@ -1,0 +1,15 @@
+# Kobong: normalize EOL + silence artifact warnings
+.gitignore          text eol=lf
+.gitattributes      text eol=lf
+*.yml               text eol=lf
+*.yaml              text eol=lf
+reports/releases/** -text
+*.sha256            -text
+*.zip               binary
+*.tgz               binary
+
+# --- GPT5 harden: EOL rules ---
+* text=auto
+*.mjs text eol=lf
+*.md  text eol=lf
+*.ps1 text eol=crlf

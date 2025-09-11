@@ -1,0 +1,25 @@
+﻿export interface ReportRequest {
+  title: string;
+  columns: string[];
+  rows: Array<Record<string, unknown>>;
+  /** default: "csv" */
+  format?: "csv" | "json";
+}
+
+export interface ReportResult {
+  title: string;
+  rows: number;
+  columns: number;
+  /** inline artifact (when generated in-memory) */
+  buffer?: string;
+  /** optional persisted artifact path */
+  artifactPath?: string;
+}
+
+export interface PortContext {
+  traceId?: string;
+}
+
+export interface ReportEnginePort {
+  run(req: ReportRequest, ctx?: PortContext): Promise<ReportResult>;
+}

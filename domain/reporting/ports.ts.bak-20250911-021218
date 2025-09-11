@@ -1,0 +1,24 @@
+/**
+ * domain/reporting/ports.ts
+ * Contract-first: ReportEnginePort + DTOs
+ */
+export interface ReportRequest {
+  title: string;
+  columns: string[];
+  rows: Record<string, unknown>[];
+}
+
+export interface ReportResult {
+  mime: "text/csv" | "application/json" | "text/plain";
+  content: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface ReportEnginePort {
+  generate(req: ReportRequest): Promise<ReportResult>;
+}
+export interface ParsePort {}
+
+export interface QueryPort {}
+
+export interface RenderPort {}

@@ -1,0 +1,16 @@
+﻿import { ReportEnginePort, ReportRequest, ReportResult } from "../../domain/reporting/ports";
+
+export class ReportService {
+  constructor(private readonly engine: ReportEnginePort) {}
+
+  // call site remains generate(...) for service API, but internally we call engine.run(req)
+  async generate(ast: { from: string; columns: string[] }, projected: Array<Record<string, unknown>>): Promise<ReportResult> {
+    const req: ReportRequest = {
+      title: `report:${ast.from}`,
+      columns: ast.columns,
+      rows: projected,
+      format: "csv",
+    };
+    return this.engine.run(req);
+  }
+}

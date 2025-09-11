@@ -1,0 +1,20 @@
+{
+    "name": "kobong-ui",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "scripts": {
+        "build": "tsc -p tsconfig.build.json",
+        "test": "vitest run --reporter=dot",
+        "demo": "npm run build && node dist/ui.console.js"
+    },
+    "devDependencies": {
+        "@types/node": "20.11.19",
+        "typescript": "5.4.5",
+        "vitest": "3.2.4"
+    },
+    "dependencies": {
+        "gpt5-conductor": "file:..",
+        "zod": "3.23.8"
+    }
+}

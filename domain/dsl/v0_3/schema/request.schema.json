@@ -1,0 +1,646 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Action DSL v0.3 Request",
+  "type": "object",
+  "required": [
+    "version",
+    "plan_id",
+    "steps"
+  ],
+  "properties": {
+    "version": {
+      "const": "0.3"
+    },
+    "plan_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "trace_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": true
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/Step"
+      }
+    }
+  },
+  "$defs": {
+    "Role": {
+      "enum": [
+        "conductor",
+        "gpt5",
+        "ai1",
+        "ai2"
+      ]
+    },
+    "Pointer": {
+      "type": "string",
+      "pattern": "^@[_A-Za-z][-_A-Za-z0-9]*$"
+    },
+    "TimeoutMs": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 600000
+    },
+    "Step": {
+      "type": "object",
+      "required": [
+        "step",
+        "actions"
+      ],
+      "properties": {
+        "step": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "explain": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/Action"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "Common": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+        },
+        "assert": {
+          "type": "boolean"
+        },
+        "retry": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "timeout_ms": {
+          "$ref": "#/$defs/TimeoutMs"
+        }
+      },
+      "additionalProperties": true
+    },
+    "Action": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Locate"
+        },
+        {
+          "$ref": "#/$defs/Focus"
+        },
+        {
+          "$ref": "#/$defs/Paste"
+        },
+        {
+          "$ref": "#/$defs/Type"
+        },
+        {
+          "$ref": "#/$defs/Press"
+        },
+        {
+          "$ref": "#/$defs/Click"
+        },
+        {
+          "$ref": "#/$defs/Double"
+        },
+        {
+          "$ref": "#/$defs/Drag"
+        },
+        {
+          "$ref": "#/$defs/Scroll"
+        },
+        {
+          "$ref": "#/$defs/Wait"
+        },
+        {
+          "$ref": "#/$defs/WaitFor"
+        },
+        {
+          "$ref": "#/$defs/Snapshot"
+        },
+        {
+          "$ref": "#/$defs/Verify"
+        },
+        {
+          "$ref": "#/$defs/Navigate"
+        }
+      ]
+    },
+    "Locate": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Common"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op",
+            "by"
+          ],
+          "properties": {
+            "op": {
+              "const": "LOCATE"
+            },
+            "role": {
+              "$ref": "#/$defs/Role"
+            },
+            "by": {
+              "enum": [
+                "text",
+                "icon",
+                "anchor",
+                "coord"
+              ]
+            },
+            "query": {
+              "type": [
+                "string",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "template_id": {
+              "type": "string"
+            },
+            "area": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 4,
+              "items": {
+                "type": "number"
+              }
+            },
+            "score_threshold": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Focus": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Common"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op",
+            "target"
+          ],
+          "properties": {
+            "op": {
+              "const": "FOCUS"
+            },
+            "target": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Pointer"
+                },
+                {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Paste": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Common"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op",
+            "text"
+          ],
+          "properties": {
+            "op": {
+              "const": "PASTE"
+            },
+            "text": {
+              "type": "string"
+            },
+            "clear": {
+              "type": "boolean"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Type": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Common"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op",
+            "text"
+          ],
+          "properties": {
+            "op": {
+              "const": "TYPE"
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Press": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Common"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op",
+            "keys"
+          ],
+          "properties": {
+            "op": {
+              "const": "PRESS"
+            },
+            "keys": {
+              "type": "string"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Click": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Common"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op",
+            "target"
+          ],
+          "properties": {
+            "op": {
+              "const": "CLICK"
+            },
+            "target": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Pointer"
+                },
+                {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              ]
+            },
+            "button": {
+              "enum": [
+                "left",
+                "right",
+                "middle"
+              ]
+            },
+            "offset": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Double": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Common"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op",
+            "target"
+          ],
+          "properties": {
+            "op": {
+              "const": "DOUBLE"
+            },
+            "target": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Pointer"
+                },
+                {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Drag": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Common"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op",
+            "from",
+            "to"
+          ],
+          "properties": {
+            "op": {
+              "const": "DRAG"
+            },
+            "from": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Pointer"
+                },
+                {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              ]
+            },
+            "to": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Pointer"
+                },
+                {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": {
+                    "type": "number"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Scroll": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Common"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op",
+            "amount"
+          ],
+          "properties": {
+            "op": {
+              "const": "SCROLL"
+            },
+            "amount": {
+              "type": "integer"
+            },
+            "axis": {
+              "enum": [
+                "vertical",
+                "horizontal"
+              ]
+            },
+            "target": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Pointer"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "window"
+                  ]
+                }
+              ],
+              "default": "window"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Wait": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Common"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op",
+            "ms"
+          ],
+          "properties": {
+            "op": {
+              "const": "WAIT"
+            },
+            "ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 120000
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "WaitFor": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Common"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "WAIT_FOR"
+            },
+            "ocr_contains": {
+              "type": [
+                "string",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "text_contains_any": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "spinner_gone": {
+              "type": "boolean"
+            },
+            "template_id": {
+              "type": "string"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Snapshot": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Common"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "SNAPSHOT"
+            },
+            "label": {
+              "type": "string"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Verify": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Common"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op"
+          ],
+          "properties": {
+            "op": {
+              "const": "VERIFY"
+            },
+            "ocr_contains": {
+              "type": [
+                "string",
+                "array"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "text_contains_any": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "pixel_change": {
+              "type": "boolean"
+            },
+            "timeout_ms": {
+              "$ref": "#/$defs/TimeoutMs"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "Navigate": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/Common"
+        },
+        {
+          "type": "object",
+          "required": [
+            "op",
+            "url"
+          ],
+          "properties": {
+            "op": {
+              "const": "NAVIGATE"
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,2 @@
+﻿# Checksums (v0.1.21)  2025-09-10T16:44:25
+18c3c682e991c9423ecf2aba04ff59170b76f77dae6e0270dc1fe578122b5dbf  build.zip

@@ -1,0 +1,23 @@
+﻿import { ReportEnginePort, ReportRequest, ReportResult } from "../../domain/reporting/ports";
+
+export class MemoryReportEngine implements ReportEnginePort {
+  async run(req: ReportRequest): Promise<ReportResult> {
+    const header = req.columns.join(",");
+    const lines = req.rows.map((r) => req.columns.map((c) => csvCell((r as Record<string, unknown>)[c])).join(","));
+    const csv = [header, ...lines].join("\n");
+    return {
+      title: req.title,
+      rows: req.rows.length,
+      columns: req.columns.length,
+      buffer: csv,
+    };
+  }
+}
+
+function csvCell(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  const s = String(v);
+  const needsQuote = /[",\n]/.test(s);
+  const escaped = s.replace(/"/g, '""');
+  return needsQuote ? `"${escaped}"` : s;
+}
