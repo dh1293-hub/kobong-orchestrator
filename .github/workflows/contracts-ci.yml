@@ -32,6 +32,12 @@ jobs:
         run: |
           python -m pip install -U pip
           python -m pip install -U pytest
+      - name: Show Python env
+        shell: pwsh
+        run: |
+          python --version
+          pip --version
+          pip list
       - name: Run contract tests
         shell: pwsh
         run: pwsh -File scripts/run-contract-tests.ps1
