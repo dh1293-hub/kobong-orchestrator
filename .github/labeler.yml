@@ -1,22 +1,24 @@
+# actions/labeler@v5 schema
 docs:
-  - README.md
-  - docs/**
+  - changed-files:
+      - any-glob-to-any-file: ['README.md', 'docs/**']
 
 ci:
-  - .github/workflows/**
+  - changed-files:
+      - any-glob-to-any-file: ['.github/workflows/**']
 
 build:
-  - package.json
-  - pnpm-lock.yaml
-  - yarn.lock
-  - scripts/**
+  - changed-files:
+      - any-glob-to-any-file: ['package.json', 'pnpm-lock.yaml', 'yarn.lock', 'scripts/**']
 
 infra:
-  - infra/**
+  - changed-files:
+      - any-glob-to-any-file: ['infra/**']
 
 app:
-  - app/**
-  - src/**
+  - changed-files:
+      - any-glob-to-any-file: ['app/**', 'src/**']
 
 test:
-  - tests/**
+  - changed-files:
+      - any-glob-to-any-file: ['tests/**']
