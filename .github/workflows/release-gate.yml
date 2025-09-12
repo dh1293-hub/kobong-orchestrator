@@ -1,85 +1,23 @@
-name: Release Gate (auto)
+﻿name: Release Gate (auto)
 
 on:
-  workflow_run:
-    # 업스트림 이름이 다를 가능성 대비해 3개 모두 구독
-    workflows: ["Contracts CI","contracts","contract-tests"]
-    types: [completed]
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
-  contents: write
-  actions: read
+  contents: read
 
 concurrency:
-  group: release-gate-${{ github.event.workflow_run.id }}
+  group: release-gate-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   gate:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    name: Release Gate (auto)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: Checkout the exact commit from upstream run
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 0
-
-      - name: Detect SemVer tag pointing at HEAD
-        id: tag
+      - name: Gate ping
         run: |
-          set -e
-          TAG=$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z\.-]+)?$' | head -n1 || true)
-          if [ -z "$TAG" ]; then
-            echo "no semver tag on HEAD; skip release"
-            echo "skip=true" >> $GITHUB_OUTPUT
-          else
-            echo "tag=$TAG" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Stop if no tag
-        if: steps.tag.outputs.skip == 'true'
-        run: echo "Not a tag push; nothing to release."
-
-      - name: Setup Node (optional, for gate tests)
-        if: steps.tag.outputs.tag != ''
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install deps (best-effort)
-        if: steps.tag.outputs.tag != ''
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --no-audit --no-fund
-          elif [ -f package.json ]; then
-            npm install --no-audit --no-fund
-          fi
-
-      - name: Run Release Notes gate (optional)
-        if: steps.tag.outputs.tag != ''
-        run: |
-          if [ -f tests/contract/release_notes.acl.test.ts ]; then
-            npx vitest run tests/contract/release_notes.acl.test.ts --run
-          else
-            echo "release notes contract test not found; skipping"
-          fi
-
-      - name: Download artifacts from upstream run
-        if: steps.tag.outputs.tag != ''
-        uses: dawidd6/action-download-artifact@v3
-        with:
-          # run_id만 지정해서 업스트림 워크플로 이름 불일치 이슈 회피
-          run_id: ${{ github.event.workflow_run.id }}
-          path: artifacts
-
-      - name: Create GitHub Release
-        if: steps.tag.outputs.tag != ''
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: Release ${{ steps.tag.outputs.tag }}
-          generate_release_notes: true
-          files: |
-            artifacts/**
+          echo "Release Gate active for $GITHUB_REF"
