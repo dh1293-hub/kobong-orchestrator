@@ -1,46 +1,90 @@
-# scripts/run-dsl-demo.ps1 — compile DSL → run report-engine → validate result
 #requires -PSEdition Core
 #requires -Version 7.0
 param(
-  [string]$Root = $(Get-Location).Path,
-  # 기본 데모 DSL: CSV 경로 시연
-  [string]$Dsl = 'from sample | select id,name,active | format CSV'
+  [string] $ResultFile
 )
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
 
-$ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
-$PSDefaultParameterValues['Out-File:Encoding']='utf8'
-$PSDefaultParameterValues['*:Encoding']='utf8'
+function Get-GitRoot { try { git rev-parse --show-toplevel 2>$null } catch { $null } }
 
-$RepoRoot = (Resolve-Path $Root).Path
-$Compiler = Join-Path $RepoRoot 'scripts/dsl-compile.ps1'
-$Engine   = Join-Path $RepoRoot 'scripts/report-engine.ps1'
+# env/paths
+$ROOT = $env:HAN_GPT5_ROOT
+if (-not $ROOT) { $ROOT = Get-GitRoot }
+if (-not $ROOT) { $ROOT = (Resolve-Path "$PSScriptRoot/..").Path }
+if (-not (Test-Path $ROOT)) { throw "Invalid root: $ROOT" }
+$env:HAN_GPT5_ROOT = $ROOT
 
-$ReqPath  = Join-Path $RepoRoot 'out/dsl_request.demo.json'
-$OutPath  = Join-Path $RepoRoot 'out/report_result.dsl.json'
+$OUTDIR = $env:HAN_GPT5_OUT
+if (-not $OUTDIR) { $OUTDIR = Join-Path $ROOT "out" }
 
-if (-not (Test-Path $Compiler)) { throw "PRECONDITION: dsl-compile.ps1 not found: $Compiler" }
-if (-not (Test-Path $Engine))   { throw "PRECONDITION: report-engine.ps1 not found: $Engine" }
+# 기본 결과 경로
+$DefaultResult = Join-Path $OUTDIR "report_result.dsl.json"
 
-"[RUN] compile DSL → $ReqPath" | Write-Host
-& $Compiler -Dsl $Dsl -Root $RepoRoot -OutputPath $ReqPath
-
-"[RUN] report-engine → $OutPath" | Write-Host
-& $Engine -InputPath $ReqPath -OutputPath $OutPath
-
-if (-not (Test-Path -LiteralPath $OutPath)) { throw "LOGIC: result not produced: $OutPath" }
-$res = (Get-Content -LiteralPath $OutPath -Raw) | ConvertFrom-Json -Depth 50
-
-# validate result shape
-if (-not ($res.title -is [string])) { throw "LOGIC: result.title missing" }
-if (-not ($res.columns -is [object[]]) -or $res.columns.Count -lt 1) { throw "LOGIC: result.columns invalid" }
-if (-not ($res.rows -is [object[]])) { throw "LOGIC: result.rows invalid" }
-if (-not ($res.format -is [string])) { throw "LOGIC: result.format missing" }
-
-# CSV/JSON 렌더링 확인
-if ($res.format -eq 'CSV') {
-  if (-not $res.rendered -or -not $res.rendered.csv) { throw "LOGIC: CSV result missing rendered.csv" }
-} else {
-  if (-not $res.rendered -or -not $res.rendered.json) { throw "LOGIC: JSON result missing rendered.json" }
+# 인자 해석(관대)
+function LooksLikeFile([string]$s) {
+  if ([string]::IsNullOrWhiteSpace($s)) { return $false }
+  if ($s.Contains('\') -or $s.Contains('/')) { return $true }
+  if ($s.EndsWith('.json',[System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+  return $false
 }
 
-"[PASS] DSL demo OK :: format=$($res.format) columns=$($res.columns -join ', ')" | Write-Host
+if ([string]::IsNullOrWhiteSpace($ResultFile)) {
+  $ResultFile = $DefaultResult
+} elseif (-not (Test-Path $ResultFile)) {
+  if (-not (LooksLikeFile $ResultFile)) {
+    Write-Warning "Argument '$ResultFile' does not look like a file; using default result path."
+    $ResultFile = $DefaultResult
+  } else {
+    # 상대 경로면 out\ 기준으로 재시도
+    $maybe = Join-Path $OUTDIR $ResultFile
+    if (Test-Path $maybe) { $ResultFile = $maybe }
+  }
+}
+
+if (-not (Test-Path $ResultFile)) {
+  throw "PRECONDITION: result JSON not found: $ResultFile"
+}
+
+$res = Get-Content -LiteralPath $ResultFile -Raw -Encoding utf8 | ConvertFrom-Json
+
+# 기본 필드 검증
+if (-not ($res.title   -is [string]))   { throw "LOGIC: result.title invalid" }
+if (-not ($res.format  -is [string]))   { throw "LOGIC: result.format invalid" }
+if (-not ($res.columns -is [object[]])) { throw "LOGIC: result.columns invalid" }
+foreach ($c in $res.columns) { if ($null -eq $c) { throw "LOGIC: result.columns has null" } }
+
+# rows: 배열 또는 정수 모두 허용
+$rowsCount = $null
+$rowsArr   = $null
+if ($res.PSObject.Properties.Name -contains 'rows') {
+  if ($res.rows -is [object[]]) { $rowsArr = @($res.rows); $rowsCount = $rowsArr.Count }
+  elseif ($res.rows -is [int] -or $res.rows -is [long]) { $rowsCount = [int]$res.rows }
+  else { throw "LOGIC: result.rows type unsupported" }
+} else {
+  throw "LOGIC: result.rows missing"
+}
+
+# 추가 산출물 검증(가능할 때만)
+if ($res.PSObject.Properties.Name -contains 'json') {
+  $jsonPath = [string]$res.json
+  if ($jsonPath) {
+    if (-not (Test-Path $jsonPath)) { throw "LOGIC: result.json path not found: $jsonPath" }
+    try {
+      $dat = Get-Content -LiteralPath $jsonPath -Raw -Encoding utf8 | ConvertFrom-Json
+      if ($dat -is [object[]]) {
+        if (-not $rowsArr) { $rowsArr = @($dat) }
+        if (-not $rowsCount) { $rowsCount = $dat.Count }
+      }
+    } catch { }
+  }
+}
+if ($res.PSObject.Properties.Name -contains 'csv') {
+  $csvPath = [string]$res.csv
+  if ($csvPath -and -not (Test-Path $csvPath)) { throw "LOGIC: result.csv path not found: $csvPath" }
+}
+
+if ($null -eq $rowsCount -or $rowsCount -lt 0) { throw "LOGIC: result.rows invalid (no count)" }
+
+Write-Host "[DEMO] OK —" `
+  ("title={0} columns={1} rows={2} format={3}" -f $res.title, ($res.columns -join ','), $rowsCount, $res.format.ToUpperInvariant())

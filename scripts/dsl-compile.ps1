@@ -1,84 +1,75 @@
-# scripts/dsl-compile.ps1 — Mini DSL → ReportRequest(JSON) compiler (PS-only)
 #requires -PSEdition Core
 #requires -Version 7.0
 param(
-  [Parameter(Mandatory=$true)][string]$Dsl,
-  [string]$Root = $(Get-Location).Path,
-  [string]$OutputPath = "$(Join-Path (Split-Path -Parent $PSScriptRoot) 'out/dsl_request.demo.json')"
+  [string] $DslFile,
+  [string] $OutFile
 )
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
 
-$ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
-$PSDefaultParameterValues['Out-File:Encoding']='utf8'
-$PSDefaultParameterValues['*:Encoding']='utf8'
+function Get-GitRoot { try { git rev-parse --show-toplevel 2>$null } catch { $null } }
 
-$RepoRoot = (Resolve-Path $Root).Path
-$SampleReq = Join-Path $RepoRoot 'contracts/v1/samples/report_request.sample.json'
-if (-not (Test-Path -LiteralPath $SampleReq)) { throw "PRECONDITION: sample request not found: $SampleReq" }
+# 루트 & 출력 디렉터리
+$ROOT  = $env:HAN_GPT5_ROOT
+if (-not $ROOT) { $ROOT = Get-GitRoot }
+if (-not $ROOT) { $ROOT = (Resolve-Path "$PSScriptRoot/..").Path }
+if (-not (Test-Path $ROOT)) { throw "Invalid root: $ROOT" }
+$env:HAN_GPT5_ROOT = $ROOT
+$OUTDIR = $env:HAN_GPT5_OUT
+if (-not $OUTDIR) { $OUTDIR = Join-Path $ROOT 'out' }
 
-# --- parse DSL:  from <source> | select a,b,c | format CSV|JSON
-$source = $null; $sel=@(); $format='JSON'
-$parts = $Dsl -split '\|' | ForEach-Object { $_.Trim() } | Where-Object { $_.Length -gt 0 }
-foreach($p in $parts){
-  if ($p -match '^(?i)from\s+([A-Za-z0-9_]+)$') { $source = $Matches[1].ToLowerInvariant(); continue }
-  if ($p -match '^(?i)select\s+(.+)$') {
-    $sel = @()
-    foreach($c in ($Matches[1] -split ',')) {
-      $name = $c.Trim()
-      if ($name.Length -gt 0) { $sel += $name }
-    }
-    continue
-  }
-  if ($p -match '^(?i)format\s+(CSV|JSON)$') { $format = $Matches[1].ToUpperInvariant(); continue }
-  throw "LOGIC: unknown DSL clause -> '$p'"
+# 기본 DSL 파일/출력 경로 추론
+if (-not $DslFile) {
+  $candidates = @(
+    (Join-Path $ROOT 'domain/dsl.demo.txt'),
+    (Join-Path $ROOT 'domain/dsl.demo.dsl'),
+    (Join-Path $ROOT 'dsl/demo.dsl')
+  )
+  $DslFile = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 }
-if ([string]::IsNullOrWhiteSpace($source)) { throw "LOGIC: DSL must start with: from <source> (e.g., 'from sample')" }
+if (-not $OutFile) { $OutFile = Join-Path $OUTDIR 'dsl_request.demo.json' }
 
-# --- load base dataset (demo: only 'sample' supported)
-$base = (Get-Content -LiteralPath $SampleReq -Raw) | ConvertFrom-Json -Depth 50
-if ($source -ne 'sample') {
-  Write-Host "[WARN] unknown source '$source' — falling back to 'sample'"
-  $source = 'sample'
-}
-$baseCols = @($base.columns)
-$baseRows = @($base.rows)
-
-# --- determine columns
-$columns = @()
-if ($sel.Count -gt 0) {
-  foreach($c in $sel){
-    if ($baseCols -notcontains $c) { throw "LOGIC: select contains unknown column: $c (available: $($baseCols -join ', '))" }
-  }
-  $columns = $sel
+# DSL 로드
+$lines = @()
+if ($DslFile -and (Test-Path $DslFile)) {
+  $lines = Get-Content -LiteralPath $DslFile -Encoding utf8
+  Write-Host "[RUN] compile DSL → $OutFile"
 } else {
-  $columns = $baseCols
+  Write-Warning "DSL file not found; using embedded demo."
+  $lines = @(
+    'from sample',
+    'columns id, name, active',
+    'format csv'
+  )
+  Write-Host "[RUN] compile DSL (embedded) → $OutFile"
 }
 
-# --- project rows
-$indexMap = @{}
-for ($i=0; $i -lt $baseCols.Count; $i++) { $indexMap[$baseCols[$i]] = $i }
-$rows = @()
-foreach($r in $baseRows){
-  $new = @()
-  foreach($c in $columns){
-    $idx = $indexMap[$c]
-    $val = $null
-    if ($idx -lt $r.Count) { $val = $r[$idx] }
-    $new += $val
-  }
-  $rows += ,$new
-}
-
-# --- build request
-$title = "report:{0}" -f $source
+# 파싱 상태
 $req = [ordered]@{
-  title   = $title
-  columns = $columns
-  rows    = $rows
-  format  = $format
+  from    = $null
+  columns = @()
+  format  = 'CSV'
 }
 
-# --- save
-$dir = Split-Path -Parent $OutputPath
-New-Item -ItemType Directory -Force -Path $dir | Out-Null
-($req | ConvertTo-Json -Depth 50) | Out-File -LiteralPath $OutputPath
-"[DSL] compiled → $OutputPath" | Write-Host
+foreach ($raw in $lines) {
+  $line = ($raw -replace '(#|//).*$', '').Trim()
+  if (-not $line) { continue }
+  $sp   = $line.IndexOf(' ')
+  $p    = ($sp -gt 0) ? $line.Substring(0,$sp) : $line
+  $rest = ($sp -gt 0) ? $line.Substring($sp+1).Trim() : ''
+
+  switch ($p.ToLowerInvariant()) {
+    'from'    { $req.from = $rest; break }
+    'columns' { $req.columns = ($rest -split '[,\s]+' | Where-Object { $_ }) ; break }
+    'select'  { $req.columns = ($rest -split '[,\s]+' | Where-Object { $_ }) ; break }
+    'format'  { if ($rest) { $req.format = $rest.ToUpperInvariant() } ; break }
+    default   { throw "LOGIC: unknown DSL clause -> '$p'" }
+  }
+}
+
+if (-not $req.from)    { throw 'PRECONDITION: "from" clause required' }
+if (-not $req.columns) { $req.columns = @('id') }
+
+$null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OutFile)
+$req | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $OutFile -Encoding utf8
+Write-Host "[DSL] compiled → $OutFile"
