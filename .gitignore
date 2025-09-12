@@ -17,3 +17,5 @@ reports/releases/*/*.zip
 *.zip
 *.bak
 !out/.gitkeep
+dist/
+*.zip
