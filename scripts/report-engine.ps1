@@ -80,7 +80,7 @@ function Project-Columns($rows, $columns) {
     foreach ($c in $columns) {
       $o[$c] = (Get-Value -obj $r -key $c)
     }
-    $o
+    [pscustomobject]$o
   }
 }
 
@@ -146,3 +146,4 @@ Write-Host ("  rows   : {0}" -f $result.rows)
 Write-Host ("  format : {0}" -f $result.format)
 if ($result.PSObject.Properties.Name -contains 'csv')  { Write-Host ("  csv    : {0}" -f $result.csv) }
 if ($result.PSObject.Properties.Name -contains 'json') { Write-Host ("  json   : {0}" -f $result.json) }
+
