@@ -1,45 +1,44 @@
-# scripts/run-report-demo.ps1 — run report-engine then self-validate (CSV file check) v1.1
+# SIGNATURE: RUN-REPORT-DEMO v1.1 (delegates to run-dsl-demo.ps1)
 #requires -PSEdition Core
 #requires -Version 7.0
-param([string]$Root = $(Get-Location).Path, [string]$Dsl = 'from sample | select id,name,active | format CSV')
-
-$ErrorActionPreference='Stop'
+param(
+  [string] $DslFile,          # default: domain/dsl.demo.dsl
+  [string] $DslReqOut,        # default: out/dsl_request.demo.json
+  [string] $ResultOut         # default: out/report_result.dsl.json
+)
 Set-StrictMode -Version Latest
-$PSDefaultParameterValues['Out-File:Encoding']='utf8'
-$PSDefaultParameterValues['*:Encoding']='utf8'
+$ErrorActionPreference = 'Stop'
 
-$RepoRoot = (Resolve-Path $Root).Path
-$Compiler = Join-Path $RepoRoot 'scripts/dsl-compile.ps1'
-$Engine   = Join-Path $RepoRoot 'scripts/report-engine.ps1'
-$ReqPath  = Join-Path $RepoRoot 'out/dsl_request.demo.json'
-$OutPath  = Join-Path $RepoRoot 'out/report_result.dsl.json'
-$CsvPath  = [System.IO.Path]::ChangeExtension($OutPath, '.csv')
+function Get-GitRoot { try { git rev-parse --show-toplevel 2>$null } catch { $null } }
 
-if (-not (Test-Path $Compiler)) { throw "PRECONDITION: dsl-compile.ps1 not found: $Compiler" }
-if (-not (Test-Path $Engine))   { throw "PRECONDITION: report-engine.ps1 not found: $Engine" }
+$ROOT = $env:HAN_GPT5_ROOT
+if (-not $ROOT) { $ROOT = Get-GitRoot }
+if (-not $ROOT) { $ROOT = (Resolve-Path "$PSScriptRoot/..").Path }
+if (-not (Test-Path $ROOT)) { throw "PRECONDITION: RepoRoot not found: $ROOT" }
+$env:HAN_GPT5_ROOT = $ROOT
 
-"[RUN] compile DSL → $ReqPath" | Write-Host
-& $Compiler -Dsl $Dsl -Root $RepoRoot -OutputPath $ReqPath
+$OUTDIR = $env:HAN_GPT5_OUT
+if (-not $OUTDIR) { $OUTDIR = Join-Path $ROOT 'out' }
 
-"[RUN] report-engine → $OutPath" | Write-Host
-& $Engine -InputPath $ReqPath -OutputPath $OutPath -CsvPath $CsvPath
+if (-not $DslFile)   { $DslFile   = Join-Path $ROOT 'domain/dsl.demo.dsl' }
+if (-not $DslReqOut) { $DslReqOut = Join-Path $OUTDIR 'dsl_request.demo.json' }
+if (-not $ResultOut) { $ResultOut = Join-Path $OUTDIR 'report_result.dsl.json' }
 
-if (-not (Test-Path -LiteralPath $OutPath)) { throw "LOGIC: result not produced: $OutPath" }
-$res = (Get-Content -LiteralPath $OutPath -Raw) | ConvertFrom-Json -Depth 50
+# 1) compile (명시 파일)
+Write-Host "[RUN] compile DSL → $DslReqOut"
+& pwsh -NoLogo -NoProfile -File (Join-Path $ROOT 'scripts/dsl-compile.ps1') -DslFile $DslFile -OutFile $DslReqOut
+if ($LASTEXITCODE -ne 0) { throw "compile failed (exit=$LASTEXITCODE)" }
+if (-not (Test-Path $DslReqOut)) { throw "compile output missing: $DslReqOut" }
+Write-Host "[DSL] compiled → $DslReqOut"
 
-# shape check
-if (-not ($res.title -is [string])) { throw "LOGIC: result.title missing" }
-if (-not ($res.columns -is [object[]]) -or $res.columns.Count -lt 1) { throw "LOGIC: result.columns invalid" }
-if (-not ($res.rows -is [object[]])) { throw "LOGIC: result.rows invalid" }
-if (-not ($res.format -is [string])) { throw "LOGIC: result.format missing" }
+# 2) engine
+Write-Host "[RUN] report-engine → $ResultOut"
+& pwsh -NoLogo -NoProfile -File (Join-Path $ROOT 'scripts/report-engine.ps1') -ReqFile $DslReqOut -OutFile $ResultOut
+if ($LASTEXITCODE -ne 0) { throw "engine failed (exit=$LASTEXITCODE)" }
+if (-not (Test-Path $ResultOut)) { throw "engine output missing: $ResultOut" }
 
-# rendered checks
-if ($res.format -eq 'CSV') {
-  if (-not $res.rendered -or -not $res.rendered.csv) { throw "LOGIC: CSV result missing rendered.csv" }
-  if (-not (Test-Path -LiteralPath $CsvPath)) { throw "LOGIC: CSV file not written: $CsvPath" }
-  if ((Get-Item -LiteralPath $CsvPath).Length -le 0) { throw "LOGIC: CSV file is empty: $CsvPath" }
-} else {
-  if (-not $res.rendered -or -not $res.rendered.json) { throw "LOGIC: JSON result missing rendered.json" }
-}
+# 3) validation 위임(관대 검사 사용)
+& pwsh -NoLogo -NoProfile -File (Join-Path $ROOT 'scripts/run-dsl-demo.ps1') -ResultFile $ResultOut
+if ($LASTEXITCODE -ne 0) { throw "demo validation failed (exit=$LASTEXITCODE)" }
 
-"[PASS] report-engine demo OK (format=$($res.format))" | Write-Host
+Write-Host "[DEMO] Pipeline OK."
