@@ -19,3 +19,8 @@ reports/releases/*/*.zip
 !out/.gitkeep
 dist/
 *.zip
+
+# GPT5 ops — backups & logs
+*.bak-*
+*.bak*
+.gpt5.lock
