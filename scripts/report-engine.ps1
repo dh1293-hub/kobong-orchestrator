@@ -1,9 +1,10 @@
-# scripts/report-engine.ps1 — Simple memory report engine (PS-only)
+# scripts/report-engine.ps1 — Simple memory report engine (PS-only) v1.1 (CSV file output)
 #requires -PSEdition Core
 #requires -Version 7.0
 param(
   [string]$InputPath = "$(Join-Path (Split-Path -Parent $PSScriptRoot) 'contracts/v1/samples/report_request.sample.json')",
-  [string]$OutputPath = "$(Join-Path (Split-Path -Parent $PSScriptRoot) 'out/report_result.demo.json')"
+  [string]$OutputPath = "$(Join-Path (Split-Path -Parent $PSScriptRoot) 'out/report_result.demo.json')",
+  [string]$CsvPath    = $null  # format=CSV일 때 파일 저장 위치(미지정 시 OutputPath와 같은 이름의 .csv)
 )
 
 $ErrorActionPreference='Stop'
@@ -32,11 +33,16 @@ $result = [ordered]@{
   title   = $req.title
   columns = $req.columns
   rows    = $req.rows
-  format  = ($req.format ? $req.format : 'JSON')
+  format  = ([string]::IsNullOrWhiteSpace($req.format) ? 'JSON' : $req.format)
   rendered = @{}
 }
 
+# ensure out dir
+$dir = Split-Path -Parent $OutputPath
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+
 if ($result.format -eq 'CSV') {
+  # build CSV text
   $sb = New-Object System.Text.StringBuilder
   [void]$sb.AppendLine(($result.columns -join ','))
   foreach($row in $result.rows){
@@ -44,18 +50,26 @@ if ($result.format -eq 'CSV') {
     for($i=0;$i -lt $result.columns.Count;$i++){
       $v = if ($i -lt $row.Count) { $row[$i] } else { $null }
       if ($v -is [string]) { $cells += ('"'+$v.Replace('"','""')+'"') }
+      elseif ($null -eq $v) { $cells += '' }
       else { $cells += ($v -as [string]) }
     }
     [void]$sb.AppendLine(($cells -join ','))
   }
-  $result.rendered = @{ csv = $sb.ToString() }
+  $csvText = $sb.ToString()
+  $result.rendered = @{ csv = $csvText }
+
+  # write CSV file if requested (or default alongside OutputPath)
+  if (-not $CsvPath -or [string]::IsNullOrWhiteSpace($CsvPath)) {
+    $CsvPath = [System.IO.Path]::ChangeExtension($OutputPath, '.csv')
+  }
+  $csvDir = Split-Path -Parent $CsvPath
+  New-Item -ItemType Directory -Force -Path $csvDir | Out-Null
+  $csvText | Out-File -LiteralPath $CsvPath
 } else {
   $result.rendered = @{ json = @{ count = $result.rows.Count } }
 }
 
-# save
-$dir = Split-Path -Parent $OutputPath
-New-Item -ItemType Directory -Force -Path $dir | Out-Null
+# save JSON result
 ($result | ConvertTo-Json -Depth 50) | Out-File -LiteralPath $OutputPath
 
 # echo summary
@@ -64,3 +78,6 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
 "  columns: $($result.columns -join ', ')" | Write-Host
 "  rows   : $($result.rows.Count)" | Write-Host
 "  format : $($result.format)" | Write-Host
+if ($result.format -eq 'CSV') {
+  "  csv    : $CsvPath" | Write-Host
+}

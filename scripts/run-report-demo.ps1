@@ -1,7 +1,7 @@
-# scripts/run-report-demo.ps1 — run report-engine then self-validate
+# scripts/run-report-demo.ps1 — run report-engine then self-validate (CSV file check) v1.1
 #requires -PSEdition Core
 #requires -Version 7.0
-param([string]$Root = $(Get-Location).Path)
+param([string]$Root = $(Get-Location).Path, [string]$Dsl = 'from sample | select id,name,active | format CSV')
 
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -9,38 +9,37 @@ $PSDefaultParameterValues['Out-File:Encoding']='utf8'
 $PSDefaultParameterValues['*:Encoding']='utf8'
 
 $RepoRoot = (Resolve-Path $Root).Path
+$Compiler = Join-Path $RepoRoot 'scripts/dsl-compile.ps1'
 $Engine   = Join-Path $RepoRoot 'scripts/report-engine.ps1'
-$ReqPath  = Join-Path $RepoRoot 'contracts/v1/samples/report_request.sample.json'
-$OutPath  = Join-Path $RepoRoot 'out/report_result.demo.json'
-$LogPath  = Join-Path $RepoRoot 'logs/apply-log.jsonl'
-New-Item -ItemType Directory -Force -Path (Split-Path $LogPath) | Out-Null
+$ReqPath  = Join-Path $RepoRoot 'out/dsl_request.demo.json'
+$OutPath  = Join-Path $RepoRoot 'out/report_result.dsl.json'
+$CsvPath  = [System.IO.Path]::ChangeExtension($OutPath, '.csv')
 
-function Write-JsonLog($o){ Add-Content -Path $LogPath -Value ($o | ConvertTo-Json -Depth 6 -Compress) }
-function Validate-ReportResult($obj) {
-  if (-not ($obj.title -is [string])) { return 'title must be string' }
-  if (-not ($obj.columns -is [object[]]) -or $obj.columns.Count -lt 1) { return 'columns must be array' }
-  if (-not ($obj.rows -is [object[]])) { return 'rows must be array' }
-  if (-not ($obj.format -is [string])) { return 'format required' }
-  return $null
-}
+if (-not (Test-Path $Compiler)) { throw "PRECONDITION: dsl-compile.ps1 not found: $Compiler" }
+if (-not (Test-Path $Engine))   { throw "PRECONDITION: report-engine.ps1 not found: $Engine" }
 
-Write-Host "[RUN] report-engine → $OutPath"
-& $Engine -InputPath $ReqPath -OutputPath $OutPath
+"[RUN] compile DSL → $ReqPath" | Write-Host
+& $Compiler -Dsl $Dsl -Root $RepoRoot -OutputPath $ReqPath
 
-if (-not (Test-Path -LiteralPath $OutPath)) {
-  Write-Host "[FAIL] result not found."
-  Write-JsonLog @{ timestamp=(Get-Date).ToString('o'); level='ERROR'; module='report-demo'; action='run'; outcome='FAIL'; message='result missing' }
-  exit 1
-}
+"[RUN] report-engine → $OutPath" | Write-Host
+& $Engine -InputPath $ReqPath -OutputPath $OutPath -CsvPath $CsvPath
 
+if (-not (Test-Path -LiteralPath $OutPath)) { throw "LOGIC: result not produced: $OutPath" }
 $res = (Get-Content -LiteralPath $OutPath -Raw) | ConvertFrom-Json -Depth 50
-$err = Validate-ReportResult $res
-if ($err) {
-  "[FAIL] result validation :: $err" | Write-Host
-  Write-JsonLog @{ timestamp=(Get-Date).ToString('o'); level='ERROR'; module='report-demo'; action='validate'; outcome='FAIL'; message=$err }
-  exit 1
+
+# shape check
+if (-not ($res.title -is [string])) { throw "LOGIC: result.title missing" }
+if (-not ($res.columns -is [object[]]) -or $res.columns.Count -lt 1) { throw "LOGIC: result.columns invalid" }
+if (-not ($res.rows -is [object[]])) { throw "LOGIC: result.rows invalid" }
+if (-not ($res.format -is [string])) { throw "LOGIC: result.format missing" }
+
+# rendered checks
+if ($res.format -eq 'CSV') {
+  if (-not $res.rendered -or -not $res.rendered.csv) { throw "LOGIC: CSV result missing rendered.csv" }
+  if (-not (Test-Path -LiteralPath $CsvPath)) { throw "LOGIC: CSV file not written: $CsvPath" }
+  if ((Get-Item -LiteralPath $CsvPath).Length -le 0) { throw "LOGIC: CSV file is empty: $CsvPath" }
+} else {
+  if (-not $res.rendered -or -not $res.rendered.json) { throw "LOGIC: JSON result missing rendered.json" }
 }
 
-"[PASS] report-engine demo OK" | Write-Host
-Write-JsonLog @{ timestamp=(Get-Date).ToString('o'); level='INFO'; module='report-demo'; action='validate'; outcome='PASS'; path=$OutPath }
-exit 0
+"[PASS] report-engine demo OK (format=$($res.format))" | Write-Host
