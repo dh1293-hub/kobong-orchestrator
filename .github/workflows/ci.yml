@@ -35,11 +35,11 @@ jobs:
       - name: Upload artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
-        with:
+with:
           name: out-artifacts
           path: |
             out/dsl_request.demo.json
             out/report_result.dsl.json
             out/report_result.dsl.csv
           if-no-files-found: ignore
-
+          retention-days: 14
