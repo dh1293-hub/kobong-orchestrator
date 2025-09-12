@@ -1,113 +1,106 @@
 ﻿from __future__ import annotations
-import json
-import os
-import re
-import socket
-import threading
-import time
-import uuid
-from datetime import datetime
-from datetime import timezone
+from dataclasses import dataclass
+from typing import Optional, Dict, Any
+from datetime import datetime, timezone
+import json, uuid, os, socket, threading, re
 
-from infra.logging.rotation import rotate_if_needed, cleanup_by_age
-from infra.alerts.notify_stub import notify as alert_notify
+def _now():
+    return datetime.now(timezone.utc).astimezone()
 
-LOG_PATH = os.path.join("logs", "app.log")
-APP_NAME = "conductor"
-APP_VER = "0.1.0"
+def _tz_id() -> str:
+    return os.getenv("APP_TZ") or os.getenv("TZ") or "Asia/Seoul"
 
-EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-TOKEN_RE = re.compile(r"(?:api[_-]?key|token|bearer)[:\s]*[A-Za-z0-9\-_\.]{8,}", re.I)
+def _app_obj(name_fallback: str, module: Optional[str]) -> Dict[str, Optional[str]]:
+    name = module if module is not None else (name_fallback or "kobong-orchestrator")
+    ver = os.getenv("APP_VER") or os.getenv("APP_VERSION") or "0.0.0"
+    commit = os.getenv("APP_COMMIT") or os.getenv("GIT_COMMIT") or None
+    return {"name": name, "ver": ver, "commit": commit}
 
-MAX_BYTES = int(os.getenv("LOG_MAX_BYTES", "5242880"))
-BACKUPS   = int(os.getenv("LOG_BACKUPS", "5"))
-RET_DAYS  = int(os.getenv("LOG_RETENTION_DAYS", "14"))
+_STATUS_TO_CODE = {"ok":0,"retry":1,"timeout":2,"assert_fail":3,"cancel":4,"fatal":9}
+_CODE_TO_STATUS = {v:k for k,v in _STATUS_TO_CODE.items()}
 
-def _utc_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+def _result_obj(result_status: Optional[str], result_code: Optional[int], fallback_ok: bool = True) -> Dict[str, Any]:
+    status = (result_status or "").strip().lower() if result_status else None
+    code = int(result_code) if result_code is not None else None
+    if status and code is None: code = _STATUS_TO_CODE.get(status, 9)
+    if code is not None and not status: status = _CODE_TO_STATUS.get(int(code), "fatal")
+    if status is None and code is None:
+        status = "ok" if fallback_ok else "fatal"
+        code = _STATUS_TO_CODE[status]
+    return {"status": status, "code": int(code)}
 
-def _mask_pii(text: str) -> str:
-    if not text:
-        return text
-    text = EMAIL_RE.sub("[MASKED_EMAIL]", text)
-    text = TOKEN_RE.sub("[MASKED_TOKEN]", text)
-    return text
+# ===== PII/Secrets scrubbers =====
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", re.IGNORECASE)
+_SECRET_KV_RE = re.compile(r"(?i)\b(api[_-]?key|apikey|token|secret|password)\b\s*([:=])\s*([^\s,;]+)")
+_LONG_TOKEN_RE = re.compile(r"\b[A-Za-z0-9][A-Za-z0-9\-_]{16,}\b")
 
-def _ensure_dir(path: str) -> None:
-    d = os.path.dirname(path)
-    if d and not os.path.exists(d):
-        os.makedirs(d, exist_ok=True)
+def _scrub(text: Optional[str]) -> Optional[str]:
+    if not text: return text
+    t = _EMAIL_RE.sub("[MASKED_EMAIL]", text)
+    t = _SECRET_KV_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}[MASKED_TOKEN]", t)
+    t = _LONG_TOKEN_RE.sub("[MASKED_TOKEN]", t)
+    return t
 
+def _action_obj(step: Optional[int], dsl_id: Optional[str]) -> Dict[str, Optional[str]]:
+    try: s = int(step) if step is not None else 0
+    except Exception: s = 0
+    return {"step": s, "dsl_id": dsl_id}
+
+@dataclass
 class JsonLogger:
-    def __init__(self, env: str = "dev"):
-        self.env = env
-        self.host = socket.gethostname()
+    app: str = "kobong-orchestrator"
+    env: Optional[str] = None
 
-    def log(
+    def make_record(
         self,
-        *,
         level: str = "INFO",
-        module: str = "app",
-        action_step: int = 0,
-        message: str,
-        result_status: str = "ok",
-        result_code: int = 0,
-        role_card: str | None = None,
-        role_group: str | None = None,
-        trace_id: str | None = None,
-        span_id: str | None = None,
-        err: dict | None = None,
-        extra: dict | None = None,
-        snapshot_paths: list[str] | None = None,
-        template_match: dict | None = None,
-    ) -> dict:
-        t0 = time.monotonic()
-        record = {
-            "timestamp": _utc_iso(),
-            "monotonic_ms": round(t0 * 1000, 3),
-            "tz": "Asia/Seoul",
-            "level": level,
-            "app": {"name": APP_NAME, "ver": APP_VER, "commit": None},
-            "env": self.env,
-            "host": self.host,
+        action: str = "contract-test",   # kept for API compat
+        message: str = "",
+        *,
+        module: Optional[str] = None,         # -> app.name
+        action_step: Optional[int] = None,    # -> action.step
+        dsl_id: Optional[str] = None,         # -> action.dsl_id
+        result_status: Optional[str] = None,  # -> result.status
+        result_code: Optional[int] = None,    # -> result.code
+        duration_ms: Optional[int] = None,    # legacy alias -> latency_ms
+        latency_ms: Optional[int] = None,
+        env: Optional[str] = None,
+        trace_id: Optional[str] = None,
+        extra: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        dt = _now()
+        rec: Dict[str, Any] = {
+            "timestamp": dt.isoformat(),
+            "tz": _tz_id(),
+            "level": str(level).upper(),
+            "app": _app_obj(self.app, module),
+            "env": env if env is not None else (self.env or os.getenv("APP_ENV") or os.getenv("ENV") or os.getenv("NODE_ENV") or "local"),
+            "host": socket.gethostname(),
             "pid": os.getpid(),
             "thread": threading.current_thread().name,
-            "trace_id": trace_id or uuid.uuid4().hex,
-            "span_id": span_id,
-            "user": None,
-            "role": {"card": role_card, "group": role_group},
-            "action": {"step": action_step, "dsl_id": None},
-            "result": {"status": result_status, "code": result_code},
-            "latency_ms": 0,
-            "message": _mask_pii(message),
-            "snapshot_paths": snapshot_paths or [],
-            "ocr_text_hash": None
+            "trace_id": trace_id or str(uuid.uuid4()),
+            "action": _action_obj(action_step if action_step is not None else kwargs.get("step"), kwargs.get("dsl_id") if dsl_id is None else dsl_id),
+            "result": _result_obj(result_status, result_code),
+            "latency_ms": int(latency_ms if latency_ms is not None else (duration_ms if duration_ms is not None else 0)),
+            "message": _scrub(message),
         }
-        if err:
-            record["err"] = {
-                "type": err.get("type"),
-                "msg": _mask_pii(err.get("msg", "")),
-                "stack": _mask_pii(err.get("stack", "")),
-            }
-        if template_match is not None:
-            record["template_match"] = template_match
         if extra:
             for k, v in extra.items():
-                if k not in record:
-                    record[k] = v
+                if isinstance(v, str):
+                    rec[k] = _scrub(v)
+                elif k not in ("app","action","result"):
+                    rec[k] = v
+        for k, v in kwargs.items():
+            if k not in rec and k not in ("app","action","result"):
+                rec[k] = _scrub(v) if isinstance(v, str) else v
+        return rec
 
-        record["latency_ms"] = round((time.monotonic() - t0) * 1000, 3)
+    def log(self, message: str = "", level: str = "INFO", action: str = "contract-test", **kwargs):
+        return self.make_record(level=level, action=action, message=message, **kwargs)
 
-        _ensure_dir(LOG_PATH)
-        rotate_if_needed(LOG_PATH, MAX_BYTES, BACKUPS)
-        cleanup_by_age(LOG_PATH, RET_DAYS)
+    def record(self, *args, **kwargs): return self.make_record(*args, **kwargs)
+    def create(self, *args, **kwargs): return self.make_record(*args, **kwargs)
 
-        with open(LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-        if level in ("ERROR", "FATAL"):
-            try:
-                alert_notify(level, record)
-            except Exception:
-                pass
-        return record
+    def to_json(self, **kwargs) -> str:
+        return json.dumps(self.make_record(**kwargs), ensure_ascii=False)
