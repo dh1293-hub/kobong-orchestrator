@@ -1,0 +1,23 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "kkb.results.v1",
+  "type": "object",
+  "required": ["step","status","duration_ms"],
+  "properties": {
+    "step": {"type":"integer"},
+    "status": {"enum":["ok","fail","retry"]},
+    "duration_ms": {"type":"integer"},
+    "evidence": {
+      "type":"object",
+      "properties": {
+        "loc": {"type":"string"},
+        "score": {"type":"number"},
+        "snapshots": {"type":"array","items":{"type":"string"}}
+      }
+    },
+    "error": {
+      "type":"object",
+      "properties": { "code":{"type":"string"}, "msg":{"type":"string"} }
+    }
+  }
+}

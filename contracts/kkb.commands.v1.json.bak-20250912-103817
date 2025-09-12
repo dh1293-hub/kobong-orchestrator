@@ -1,0 +1,46 @@
+{
+  "$id": "kkb.commands.v1",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["plan"],
+  "properties": {
+    "meta": { "type": "object", "properties": { "traceId": {"type":"string"}, "from": { "enum": ["gpt5"] } } },
+    "plan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["step","actions"],
+        "properties": {
+          "step": { "type": "integer" },
+          "explain": { "type": "string" },
+          "actions": { "type": "array", "items": { "$ref": "#/definitions/action" } }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "action": {
+      "oneOf": [
+        { "title":"LOCATE","type":"object","required":["LOCATE"],
+          "properties":{"LOCATE":{"type":"object","required":["role","by"],
+            "properties":{"role":{"enum":["ai1","ai2","conductor"]},"by":{"enum":["text","icon","anchor"]},
+              "query":{"type":"array","items":{"type":"string"}},"timeout_ms":{"type":"integer"}}}} },
+        { "title":"FOCUS","type":"object","required":["FOCUS"],
+          "properties":{"FOCUS":{"type":"object","properties":{"target":{"type":"string"}}}} },
+        { "title":"PASTE","type":"object","required":["PASTE"],
+          "properties":{"PASTE":{"type":"object","required":["text"],"properties":{"text":{"type":"string"}}}} },
+        { "title":"PRESS","type":"object","required":["PRESS"],
+          "properties":{"PRESS":{"type":"object","properties":{"keys":{"type":"string"}}}} },
+        { "title":"CLICK","type":"object","required":["CLICK"],
+          "properties":{"CLICK":{"type":"object","properties":{"button":{"enum":["left","right"]},"x":{"type":"number"},"y":{"type":"number"}}}} },
+        { "title":"WAIT","type":"object","required":["WAIT"],
+          "properties":{"WAIT":{"type":"object","properties":{"ms":{"type":"integer"}}}} },
+        { "title":"SNAPSHOT","type":"object","required":["SNAPSHOT"],
+          "properties":{"SNAPSHOT":{"type":"object","properties":{"label":{"type":"string"}}}} },
+        { "title":"VERIFY","type":"object","required":["VERIFY"],
+          "properties":{"VERIFY":{"type":"object","properties":{"ocr_contains":{"type":"string"},
+            "text_contains_any":{"type":"array","items":{"type":"string"}},"timeout_ms":{"type":"integer"}}}} }
+      ]
+    }
+  }
+}
