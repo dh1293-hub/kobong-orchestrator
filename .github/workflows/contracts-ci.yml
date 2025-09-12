@@ -1,0 +1,34 @@
+name: contracts-ci
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "contracts/**"
+      - "scripts/run-contract-tests.ps1"
+      - "scripts/check-release-notes.ps1"
+      - "CHANGELOG.md"
+      - ".github/workflows/contracts-ci.yml"
+  pull_request:
+    paths:
+      - "contracts/**"
+      - "scripts/run-contract-tests.ps1"
+      - "scripts/check-release-notes.ps1"
+      - "CHANGELOG.md"
+      - ".github/workflows/contracts-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run contract tests
+        shell: pwsh
+        run: pwsh -File scripts/run-contract-tests.ps1
+      - name: Check release notes
+        shell: pwsh
+        run: pwsh -File scripts/check-release-notes.ps1
