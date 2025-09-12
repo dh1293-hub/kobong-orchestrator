@@ -31,7 +31,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.19.0'
+          $120'
           cache: 'npm'
       - run: npm ci
       - run: npm run run-lint
@@ -49,7 +49,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.19.0'
+          $120'
           cache: 'npm'
       - run: npm ci
       - name: Gate — lint/typecheck/build/tests
@@ -67,4 +67,5 @@ jobs:
           LEVEL: ${{ github.event.inputs.level }}
         run: |
           npm run release -- --release-as ${LEVEL}
+
 
