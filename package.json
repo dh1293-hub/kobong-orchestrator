@@ -1,4 +1,4 @@
-﻿{
+{
     "name":  "kobong-orchestrator",
     "version":  "0.1.0",
     "private":  true,
@@ -10,7 +10,7 @@
                     "build":  "tsc -p tsconfig.json",
                     "start":  "node dist/app/bootstrap.js",
                     "check:ts":  "node ./scripts/check-ts-version.mjs",
-                    "prebuild":  "pwsh ./scripts/check-contracts.ps1 \u0026\u0026 node ./scripts/check-ts-version.cjs \u0026\u0026 node ./scripts/check-ts-version.mjs",
+                    "prebuild":  "pwsh ./scripts/check-contracts.ps1 \u0026\u0026  \u0026\u0026 node ./scripts/check-ts-version.mjs",
                     "run-tests":  "vitest run",
                     "run-smoke":  "vitest run tests/e2e --reporter=dot",
                     "run-contract":  "vitest run tests/contract --reporter=dot",
@@ -101,3 +101,4 @@
                          "zod":  "3.23.8"
                      }
 }
+

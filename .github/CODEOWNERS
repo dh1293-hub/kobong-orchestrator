@@ -1,0 +1,11 @@
+# CODEOWNERS — default owners
+# 참고: 팀을 쓰려면 @org/team 형식 사용
+*       @dh1293-hub
+
+# Areas
+.github/            @dh1293-hub
+scripts/            @dh1293-hub
+infra/              @dh1293-hub
+app/                @dh1293-hub
+src/                @dh1293-hub
+tests/              @dh1293-hub

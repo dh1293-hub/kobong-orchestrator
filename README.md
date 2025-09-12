@@ -10,3 +10,7 @@
 
 
 
+
+[![Contracts CI](https://img.shields.io/github/actions/workflow/status/dh1293-hub/kobong-orchestrator/contracts-ci.yml?branch=main)](https://github.com/dh1293-hub/kobong-orchestrator/actions/workflows/contracts-ci.yml)
+[![Release Gate](https://img.shields.io/github/actions/workflow/status/dh1293-hub/kobong-orchestrator/release-gate.yml?branch=main)](https://github.com/dh1293-hub/kobong-orchestrator/actions/workflows/release-gate.yml)
+
