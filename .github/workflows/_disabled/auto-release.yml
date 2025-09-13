@@ -1,4 +1,4 @@
-﻿name: Auto Release (rel bot)
+name: Auto Release (rel bot)
 
 on:
   schedule:

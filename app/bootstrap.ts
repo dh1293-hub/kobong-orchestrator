@@ -1,4 +1,4 @@
-﻿import { mkdirSync, appendFileSync } from 'fs';
+import { mkdirSync, appendFileSync } from 'fs';
 import { join } from 'path';
 
 const __LOG_DIR = 'logs';

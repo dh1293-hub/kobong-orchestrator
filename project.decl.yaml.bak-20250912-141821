@@ -1,9 +1,0 @@
-﻿decl_version: 1
-project: { id: han.gpt5, name: Han GPT-5 Conductor, owner: STS }
-runtimes: { python: "3.11", node: "20.x" }
-paths: { root_env: HAN_GPT5_ROOT, out: out/, logs: logs/, cache: .cache/, tmp: .tmp/ }
-quality: { coverage: { lines: 0.85, branches: 0.80 }, e2e: { required: ["smoke_bootstrap","release_notes_acl"] } }
-release: { strategy: semver, changelog: conventional, ci: github-actions }
-security: { pii_masking: true, break_glass: { enabled: false } }
-contracts: { schema_versioning: semver }
-ui: { invariants: ["card_header_rule","role_combo_right","input_group_single_row"] }

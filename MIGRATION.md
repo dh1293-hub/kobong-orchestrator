@@ -1,4 +1,4 @@
-﻿# MIGRATION
+# MIGRATION
 
 - Source: D:\ChatGPT5_AI_Link\dosc\gpt5-conductor
 - New   : D:\ChatGPT5_AI_Link\dosc\kobong-orchestrator

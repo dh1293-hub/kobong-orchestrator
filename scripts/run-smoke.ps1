@@ -1,4 +1,4 @@
-﻿param()
+param()
 $ErrorActionPreference = "Stop"
 Write-Host "== Smoke (logging) =="
 python -m scripts.smoke_log

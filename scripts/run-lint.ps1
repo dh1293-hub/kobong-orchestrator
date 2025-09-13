@@ -1,4 +1,4 @@
-﻿# run-lint.ps1 (v1)
+# run-lint.ps1 (v1)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Write-Host '[lint] start'

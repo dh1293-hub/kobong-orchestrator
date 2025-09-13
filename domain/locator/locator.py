@@ -1,4 +1,4 @@
-﻿"""
+"""
 Project : ChatGPT5 AI Link – Conductor
 Module  : domain/locator/locator.py
 Version : v0.1.1 (2025-09-10 22:30)

@@ -1,4 +1,4 @@
-﻿name: release-verify
+name: release-verify
 
 on:
   workflow_dispatch:

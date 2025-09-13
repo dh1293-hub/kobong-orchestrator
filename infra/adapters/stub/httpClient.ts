@@ -1,4 +1,4 @@
-﻿import { HttpClientPort, HttpRequest, HttpResponse } from "../../../domain/ports/httpClient";
+import { HttpClientPort, HttpRequest, HttpResponse } from "../../../domain/ports/httpClient";
 import { createJsonlLogger } from "../../logging/jsonlLogger";
 
 const log = createJsonlLogger({ defaultModule: "infra.stub.http" }).with({ module: "infra.stub.http" });

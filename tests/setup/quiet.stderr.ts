@@ -1,4 +1,4 @@
-﻿/** Quiet stderr filter: hide "fatal: not a git repository" lines during tests */
+/** Quiet stderr filter: hide "fatal: not a git repository" lines during tests */
 const origWrite = process.stderr.write.bind(process.stderr);
 process.stderr.write = (chunk, enc, cb) => {
   try {

@@ -1,4 +1,4 @@
-﻿from typing import Protocol, Literal, Iterable, Optional
+from typing import Protocol, Literal, Iterable, Optional
 from .types import Point
 
 By = Literal["text", "icon", "anchor", "coord"]

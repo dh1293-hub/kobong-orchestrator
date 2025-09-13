@@ -1,4 +1,4 @@
-﻿import { getRepoJsonSafe } from "../infra/kobong/git_repo";
+import { getRepoJsonSafe } from "../infra/kobong/git_repo";
 
 export type KobongFetchArgs = { url: string; headers?: Record<string, string> };
 

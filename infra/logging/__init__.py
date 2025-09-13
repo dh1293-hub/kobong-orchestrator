@@ -1,2 +1,2 @@
-﻿from .json_logger import JsonLogger  # public API
+from .json_logger import JsonLogger  # public API
 

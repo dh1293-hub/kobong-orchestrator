@@ -1,4 +1,4 @@
-﻿import json
+import json
 from pathlib import Path
 from jsonschema import validate, Draft202012Validator
 import pytest

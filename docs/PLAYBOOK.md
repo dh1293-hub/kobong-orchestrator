@@ -1,4 +1,4 @@
-﻿# Error Playbook (Sprint-B seed)
+# Error Playbook (Sprint-B seed)
 
 > ?⑥씪 吏꾩떎?먯쿇. ???먮윭 = ??ID = ?ы쁽 ?④퀎/?먯씤/議곗튂/媛?쒕젅???ы븿.
 

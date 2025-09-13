@@ -1,5 +1,0 @@
-# Contract test minimal deps (pin for reproducibility)
-pytest==7.4.4
-requests==2.31.0
-pydantic==1.10.15
-# add libs here as contracts grow

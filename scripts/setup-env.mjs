@@ -1,4 +1,4 @@
-﻿import fs from "node:fs";
+import fs from "node:fs";
 import path from "node:path";
 const src = path.resolve(".env.sample");
 const dst = path.resolve(".env");

@@ -1,4 +1,4 @@
-﻿export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
+export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 
 export interface LogEvent {
   timestamp: string; // ISO8601

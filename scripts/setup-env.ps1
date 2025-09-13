@@ -1,4 +1,4 @@
-﻿# scripts/setup-env.ps1 — clean (v2)
+# scripts/setup-env.ps1 — clean (v2)
 param([string]$Python = 'python')
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest

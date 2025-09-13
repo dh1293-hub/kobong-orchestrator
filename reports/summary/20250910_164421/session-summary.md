@@ -1,4 +1,4 @@
-﻿# Release run (RID=17606726020)
+# Release run (RID=17606726020)
 
 Artifacts copied from: D:\ChatGPT5_AI_Link\dosc\gpt5-conductor\out\gh\run_17606726020
 

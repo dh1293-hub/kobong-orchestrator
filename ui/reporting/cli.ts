@@ -1,4 +1,4 @@
-﻿import { ReportService } from "../../app/reporting/ReportService";
+import { ReportService } from "../../app/reporting/ReportService";
 import { ParserAdapter } from "../../infra/reporting/ParserAdapter";
 import { QueryStub } from "../../infra/reporting/QueryStub";
 import { CsvRenderer } from "../../infra/reporting/CsvRenderer";

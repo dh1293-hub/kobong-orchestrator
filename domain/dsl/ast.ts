@@ -1,4 +1,4 @@
-﻿/** domain/dsl/ast.ts */
+/** domain/dsl/ast.ts */
 import type { ReportSpec } from "../reporting/types";
 
 /** AST 최소 구조: 향후 nearley/ohm-js 등 교체 가능 */

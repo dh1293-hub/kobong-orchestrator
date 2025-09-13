@@ -1,4 +1,4 @@
-﻿import json
+import json
 from jsonschema import Draft202012Validator
 
 def test_log_record_matches_schema():

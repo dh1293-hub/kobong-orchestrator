@@ -1,4 +1,4 @@
-﻿/** domain/reporting/types.ts */
+/** domain/reporting/types.ts */
 export type FieldRef = { name: string; alias?: string };
 export type FilterOp = "eq" | "ne" | "gt" | "lt" | "gte" | "lte" | "in" | "contains";
 

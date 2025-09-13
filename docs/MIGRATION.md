@@ -1,3 +1,3 @@
-﻿# Migration Notes
+# Migration Notes
 
 

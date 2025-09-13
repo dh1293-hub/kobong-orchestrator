@@ -1,4 +1,4 @@
-﻿# PS-SB-PORTS-FIX-AUTO_v1.3.1 — 계약 PATCH + 빌드 + ESM↔CJS 브리지 + 테스트 + 커밋/푸시
+# PS-SB-PORTS-FIX-AUTO_v1.3.1 — 계약 PATCH + 빌드 + ESM↔CJS 브리지 + 테스트 + 커밋/푸시
 $ErrorActionPreference = "Stop"
 function Warn($m){ Write-Host "[경고] $m" -ForegroundColor DarkYellow }
 function Info($m){ Write-Host "[정보] $m" -ForegroundColor Cyan }

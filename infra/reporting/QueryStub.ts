@@ -1,4 +1,4 @@
-﻿import type { DslAst, Datasets, Rows, QueryPort } from "../../domain/reporting/ports";
+import type { DslAst, Datasets, Rows, QueryPort } from "../../domain/reporting/ports";
 
 function isArrayOfObjects(v: unknown): v is Array<Record<string, unknown>> {
   return Array.isArray(v) && v.length > 0 && typeof v[0] === "object" && v[0] !== null;

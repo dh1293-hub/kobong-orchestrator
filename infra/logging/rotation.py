@@ -1,4 +1,4 @@
-﻿import os
+import os
 import time
 
 def rotate_if_needed(path: str, max_bytes: int, backups: int) -> None:

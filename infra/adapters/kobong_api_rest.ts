@@ -1,4 +1,4 @@
-﻿/* eslint-disable no-useless-escape */ // TODO(PS-12.6): refine regex
+/* eslint-disable no-useless-escape */ // TODO(PS-12.6): refine regex
 /* eslint-disable @typescript-eslint/no-explicit-any */ // TODO(PS-12.6): type properly
 import { resolve } from "node:path";
 import { execFile } from "node:child_process";

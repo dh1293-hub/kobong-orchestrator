@@ -1,4 +1,4 @@
-﻿/* eslint-disable no-useless-escape */ // TODO(PS-12.6): refine regex and remove
+/* eslint-disable no-useless-escape */ // TODO(PS-12.6): refine regex and remove
 import { it, expect } from "vitest";
 import { execSync } from "node:child_process";
 import { kobongFetch } from "../../app/kobong_api";

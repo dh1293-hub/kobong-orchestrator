@@ -1,4 +1,4 @@
-﻿# Action DSL v0.3 (Contract)
+# Action DSL v0.3 (Contract)
 - **Version**: 0.3 (requests/responses share the same major/minor)
 - **Purpose**: GPT-5 ↔ Conductor 간 실행 가능한 표준 명령/결과 포맷
 - **Principles**: Contract-first, additive-only(minor), evidence-first(logging/snapshots)

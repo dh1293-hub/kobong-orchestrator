@@ -1,4 +1,4 @@
-﻿# Post-run Summary (20250910_153428)
+# Post-run Summary (20250910_153428)
 
 ## Environment
 ``

@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Stop"
 Write-Host "[Pester] bootstrap" -ForegroundColor DarkCyan
 $mod = Get-Module -ListAvailable -Name Pester | Sort-Object Version -Descending | Select-Object -First 1
 if (-not $mod) { Install-Module Pester -Scope CurrentUser -Force -MinimumVersion 5.5.0 -SkipPublisherCheck; $mod = Get-Module -ListAvailable -Name Pester | Sort-Object Version -Descending | Select-Object -First 1 }

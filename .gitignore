@@ -14,3 +14,14 @@ repo.merge.settings.applied*.json
 logs/
 .venv/
 scripts/hooks/
+# --- Kobong standard ignore (venv & caches) ---
+__pycache__/
+*.pyc
+# dotenv (keep .env.sample tracked)
+.env
+.env.local
+.env.*
+!.env.sample
+# build/log outputs
+out/
+scripts/view-ci-summary.ps1

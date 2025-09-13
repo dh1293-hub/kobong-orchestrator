@@ -1,4 +1,4 @@
-﻿# ChatGPT5 AI Link – Conductor (Discovery v0.1)
+# ChatGPT5 AI Link – Conductor (Discovery v0.1)
 ## Purpose
 Conductor–GPT-5–AI1/AI2 semi-automated collaboration with HITL gates and reproducible evidence.
 ## Architecture (High-level)

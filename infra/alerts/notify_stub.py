@@ -1,4 +1,4 @@
-﻿import os, sys
+import os, sys
 
 _LEVELS = ["TRACE","DEBUG","INFO","WARN","ERROR","FATAL"]
 

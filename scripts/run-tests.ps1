@@ -1,4 +1,4 @@
-﻿param()
+param()
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot/_preamble.ps1"
 

@@ -1,8 +1,0 @@
-﻿$ErrorActionPreference='Stop'
-$root = (Resolve-Path "$PSScriptRoot\..").Path
-$py = Join-Path $root '.venv\Scripts\python.exe'
-if (-not (Test-Path $py)) { throw 'PRECONDITION: .venv missing. Run Code-008 first.' }
-# 선언 프리플라이트
-& "$PSScriptRoot\validate-decl.ps1"
-# pytest 실행 (contracts 우선)
-& $py -m pytest -q "tests/contract"

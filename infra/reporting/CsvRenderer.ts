@@ -1,4 +1,4 @@
-﻿import type { DslAst, Rows, RenderPort, ReportResult } from "../../domain/reporting/ports";
+import type { DslAst, Rows, RenderPort, ReportResult } from "../../domain/reporting/ports";
 
 export class CsvRenderer implements RenderPort {
   render(ast: DslAst, rows: Rows): ReportResult {
