@@ -27,5 +27,14 @@ jobs:
           python -m pip install pytest==8.3.2 jsonschema==4.23.0 PyYAML==6.0.2
       - name: Run contract tests
         run: |
-          set -e           pytest -q tests/contract || \           pytest -q tests/contracts || \           pytest -q -k "contract or contracts or schema or api" || \           { echo "::notice title=contract-tests::No contract tests matched; skipping."; exit 0; }
-
+          set -e
+          if pytest -q tests/contract; then
+            echo "contracts: tests/contract"
+          elif pytest -q tests/contracts; then
+            echo "contracts: tests/contracts"
+          elif pytest -q -k 'contract or contracts or schema or api'; then
+            echo "contracts: keyword selection"
+          else
+            echo "::notice title=contract-tests::No contract tests matched; skipping."
+            exit 0
+          fi
