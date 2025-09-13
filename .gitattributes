@@ -36,3 +36,5 @@
 *.exe  binary
 *.dll  binary
 *.pdb  binary
+
+*.yml text eol=lf
