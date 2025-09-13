@@ -24,3 +24,4 @@ __pycache__/
 !.env.sample
 # build/log outputs
 out/
+scripts/view-ci-summary.ps1
