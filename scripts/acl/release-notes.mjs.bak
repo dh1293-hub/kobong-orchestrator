@@ -1,0 +1,60 @@
+#!/usr/bin/env node
+import { execSync } from "node:child_process";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import process from "node:process";
+
+const sh    = (c) => execSync(c, { encoding: "utf8" }).trim();
+const trySh = (c) => { try { return sh(c); } catch { return ""; } };
+const esc   = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+function latestTag() { const o = trySh("git describe --tags --abbrev=0"); return o || null; }
+function tagList()   { const o = trySh("git tag --sort=-v:refname"); return o ? o.split("\\n").map(s=>s.trim()).filter(Boolean) : []; }
+function prevTag(curr){
+  const t = tagList();
+  if (!curr) return t.length>1 ? t[1] : null;
+  const i = t.indexOf(curr);
+  return (i>=0 && i+1<t.length) ? t[i+1] : null;
+}
+
+function extractFromChangelog(ver){
+  try{
+    const cl = readFileSync("CHANGELOG.md","utf8").replace(/\\r/g, "");
+    // 헤더: ##~######, []/() 유무 허용. 다음 헤더(##~######) 또는 파일 끝($)전까지 캡처
+    const rx = new RegExp("^\\s*#{2,6}\\s*\\[?"+esc(ver)+"\\]?\\s*(?:\\([^)]*\\))?\\s*$\\n([\\s\\S]*?)(?=^\\s*#{2,6}\\s|\\s*$)", "m");
+    const m = cl.match(rx);
+    return m ? m[1].trim() : null;
+  } catch { return null; }
+}
+
+function notesFromGit(prev, curr){
+  let raw = "";
+  if (prev) raw = trySh(`git log --pretty=format:%s||%h ${prev}..${curr}`);
+  else      raw = trySh(`git log --pretty=format:%s||%h --max-count=200`);
+  const lines = raw ? raw.split("\\n").filter(Boolean) : [];
+  if (lines.length === 0) return "- No changes recorded.";
+  return lines.map(l => {
+    const [s,h] = l.split("||");
+    return `- ${s} (${h ? h : "NA"})`;
+  }).join("\\n");
+}
+
+function main(){
+  const args  = process.argv.slice(2);
+  const tag   = (args.find(a=>a.startsWith("--tag="))||"").split("=")[1] || latestTag();
+  const out   = (args.find(a=>a.startsWith("--out="))||"").split("=")[1] || join("out","release_notes",`${tag}.md`);
+  if (!tag) { console.error("No git tag."); process.exit(2); }
+
+  const ver  = tag.replace(/^v/,"");
+  const prev = prevTag(tag);
+
+  let body = extractFromChangelog(ver);         // 1차: CHANGELOG
+  if (!body) body = notesFromGit(prev, tag);    // 2차: git-log 폴백
+
+  const notes = `# ${tag}\\n\\n${body}`;
+  const dir   = dirname(out);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(out, notes, { encoding: "utf8" });
+  console.log(out);
+}
+main();

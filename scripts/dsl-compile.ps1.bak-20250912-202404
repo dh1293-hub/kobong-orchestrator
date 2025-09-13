@@ -1,0 +1,76 @@
+#requires -PSEdition Core
+#requires -Version 7.0
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+param(
+  [string] $DslFile,
+  [string] $OutFile
+)
+
+function Get-GitRoot { try { git rev-parse --show-toplevel 2>$null } catch { $null } }
+
+# 루트 & 출력 디렉터리
+$ROOT  = $env:HAN_GPT5_ROOT
+if (-not $ROOT) { $ROOT = Get-GitRoot }
+if (-not $ROOT) { $ROOT = (Resolve-Path "$PSScriptRoot/..").Path }
+if (-not (Test-Path $ROOT)) { throw "Invalid root: $ROOT" }
+$env:HAN_GPT5_ROOT = $ROOT
+$OUTDIR = $env:HAN_GPT5_OUT
+if (-not $OUTDIR) { $OUTDIR = Join-Path $ROOT 'out' }
+
+# 기본 DSL 파일/출력 경로 추론
+if (-not $DslFile) {
+  $candidates = @(
+    (Join-Path $ROOT 'domain/dsl.demo.txt'),
+    (Join-Path $ROOT 'domain/dsl.demo.dsl'),
+    (Join-Path $ROOT 'dsl/demo.dsl')
+  )
+  $DslFile = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+}
+if (-not $OutFile) { $OutFile = Join-Path $OUTDIR 'dsl_request.demo.json' }
+
+# DSL 로드
+$lines = @()
+if ($DslFile -and (Test-Path $DslFile)) {
+  $lines = Get-Content -LiteralPath $DslFile -Encoding utf8
+  Write-Host "[RUN] compile DSL → $OutFile"
+} else {
+  Write-Warning "DSL file not found; using embedded demo."
+  $lines = @(
+    'from sample',
+    'columns id, name, active',
+    'format csv'
+  )
+  Write-Host "[RUN] compile DSL (embedded) → $OutFile"
+}
+
+# 파싱 상태
+$req = [ordered]@{
+  from    = $null
+  columns = @()
+  format  = 'CSV'
+}
+
+foreach ($raw in $lines) {
+  $line = ($raw -replace '(#|//).*$', '').Trim()
+  if (-not $line) { continue }
+  $sp   = $line.IndexOf(' ')
+  $p    = ($sp -gt 0) ? $line.Substring(0,$sp) : $line
+  $rest = ($sp -gt 0) ? $line.Substring($sp+1).Trim() : ''
+
+  switch ($p.ToLowerInvariant()) {
+    'from'    { $req.from = $rest; break }
+    'columns' { $req.columns = ($rest -split '[,\s]+' | Where-Object { $_ }) ; break }
+    'select'  { $req.columns = ($rest -split '[,\s]+' | Where-Object { $_ }) ; break }
+    'format'  { if ($rest) { $req.format = $rest.ToUpperInvariant() } ; break }
+    default   { throw "LOGIC: unknown DSL clause -> '$p'" }
+  }
+}
+
+if (-not $req.from)    { throw 'PRECONDITION: "from" clause required' }
+if (-not $req.columns) { $req.columns = @('id') }
+
+$null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OutFile)
+$req | ConvertTo-Json -Depth 6 | Out-File -LiteralPath $OutFile -Encoding utf8
+Write-Host "[DSL] compiled → $OutFile"

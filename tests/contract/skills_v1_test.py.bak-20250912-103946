@@ -1,0 +1,34 @@
+import json, yaml, pathlib
+from jsonschema import Draft7Validator, RefResolver
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+def _load_json(p: pathlib.Path):
+    # BOM 관대 처리
+    return json.loads(p.read_text(encoding="utf-8-sig"))
+
+skills_schema   = _load_json(ROOT / "contracts/skills.v1.json")
+commands_schema = _load_json(ROOT / "contracts/kkb.commands.v1.json")
+
+# 외부 참조 스토어: "$ref": "kkb.commands.v1#/definitions/action" 해결
+store = {
+    commands_schema.get("$id", "kkb.commands.v1"): commands_schema,
+    skills_schema.get("$id", "skills.v1"): skills_schema,
+}
+
+def iter_skill_files():
+    for d in ["skills/staged", "skills/approved"]:
+        p = ROOT / d
+        if p.exists():
+            yield from p.glob("*.yaml")
+
+def test_skill_yaml_against_schema():
+    resolver = RefResolver.from_schema(skills_schema, store=store)
+    validator = Draft7Validator(schema=skills_schema, resolver=resolver)
+    errors = []
+    for yfile in iter_skill_files():
+        data = yaml.safe_load(yfile.read_text(encoding="utf-8"))
+        for err in validator.iter_errors(data):
+            errors.append(f"{yfile.name}: {err.message}")
+    if errors:
+        raise AssertionError("\\n".join(errors))

@@ -1,0 +1,4 @@
+﻿# scripts/run-contract-tests.ps1
+$ErrorActionPreference='Stop'
+& $PSScriptRoot/setup-env.ps1
+pytest -q tests/contract

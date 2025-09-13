@@ -1,0 +1,18 @@
+id: skill.send_prompt_to_ai1
+name: "Send prompt to AI1 and verify reply"
+version: 0.1.0
+category: chat
+intent: "paste into chat input and press Enter"
+preconditions:
+  - role: ai1
+  - app: browser
+  - ui: chat_input_visible
+plan:
+  - LOCATE: {role: ai1, by: text, query: ["채팅 입력", "Send a message"], timeout_ms: 5000}
+  - FOCUS:  {target: "@LOCATE"}
+  - PASTE:  {text: "<PROMPT_TEXT>"}
+  - PRESS:  {keys: Enter}
+  - WAIT:   {ms: 1200}
+  - SNAPSHOT: {label: ai1_after_send}
+assertions:
+  - VERIFY: {text_contains_any: ["Sent", "전송됨", "응답 중"], timeout_ms: 2000}

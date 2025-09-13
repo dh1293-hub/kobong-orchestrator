@@ -1,26 +1,11 @@
-node_modules/
-npm-debug.log*
-dist/
-coverage/
-logs/
-*.log
-.DS_Store
-Thumbs.db
-.venv/
-**/__pycache__/
-*.py[cod]
-release_notes/
-# Kobong standard ignore
-out/
-reports/releases/*/*.zip
-*.tgz
-*.zip
-*.bak
-!out/.gitkeep
-dist/
-*.zip
 
-# GPT5 ops — backups & logs
-*.bak-*
-*.bak*
-.gpt5.lock
+# GPT5 ignore rules
+.tmp/
+logs/
+*.bak-PS*
+protection.*applied*.json
+protection.backup*.json
+protection.restored*.json
+protection.relaxed*.json
+repo.merge.settings.applied*.json
+

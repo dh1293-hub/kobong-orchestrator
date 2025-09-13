@@ -1,0 +1,6 @@
+# scripts/setup-env.ps1
+param([string]$Python='python')
+$ErrorActionPreference='Stop'
+if (-not (Test-Path '.venv')) { & $Python -m venv .venv }
+if (Test-Path '.venv/Scripts/Activate.ps1') { . ./.venv/Scripts/Activate.ps1 } else { . ./.venv/bin/Activate.ps1 }
+pip install -r requirements.contract-tests.txt --disable-pip-version-check

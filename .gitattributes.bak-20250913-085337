@@ -1,0 +1,49 @@
+* text=auto eol=lf
+
+# Windows scripts (선호 스타일 명시)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# PowerShell/Unix scripts & yaml/md → LF
+*.ps1  text eol=lf
+*.psm1 text eol=lf
+*.psd1 text eol=lf
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.md   text eol=lf
+
+# Normalize line endings (LF default)
+*           text=auto eol=lf
+
+# Windows batch files keep CRLF
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# PowerShell scripts ? LF? ?? (PS7/5.1 ?? OK)
+*.ps1       text eol=lf
+*.psm1      text eol=lf
+*.psd1      text eol=lf
+
+# Common text types
+*.sh        text eol=lf
+*.py        text eol=lf
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.jsx       text eol=lf
+*.json      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.md        text eol=lf
+*.toml      text eol=lf
+*.ini       text eol=lf
+
+*.ps1 text eol=crlf
+*.sh  text eol=lf
+*.ps1  text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+*.dsl  text eol=lf
+*.json text eol=lf
+*.csv  text eol=lf
