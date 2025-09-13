@@ -1,40 +1,11 @@
 ﻿* text=auto eol=lf
-
-# Windows scripts
-*.ps1  text eol=crlf
-*.psm1 text eol=crlf
+*.ps1  text eol=lf
+*.psm1 text eol=lf
+*.psd1 text eol=lf
+*.sh   text eol=lf
 *.cmd  text eol=crlf
 *.bat  text eol=crlf
-
-# Unix scripts
-*.sh   text eol=lf
-
-# Data & configs
 *.yml  text eol=lf
 *.yaml text eol=lf
-*.json text eol=lf
 *.md   text eol=lf
-*.ini  text eol=lf
-*.toml text eol=lf
-
-# Source
-*.ts   text eol=lf
-*.tsx  text eol=lf
-*.js   text eol=lf
-*.jsx  text eol=lf
-*.py   text eol=lf
-
-# Binaries
-*.png  binary
-*.jpg  binary
-*.jpeg binary
-*.gif  binary
-*.ico  binary
-*.pdf  binary
-*.zip  binary
-*.7z   binary
-*.exe  binary
-*.dll  binary
-*.pdb  binary
-
-*.yml text eol=lf
+*.txt  text eol=lf
