@@ -1,0 +1,26 @@
+{
+  "title": "report:demo",
+  "columns": [
+    "id",
+    "name",
+    "active"
+  ],
+  "rows": [
+    [
+      1,
+      "alpha",
+      true
+    ],
+    [
+      2,
+      "beta",
+      false
+    ]
+  ],
+  "format": "JSON",
+  "rendered": {
+    "json": {
+      "count": 2
+    }
+  }
+}

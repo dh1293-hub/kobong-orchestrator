@@ -1,0 +1,15 @@
+﻿# scripts/setup-env.ps1 — clean
+param([string]$Python = 'python')
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+
+# venv 보장
+if (-not (Test-Path '.venv')) { & $Python -m venv .venv }
+
+# python 실행 파일 선택
+$py = if (Test-Path '.venv\Scripts\python.exe') { '.venv\Scripts\python.exe' }
+      elseif (Test-Path '.venv/bin/python')    { '.venv/bin/python' }
+      else { $Python }
+
+# 의존성 설치(조용히)
+& $py -m pip install -q -r (Join-Path (Split-Path $PSScriptRoot -Parent) 'requirements.contract-tests.txt') --disable-pip-version-check

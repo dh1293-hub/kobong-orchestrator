@@ -1,0 +1,79 @@
+﻿/** domain/dsl/parser.ts */
+import type { ReportSpec, SortSpec } from "../reporting/types";
+import { ParseError } from "../reporting/errors";
+
+type Ctx = { lineNo: number; line?: string };
+
+function err(ctx: Ctx, msg: string): never {
+  throw new ParseError(`line ${ctx.lineNo}: ${msg} | "${ctx.line ?? ""}"`, ctx.lineNo);
+}
+
+function splitCsv(s: string): string[] {
+  // 간단: 콤마 기준(따옴표 처리 없음 — v0.1)
+  return s.split(",").map(x => x.trim()).filter(Boolean);
+}
+
+/** core parser: 줄 단위 규칙을 누적하여 ReportSpec 작성 */
+export function parseFromDsl(input: string): ReportSpec {
+  const lines = input.split(/\r?\n/).map(s => s.trim()).filter(s => s.length > 0);
+  const ctx: Ctx = { lineNo: 0 };
+
+  let source = "";
+  const fields: { name: string; alias?: string }[] = [];
+  let format: "csv" | "json" | "" = "";
+  let limit: number | undefined;
+  let sort: SortSpec[] | undefined;
+
+  for (let i = 0; i < lines.length; i++) {
+    ctx.lineNo = i + 1;
+    const ln = lines[i];
+    const m = ln.match(/^([A-Za-z]+)\s+(.+)$/);
+    if (!m) err(ctx, "알 수 없는 구문");
+
+    const head = m[1].toUpperCase();
+    const body = m[2].trim();
+
+    if (head === "REPORT") {
+      if (!body) err(ctx, "REPORT 뒤에 source 필요");
+      source = body;
+    } else if (head === "FIELDS") {
+      const names = splitCsv(body);
+      if (names.length === 0) err(ctx, "FIELDS 비어있음");
+      for (const n of names) {
+        // alias 지원: field as alias
+        const mm = n.match(/^([A-Za-z0-9_]+)(\s+AS\s+([A-Za-z0-9_]+))?$/i);
+        if (!mm) err(ctx, `필드명 형식 오류: ${n}`);
+        fields.push({ name: mm[1], alias: mm[3] });
+      }
+    } else if (head === "FORMAT") {
+      const f = body.toLowerCase();
+      if (f !== "csv" && f !== "json") err(ctx, "FORMAT csv|json 만 허용");
+      format = f as "csv" | "json";
+    } else if (head === "LIMIT") {
+      const n = Number(body);
+      if (!Number.isInteger(n) || n < 1) err(ctx, "LIMIT 정수 필요");
+      limit = n;
+    } else if (head === "SORT") {
+      // 예: SORT amount desc
+      const parts = body.split(/\s+/);
+      if (parts.length < 1) err(ctx, "SORT 형식 오류");
+      const field = parts[0];
+      const dir = (parts[1]?.toLowerCase() === "desc") ? "desc" : "asc";
+      sort = [{ field, dir }];
+    } else {
+      err(ctx, `지원되지 않는 키워드: ${head}`);
+    }
+  }
+
+  if (!source) throw new ParseError("source 미지정");
+  if (fields.length === 0) throw new ParseError("fields 미지정");
+  if (!format) throw new ParseError("format 미지정");
+
+  const spec: ReportSpec = {
+    source, fields, format,
+    limit,
+    sort,
+  };
+  return spec;
+}
+

@@ -1,0 +1,22 @@
+name: contract-tests
+on:
+  push:
+    paths:
+      - 'contracts/**'
+      - 'skills/**'
+      - 'tests/contract/**'
+      - 'scripts/**'
+      - 'project.decl.yaml'
+  workflow_dispatch:
+
+jobs:
+  contract:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Run contract tests
+        shell: pwsh
+        run: |
+          pwsh -NoLogo -File scripts/run-contract-tests.ps1

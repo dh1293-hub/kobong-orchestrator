@@ -1,0 +1,17 @@
+﻿{
+  "$id": "skills.v1",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["id","name","version","category","intent","plan"],
+  "properties": {
+    "id": {"type":"string"},
+    "name": {"type":"string"},
+    "version": {"type":"string"},
+    "category": {"enum":["browser","chat","docs","file"]},
+    "intent": {"type":"string"},
+    "preconditions": {"type":"array","items":{"type":"object"}},
+    "plan": {"type":"array","items":{"$ref":"kkb.commands.v1#/definitions/action"}},
+    "assertions": {"type":"array","items":{"type":"object"}},
+    "kpi": {"type":"object"}
+  }
+}

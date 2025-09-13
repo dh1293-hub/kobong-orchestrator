@@ -1,0 +1,22 @@
+docs:
+  - README.md
+  - docs/**
+
+ci:
+  - .github/workflows/**
+
+build:
+  - package.json
+  - pnpm-lock.yaml
+  - yarn.lock
+  - scripts/**
+
+infra:
+  - infra/**
+
+app:
+  - app/**
+  - src/**
+
+test:
+  - tests/**
