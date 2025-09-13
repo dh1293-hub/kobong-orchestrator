@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/logging/v1.schema.json",
+  "type": "object",
+  "required": ["timestamp","tz","level","app","env","host","pid","thread","trace_id","action","result","latency_ms","message"],
+  "properties": {
+    "timestamp": { "type": "string" },
+    "tz": { "type": "string", "enum": ["Asia/Seoul"] },
+    "level": { "type": "string" },
+    "app": { "type": "object", "required": ["name","ver"],
+      "properties": { "name": { "type": "string" }, "ver": { "type": "string" }, "commit": { "type": ["string","null"] } } },
+    "env": { "type": "string" },
+    "host": { "type": "string" },
+    "pid": { "type": "integer" },
+    "thread": { "type": "string" },
+    "trace_id": { "type": "string" },
+    "action": { "type": "object", "required": ["step"], "properties": { "step": { "type": "integer" }, "dsl_id": { "type": ["string","null"] } } },
+    "result": { "type": "object", "required": ["status","code"],
+      "properties": { "status": { "type": "string", "enum": ["ok","retry","timeout","assert_fail","cancel","fatal"] },
+                      "code":   { "type": "integer", "enum": [0,1,2,3,4,9] } } },
+    "latency_ms": { "type": "integer" },
+    "message": { "type": "string" }
+  },
+  "additionalProperties": true
+}
