@@ -25,3 +25,5 @@ __pycache__/
 # build/log outputs
 out/
 scripts/view-ci-summary.ps1
+.gpt5.lock
+kb_stash_untracked-*/
