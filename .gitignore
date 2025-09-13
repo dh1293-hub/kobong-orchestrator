@@ -9,3 +9,8 @@ protection.restored*.json
 protection.relaxed*.json
 repo.merge.settings.applied*.json
 
+# backups & logs & venv
+*.bak-*
+logs/
+.venv/
+scripts/hooks/
