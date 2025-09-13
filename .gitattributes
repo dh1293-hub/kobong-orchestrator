@@ -9,3 +9,7 @@
 *.yaml text eol=lf
 *.md   text eol=lf
 *.txt  text eol=lf
+
+*.cmd text eol=lf
+
+*.bat text eol=lf
