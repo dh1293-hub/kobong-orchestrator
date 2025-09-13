@@ -1,0 +1,22 @@
+name: EOL Guard
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  check-crlf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail if files contain CR (\r)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ignore=( ':!*.png' ':!*.jpg' ':!*.jpeg' ':!*.gif' ':!*.bmp' ':!*.ico' ':!*.pdf' ':!*.zip' ':!*.7z' ':!*.gz' ':!*.bz2' ':!*.exe' ':!*.dll' ':!*.pdb' )
+          if git grep -I -n $'\r' -- . "${ignore[@]}"; then
+            echo "ERROR: Carriage Return (CR, \\r) detected. Convert files to LF (\\n)."
+            exit 1
+          fi
+          echo "OK: No CR detected (LF-only)."
