@@ -1,4 +1,4 @@
-﻿name: contracts-ci
+name: contracts-ci
 
 on:
   workflow_dispatch:

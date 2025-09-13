@@ -1,4 +1,4 @@
-﻿# kobong_logger v0.2 — PS5/PS7 compatible (no ArgumentList)
+# kobong_logger v0.2 — PS5/PS7 compatible (no ArgumentList)
 function Remove-AnsiEscapes {
   param([string]$s)
   if ($null -eq $s) { return '' }

@@ -1,4 +1,4 @@
-﻿# PS-SB-PORTS-STUB v1.1 — crash-safe (quiet build/test + logfile)
+# PS-SB-PORTS-STUB v1.1 — crash-safe (quiet build/test + logfile)
 $ErrorActionPreference = "Stop"
 function Warn($m){ Write-Host "[경고] $m" -ForegroundColor DarkYellow }
 function Info($m){ Write-Host "[정보] $m" -ForegroundColor Cyan }

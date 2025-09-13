@@ -1,4 +1,4 @@
-﻿name: contracts-status
+name: contracts-status
 
 on:
   pull_request:

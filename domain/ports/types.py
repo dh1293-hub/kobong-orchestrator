@@ -1,4 +1,4 @@
-﻿from dataclasses import dataclass
+from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class Point:

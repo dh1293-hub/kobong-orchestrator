@@ -1,4 +1,4 @@
-﻿from .types import Point
+from .types import Point
 from .locator import LocatorPort
 from .ui import UiPort
 from .ocr import OcrPort

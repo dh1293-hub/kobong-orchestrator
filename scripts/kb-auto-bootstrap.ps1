@@ -1,4 +1,4 @@
-﻿# Code-001 — KB-AUTO-BOOTSTRAP v1 (PS5.1-safe)
+# Code-001 — KB-AUTO-BOOTSTRAP v1 (PS5.1-safe)
 # APPLY IN SHELL
 # Name: KB-AUTO-BOOTSTRAP
 # Version: 1.0.1

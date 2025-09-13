@@ -1,1 +1,1 @@
-﻿# Package marker
+# Package marker

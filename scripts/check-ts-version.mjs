@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Allow TS >=5.3.0 <5.4.0 (eslint typescript-estree 지원 범위)
  * 출력만 하고, 범위를 벗어나면 process.exit(1)
  */

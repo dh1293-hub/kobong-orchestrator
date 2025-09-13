@@ -1,4 +1,4 @@
-﻿import numpy as np
+import numpy as np
 from domain.dsl.actions import ActionExecutor
 
 def test_dsl_locate_paste_verify():

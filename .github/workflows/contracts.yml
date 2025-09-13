@@ -1,4 +1,4 @@
-﻿name: contracts
+name: contracts
 on:
   push:
     branches: [ main ]

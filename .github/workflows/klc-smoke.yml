@@ -1,4 +1,4 @@
-﻿name: KLC Smoke
+name: KLC Smoke
 on:
   push:
     branches: [ '**' ]

@@ -1,4 +1,4 @@
-﻿name: housekeeping
+name: housekeeping
 
 on:
   workflow_dispatch:

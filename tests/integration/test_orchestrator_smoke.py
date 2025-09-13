@@ -1,4 +1,4 @@
-﻿import json
+import json
 from pathlib import Path
 from jsonschema import Draft202012Validator
 from app.orchestrator import ActionOrchestrator, Ports

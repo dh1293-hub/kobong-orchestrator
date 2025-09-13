@@ -1,4 +1,4 @@
-﻿/** domain/reporting/errors.ts */
+/** domain/reporting/errors.ts */
 export class NotImplementedError extends Error {
   constructor(msg = "Not implemented") { super(msg); this.name = "NotImplementedError"; }
 }

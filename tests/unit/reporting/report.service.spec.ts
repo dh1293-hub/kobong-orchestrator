@@ -1,4 +1,4 @@
-﻿/** tests/unit/reporting/report.service.spec.ts */
+/** tests/unit/reporting/report.service.spec.ts */
 import { describe, it, expect } from "vitest";
 import { ReportService } from "../../../app/reporting/ReportService";
 import { ParserAdapter } from "../../../infra/reporting/ParserAdapter";

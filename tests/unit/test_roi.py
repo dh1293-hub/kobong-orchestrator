@@ -1,4 +1,4 @@
-﻿from domain.locator.roi import ROIAnchor
+from domain.locator.roi import ROIAnchor
 
 def test_roi_scaling():
     roi = ROIAnchor(100, 200, 300, 400, base_res=(1920, 1080))

@@ -1,4 +1,4 @@
-﻿import { KeyValueStorePort } from "../../../domain/ports/kvs";
+import { KeyValueStorePort } from "../../../domain/ports/kvs";
 import { createJsonlLogger } from "../../logging/jsonlLogger";
 
 const log = createJsonlLogger({ defaultModule: "infra.stub.kvs" }).with({ module: "infra.stub.kvs" });

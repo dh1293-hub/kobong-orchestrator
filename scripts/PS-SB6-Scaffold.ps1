@@ -1,4 +1,4 @@
-﻿# PS-SB6-Scaffold.ps1  (v1.3)
+# PS-SB6-Scaffold.ps1  (v1.3)
 [CmdletBinding()] param()
 $ErrorActionPreference = "Stop"
 

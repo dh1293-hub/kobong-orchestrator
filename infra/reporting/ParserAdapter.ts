@@ -1,4 +1,4 @@
-﻿import type { DslAst, ParsePort } from "../../domain/reporting/ports";
+import type { DslAst, ParsePort } from "../../domain/reporting/ports";
 
 function normalizeColumns(input: unknown, hint?: unknown): string[] {
   if (Array.isArray(input)) return input.map((v) => String(v));

@@ -1,4 +1,4 @@
-﻿# conftest.py — add repo paths so `infra.logging.json_logger` can be imported in CI
+# conftest.py — add repo paths so `infra.logging.json_logger` can be imported in CI
 # Intent: Locate the directory that contains the "infra" package and prepend it to sys.path for tests.
 # Safe: test-scope only; no runtime effect on production code.
 

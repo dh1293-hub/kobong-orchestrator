@@ -1,4 +1,4 @@
-﻿name: contract-tests
+name: contract-tests
 on:
   push:
     paths:

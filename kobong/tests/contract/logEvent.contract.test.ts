@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import { LogEvent } from "../../src/contracts.logEvent";
 
 describe("contract: LogEvent", () => {

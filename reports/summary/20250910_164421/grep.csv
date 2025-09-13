@@ -1,4 +1,4 @@
-﻿"Path","LineNumber","Line"
+"Path","LineNumber","Line"
 "D:\ChatGPT5_AI_Link\dosc\gpt5-conductor\out\summary\20250910_164421\gh_run_17606726020_log.txt","70","release	Run actions/checkout@v4	2025-09-10T07:38:04.3913053Z hint: of your new repositories, which will suppress this warning, call:"
 "D:\ChatGPT5_AI_Link\dosc\gpt5-conductor\out\summary\20250910_164421\gh_run_17606726020_log.txt","185","release	Create tag if missing	2025-09-10T07:38:05.6654932Z fatal: 'v## [0.1.11]' is not a valid tag name."
 "D:\ChatGPT5_AI_Link\dosc\gpt5-conductor\out\summary\20250910_164421\gh_run_17606726020_log.txt","186","release	Create tag if missing	2025-09-10T07:38:05.6671443Z ##[error]Process completed with exit code 128."

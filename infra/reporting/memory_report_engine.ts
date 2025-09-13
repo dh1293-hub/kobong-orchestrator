@@ -1,4 +1,4 @@
-﻿import type { RenderPort, DslAst, Rows, ReportResult } from "../../domain/reporting/ports";
+import type { RenderPort, DslAst, Rows, ReportResult } from "../../domain/reporting/ports";
 
 export class MemoryReportEngine implements RenderPort {
   render(ast: DslAst, rows: Rows): ReportResult {

@@ -1,4 +1,4 @@
-﻿# Reporting DSL v0.1 (초안)
+# Reporting DSL v0.1 (초안)
 
 규칙(줄 단위, 대소문자 무시):
 - `REPORT <source>`

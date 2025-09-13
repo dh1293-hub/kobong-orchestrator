@@ -1,4 +1,4 @@
-﻿# Local CI Gate: lint -> tests (scoped, strict exit codes)
+# Local CI Gate: lint -> tests (scoped, strict exit codes)
 param()
 $ErrorActionPreference = "Stop"
 

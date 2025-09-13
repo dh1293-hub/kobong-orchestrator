@@ -1,4 +1,4 @@
-﻿import json
+import json
 from app.orchestrator import ActionOrchestrator, Ports
 from domain.ports import Point
 

@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference='Stop'
+$ErrorActionPreference='Stop'
 Set-Location 'D:\ChatGPT5_AI_Link\dosc\gpt5-conductor'
 try {
   '9' | Set-Content '.\logs\unstuck.exit' -Encoding ascii

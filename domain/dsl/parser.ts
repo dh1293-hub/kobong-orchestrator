@@ -1,4 +1,4 @@
-﻿export class ParseError extends Error {
+export class ParseError extends Error {
   lineNo: number;
   constructor(message: string, lineNo: number) {
     super(message);

@@ -1,4 +1,4 @@
-﻿# PS-GUARD-BOOTSTRAP v1 — must be dot-sourced by all scripts
+# PS-GUARD-BOOTSTRAP v1 — must be dot-sourced by all scripts
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
