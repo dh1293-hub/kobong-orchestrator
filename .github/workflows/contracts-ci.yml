@@ -1,4 +1,4 @@
-name: contracts-ci
+﻿name: contracts-ci
 
 on:
   workflow_dispatch:
@@ -25,7 +25,10 @@ jobs:
   contracts:
     runs-on: windows-latest
     steps:
-      - name: Checkout
+      - name: Set PYTHONPATH
+        shell: bash
+        run: |
+          echo "PYTHONPATH=$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/src:$GITHUB_WORKSPACE/tools/kobong_logger_cli:$GITHUB_WORKSPACE/tools/kobong_logger_cli/src" >> $GITHUB_ENV      - name: Checkout
         uses: actions/checkout@v4
       - name: Ensure pytest
         shell: pwsh
@@ -44,3 +47,4 @@ jobs:
       - name: Check release notes
         shell: pwsh
         run: pwsh -File scripts/check-release-notes.ps1
+

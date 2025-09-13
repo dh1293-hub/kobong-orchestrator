@@ -1,4 +1,4 @@
-name: contracts-status
+﻿name: contracts-status
 
 on:
   pull_request:
@@ -13,7 +13,10 @@ jobs:
     name: Windows, Python 3.11
     runs-on: windows-latest
     steps:
-      - name: Set pending status
+      - name: Set PYTHONPATH
+        shell: bash
+        run: |
+          echo "PYTHONPATH=$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/src:$GITHUB_WORKSPACE/tools/kobong_logger_cli:$GITHUB_WORKSPACE/tools/kobong_logger_cli/src" >> $GITHUB_ENV      - name: Set pending status
         uses: actions/github-script@v7
         with:
           script: |
@@ -69,3 +72,4 @@ jobs:
               context: 'contracts (Windows, Python 3.11)',
               description: 'Contracts check failed'
             });
+

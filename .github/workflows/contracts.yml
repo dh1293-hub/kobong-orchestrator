@@ -14,7 +14,10 @@ jobs:
   contract-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Set PYTHONPATH
+        shell: bash
+        run: |
+          echo "PYTHONPATH=$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/src:$GITHUB_WORKSPACE/tools/kobong_logger_cli:$GITHUB_WORKSPACE/tools/kobong_logger_cli/src" >> $GITHUB_ENV      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -25,3 +28,4 @@ jobs:
       - name: Run contract tests
         run: |
           pytest -q tests/contract
+
