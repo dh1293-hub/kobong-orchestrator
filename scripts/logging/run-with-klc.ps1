@@ -58,11 +58,15 @@ $cDbg = CountOrZero $debugf
 $sampleErr = if (Test-Path $stderr) { (Get-Content $stderr -TotalCount 2) -join ' | ' } else { '' }
 $sampleWrn = if (Test-Path $warnf)  { (Get-Content $warnf  -TotalCount 2) -join ' | ' } else { '' }
 
-$outcome = if (($exitCode -eq 0) -and ($cErr -eq 0)) { 'SUCCESS' } else { 'FAILURE' }
+# ← 여기! if를 표현식으로 쓰지 않고 사전 계산
+$levelEmit   = $(if ($exitCode -eq 0 -and $cErr -eq 0) { 'INFO' } else { 'ERROR' })
+$outcomeEmit = $(if ($exitCode -eq 0 -and $cErr -eq 0) { 'SUCCESS' } else { 'FAILURE' })
+$errCodeEmit = $(if ($exitCode -eq 0 -and $cErr -eq 0) { '' } else { 'LOGIC' })
 $msg = "exit=$exitCode; out=$cOut, warn=$cWrn, err=$cErr, info=$cInf, verbose=$cVer, debug=$cDbg"
 if ($sampleErr) { $msg += "; errSample=" + $sampleErr }
 if ($sampleWrn) { $msg += "; warnSample=" + $sampleWrn }
-Write-KlcJsonl -Level (if($outcome -eq 'SUCCESS'){'INFO'}else{'ERROR'}) -Action 'run:end' -Outcome $outcome -Message $msg -ErrorCode=(if($outcome -eq 'FAILURE'){'LOGIC'}else{''})
+
+Write-KlcJsonl -Level $levelEmit -Action 'run:end' -Outcome $outcomeEmit -Message $msg -ErrorCode $errCodeEmit
 
 Write-Host "[OK] Run logs at: $runDir" -ForegroundColor Green
-if ($outcome -ne 'SUCCESS') { Write-Host "[HINT] Check stderr: $stderr" -ForegroundColor DarkYellow }
+if ($outcomeEmit -ne 'SUCCESS') { Write-Host "[HINT] Check stderr: $stderr" -ForegroundColor DarkYellow }
