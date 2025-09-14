@@ -1,3 +1,8 @@
+<!-- g5:mini-toc v1 -->
+> **GPT-5 Ops — Quick Links**
+> • [Standard Guidelines — GPT-5 Ops (v1.0)](docs/Standard_Guidelines_GPT5_Ops_v1.0_KobongFirst.md)  
+> • [PowerShell 7 지침 — 현장 요약 (v1.0)](docs/powershell7_guidelines_kobong_first_v1.txt)  
+> • [kobong_logger_cli — Minimal Standard (v1.0)](docs/kobong_logger_cli_minimal_standard_v1.txt)
 PowerShell 7 지침 — 현장 요약 (v1.0)
 - pwsh 7.x 고정(#requires -Version 7.0), UTF-8(no BOM), StrictMode/Stop 기본
 - 경로는 Join-Path/Resolve-Path, OS 분기 $IsWindows/$IsLinux/$IsMacOS
