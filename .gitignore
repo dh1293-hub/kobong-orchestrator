@@ -25,3 +25,4 @@ __pycache__/
 # build/log outputs
 out/
 scripts/view-ci-summary.ps1
+out/*

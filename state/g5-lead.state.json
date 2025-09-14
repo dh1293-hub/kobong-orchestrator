@@ -1,0 +1,18 @@
+{
+  "version": "1.0",
+  "leader": "GPT-5",
+  "model": "GPT-5 Thinking",
+  "assistant": "한민수",
+  "policy": "Standard Guidelines — GPT-5 Ops v1.0 + Kobong-First",
+  "startedAtKST": "2025-09-14 11:45:43 +09:00",
+  "featureFlags": {
+    "KOBONG_SAFE_GATES": 1,
+    "KOBONG_ENABLE_TRANSCRIPT": 1
+  },
+  "gates": {
+    "apply": "enabled",
+    "dryrun": "default",
+    "preflight": "enabled"
+  },
+  "notes": "Lead mode asserted (repair)."
+}
