@@ -88,19 +88,20 @@ $manifest = [ordered]@{
 $mPath = Join-Path $runDir 'run.json'
 ($manifest | ConvertTo-Json -Depth 6) | Set-Content -Path $mPath -Encoding utf8
 
-$sumMd = @(
-  '# Run Summary (' + $name + ')',
-  '',
-  '*Dir:* ' + $runDir,
-  '*Target:* ' + $target,
-  '*Args:* ' + ($Args -join ' '),
-  '*Outcome:* ' + $outcomeEmit + '  (exit=' + $exitCode + ')',
-  '*Counts:* out=' + $cOut + ', warn=' + $cWrn + ', err=' + $cErr + ', info=' + $cInf + ', verbose=' + $cVer + ', debug=' + $cDbg,
-  if($sampleErr){'*ErrSample:* ' + $sampleErr} else {''},
-  if($sampleWrn){'*WarnSample:* ' + $sampleWrn} else {''}
-) | Where-Object { $_ -ne "" }
+# 배열 안에서 if를 쓰지 말고, 조건부 추가는 += 로 분리
+$sumMd = @()
+$sumMd += '# Run Summary (' + $name + ')'
+$sumMd += ''
+$sumMd += '*Dir:* ' + $runDir
+$sumMd += '*Target:* ' + $target
+$sumMd += '*Args:* ' + ($Args -join ' ')
+$sumMd += '*Outcome:* ' + $outcomeEmit + '  (exit=' + $exitCode + ')'
+$sumMd += '*Counts:* out=' + $cOut + ', warn=' + $cWrn + ', err=' + $cErr + ', info=' + $cInf + ', verbose=' + $cVer + ', debug=' + $cDbg
+if ($sampleErr) { $sumMd += '*ErrSample:* ' + $sampleErr }
+if ($sampleWrn) { $sumMd += '*WarnSample:* ' + $sampleWrn }
 $sumPath = Join-Path $runDir 'summary.md'
 [System.IO.File]::WriteAllText($sumPath, ([string]::Join("`n",$sumMd) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host "[OK] Run logs at: $runDir" -ForegroundColor Green
+if ($outcomeEmit -ne 'SUCCESS') { Write-Host "[HINT] Check stderr: $stderr" -ForegroundColor DarkYellow }Write-Host "[OK] Run logs at: $runDir" -ForegroundColor Green
 if ($outcomeEmit -ne 'SUCCESS') { Write-Host "[HINT] Check stderr: $stderr" -ForegroundColor DarkYellow }
