@@ -19,17 +19,17 @@ function TryReadJson([string]$path){
   return $null
 }
 function GetRunMeta([string]$dir){
-  $m = TryReadJson (Join-Path $dir 'run.json')
-  $name    = if ($m -and $m.PSObject.Properties['name'])    { $m.name }    else { Split-Path $dir -Leaf }
-  $target  = if ($m -and $m.PSObject.Properties['target'])  { $m.target }  else { '(unknown)' }
-  $args    = if ($m -and $m.PSObject.Properties['args'])    { $m.args }    else { '' }
-  $outcome = if ($m -and $m.PSObject.Properties['outcome']) { $m.outcome } else { '(unknown)' }
-  $exit    = if ($m -and $m.PSObject.Properties['exitCode']){ [int]$m.exitCode } else { 0 }
-  # counts: 기본은 디렉터리에서 생성, run.json에 정상 숫자 있으면 덮어씀
+  $j = TryReadJson (Join-Path $dir 'run.json')
+  $name    = if ($j -and $j.PSObject.Properties['name'])    { $j.name }    else { Split-Path $dir -Leaf }
+  $target  = if ($j -and $j.PSObject.Properties['target'])  { $j.target }  else { '(unknown)' }
+  $args    = if ($j -and $j.PSObject.Properties['args'])    { $j.args }    else { '' }
+  $outcome = if ($j -and $j.PSObject.Properties['outcome']) { $j.outcome } else { '(unknown)' }
+  $exit    = if ($j -and $j.PSObject.Properties['exitCode']){ [int]$j.exitCode } else { 0 }
+  # 기본은 디렉터리에서 집계, run.json에 정상 숫자 있으면 덮어씀
   $counts = CountsFromDir $dir
-  if ($m -and $m.PSObject.Properties['counts']) {
+  if ($j -and $j.PSObject.Properties['counts']) {
     foreach($k in 'stdout','stderr','warn','info','verbose','debug'){
-      $v = $m.counts.PSObject.Properties[$k]?.Value
+      $v = $j.counts.PSObject.Properties[$k]?.Value
       if ($null -ne $v -and $v -is [int]) { $counts[$k] = [int]$v }
     }
   }
@@ -48,39 +48,32 @@ if (-not $Old -or -not (Test-Path $Old) -or -not $New -or -not (Test-Path $New))
   if (-not $New -or -not (Test-Path $New)) { $New = $pair[1] }
 }
 
-$A = GetRunMeta $Old
-$B = GetRunMeta $New
+$runA = GetRunMeta $Old
+$runB = GetRunMeta $New
 
 Write-Host "== RUN DIFF ==" -ForegroundColor Magenta
-Write-Host ("Old: {0}" -f $A.dir)
-Write-Host ("New: {0}" -f $B.dir)
-Write-Host ("Outcome: {0}  →  {1}" -f $A.outcome,$B.outcome)
-Write-Host ("Exit:    {0}  →  {1}" -f $A.exitCode,$B.exitCode)
+Write-Host ("Old: {0}" -f $runA.dir)
+Write-Host ("New: {0}" -f $runB.dir)
+Write-Host ("Outcome: {0}  →  {1}" -f $runA.outcome,$runB.outcome)
+Write-Host ("Exit:    {0}  →  {1}" -f $runA.exitCode,$runB.exitCode)
 
 $keys = 'stdout','warn','stderr','info','verbose','debug'
 foreach($k in $keys){
-  # ← 핵심: counts 속성이 없거나 null이어도, 항상 디렉터리에서 안전 폴백
-  $a = if ($A.PSObject.Properties['counts'] -and $A.counts -is [hashtable] -and $A.counts.ContainsKey($k)) {
-    [int]$A.counts[$k]
-  } else {
-    CountOrZero (Join-Path $A.dir ("{0}.log" -f $k))
-  }
-  $b = if ($B.PSObject.Properties['counts'] -and $B.counts -is [hashtable] -and $B.counts.ContainsKey($k)) {
-    [int]$B.counts[$k]
-  } else {
-    CountOrZero (Join-Path $B.dir ("{0}.log" -f $k))
-  }
-  $d = $b - $a
-  Write-Host ("{0,-7}: {1,5} → {2,5}   (Δ {3})" -f $k,$a,$b,$d)
+  $countA = [int]($runA.counts[$k])
+  $countB = [int]($runB.counts[$k])
+  $delta  = $countB - $countA
+  Write-Host ("{0,-7}: {1,5} → {2,5}   (Δ {3})" -f $k,$countA,$countB,$delta)
 }
 
 function Norm([string]$s){ ($s ?? '') -replace '\s+',' ' }
-$eOld = if (Test-Path (Join-Path $A.dir 'stderr.log')) { Get-Content (Join-Path $A.dir 'stderr.log') } else { @() }
-$eNew = if (Test-Path (Join-Path $B.dir 'stderr.log')) { Get-Content (Join-Path $B.dir 'stderr.log') } else { @() }
-$setOld = [System.Collections.Generic.HashSet[string]]::new(); foreach($l in $eOld){ [void]$setOld.Add((Norm $l)) }
-$setNew = [System.Collections.Generic.HashSet[string]]::new(); foreach($l in $eNew){ [void]$setNew.Add((Norm $l)) }
+$eOld = if (Test-Path (Join-Path $runA.dir 'stderr.log')) { Get-Content (Join-Path $runA.dir 'stderr.log') } else { @() }
+$eNew = if (Test-Path (Join-Path $runB.dir 'stderr.log')) { Get-Content (Join-Path $runB.dir 'stderr.log') } else { @() }
+$setOld = [System.Collections.Generic.HashSet[string]]::new(); foreach($line in $eOld){ [void]$setOld.Add((Norm $line)) }
+$setNew = [System.Collections.Generic.HashSet[string]]::new(); foreach($line in $eNew){ [void]$setNew.Add((Norm $line)) }
+
 $added    = $eNew | Where-Object { -not $setOld.Contains((Norm $_)) } | Select-Object -First $Top
 $resolved = $eOld | Where-Object { -not $setNew.Contains((Norm $_)) } | Select-Object -First $Top
+
 Write-Host "`nNew error lines (up to $Top):" -ForegroundColor DarkYellow
 if ($added)    { $added    | ForEach-Object { " + " + $_ } } else { Write-Host "(none)" }
 Write-Host "Resolved error lines (up to $Top):" -ForegroundColor DarkYellow
