@@ -1,0 +1,5 @@
+kobong_logger_cli — Minimal Standard (v1.0)
+- 항상 kobong_logger_cli 우선, 실패 시 logs/apply-log.jsonl 로 폴백
+- 표준 종료코드: PRECONDITION=10, CONFLICT=11, TRANSIENT=12, LOGIC=13, Unknown=1
+- JSONL 필드: timestamp, level, traceId, module, action, outcome, errorCode, message
+- PowerShell 최소 통합 함수: Write-KobongJsonLog, Exit-Kobong

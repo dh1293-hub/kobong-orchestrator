@@ -1,0 +1,7 @@
+PowerShell 7 지침 — 현장 요약 (v1.0)
+- pwsh 7.x 고정(#requires -Version 7.0), UTF-8(no BOM), StrictMode/Stop 기본
+- 경로는 Join-Path/Resolve-Path, OS 분기 $IsWindows/$IsLinux/$IsMacOS
+- 에러는 -ErrorAction Stop + try/catch, 현대 문법(??, ??=, ?:, &&/||) 허용
+- 병렬 ForEach-Object -Parallel, 스타일: CmdletBinding/명사-동사 함수
+- 지양: WinPS 5.1 종속, powershell.exe 강제, 경로/로케일 하드코딩
+(부록) Kobong-First 요약: kobong_logger_cli 우선, 표준 종료코드(10/11/12/13/1), *.bak-<ts>+tmp 원자교체
