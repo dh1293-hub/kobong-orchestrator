@@ -1,4 +1,10 @@
 #requires -Version 7.0
+<#
+ G5/TRIAGE — 대량 에러 1차 판독(콘솔 복붙용)
+ - 최근 N분 윈도우에서 레벨/아웃컴 집계
+ - 오류 시그니처(코드 + 정규화된 메시지)로 버킷팅 → Top-K
+ - 누락 필드(error/errorCode/message 등)에도 견고
+#>
 param(
   [int]$SinceMinutes = 240,
   [int]$Top = 5,
@@ -20,39 +26,31 @@ function Norm([string]$s){
   if ($null -eq $s) { return '' }
   $t = $s.ToLowerInvariant()
 
-  # 1) 윈도우 경로/드라이브: D:\..., C:\... → <path>
+  # 경로 → <path>
   $t = $t -replace '(?i)\b[a-z]:\\[^\s\|\r\n:]+' , '<path>'
-
-  # 2) "파일:라인" 패턴 → <path>:<n>
+  # 파일:라인 → <path>:<n>
   $t = $t -replace '(?i)<path>:\d+', '<path>:<n>'
-
-  # 3) "Line | 53" / "line|53" → line|<n>
+  # line | 53 / line 53 → <n>
   $t = $t -replace '(?i)\bline\s*\|\s*\d+', 'line|<n>'
-
-  # 4) "at <ScriptBlock>, ..., line 2" → line <n>
   $t = $t -replace '(?i)line\s+\d+', 'line <n>'
-
-  # 5) 한글 PowerShell 에러 위치: "위치 줄:53 문자:10" → 위치 줄:<n> 문자:<n>
+  # 한글 위치 정보
   $t = $t -replace '위치\s*줄:\s*\d+', '위치 줄:<n>'
   $t = $t -replace '문자:\s*\d+', '문자:<n>'
-
-  # 6) 타임스탬프/해시 치환
+  # 타임스탬프/해시
   $t = $t -replace '\b[0-9a-f]{8,}\b','<hex>'
   $t = $t -replace '\d{4}-\d{2}-\d{2}[t\s]\d{2}:\d{2}:\d{2}(\.\d+)?(z|[+\-]\d{2}:\d{2})?','<ts>'
-
-  # 7) 공백 정리
-  $t = $t -replace '\s+',' '
-  return $t.Trim()
-}
-  $t = $s.ToLowerInvariant()
-  $t = $t -replace '\b[0-9a-f]{8,}\b','<hex>'
-  $t = $t -replace '\d{4}-\d{2}-\d{2}[t\s]\d{2}:\d{2}:\d{2}(\.\d+)?(z|[+\-]\d{2}:\d{2})?','<ts>'
+  # 공백 정리
   $t = $t -replace '\s+',' '
   return $t.Trim()
 }
 function TryParseIso([string]$s){ try { [datetime]::Parse($s) } catch { $null } }
 function FirstProp([object]$o,[string[]]$names){
-  foreach($n in $names){ if ($o -and $o.PSObject.Properties[$n]) { $v = $o.$n; if ($null -ne $v -and (''+$v).Length -gt 0) { return (''+$v) } } }
+  foreach($n in $names){
+    if ($o -and $o.PSObject.Properties[$n]) {
+      $v = $o.$n
+      if ($null -ne $v -and (''+$v).Length -gt 0) { return (''+$v) }
+    }
+  }
   return ''
 }
 
@@ -69,13 +67,14 @@ if (Test-Path $Jsonl) {
 }
 
 $byLevel=@{}; $byOutcome=@{}
-$errBuckets=@{}; $lastErr=$null
+$errBuckets = [System.Collections.Generic.Dictionary[string,object]]::new()
+$lastErr=$null
 
 foreach($r in $recs){
-  $lv = (FirstProp $r @('level')).ToUpper()
-  $oc = (FirstProp $r @('outcome')).ToUpper()
-  if ($lv) { $byLevel[$lv]   = 1 + ($(if ($byLevel.ContainsKey($lv)) { $byLevel[$lv] } else { 0 })) }
-  if ($oc) { $byOutcome[$oc] = 1 + ($(if ($byOutcome.ContainsKey($oc)) { $byOutcome[$oc] } else { 0 })) }
+  $lv = (FirstProp $r @('level')).ToUpperInvariant()
+  $oc = (FirstProp $r @('outcome')).ToUpperInvariant()
+  if ($lv) { $byLevel[$lv]   = 1 + ($byLevel[$lv]   ?? 0) }
+  if ($oc) { $byOutcome[$oc] = 1 + ($byOutcome[$oc] ?? 0) }
 
   $isErr = ($lv -like '*ERROR*') -or ($oc -like '*FAIL*')
   if (-not $isErr) { continue }
@@ -83,26 +82,26 @@ foreach($r in $recs){
   $lastErr = $r
   $codeRaw = FirstProp $r @('error','errorCode','category','code'); if (-not $codeRaw) { $codeRaw = 'ERROR' }
   $msgRaw  = FirstProp $r @('message','msg','detail','errorMessage','exception')
-
   $sig  = Norm $msgRaw
   $key  = "$codeRaw :: $sig"
+
   if (-not $errBuckets.ContainsKey($key)) {
-    $errBuckets[$key] = [pscustomobject]@{ key=$key; code=$codeRaw; sig=$sig; n=0; sample=$msgRaw }
+    $errBuckets[$key] = [pscustomobject]@{ code=$codeRaw; sig=$sig; n=0; sample=$msgRaw }
   }
-  # n은 항상 단일 정수로 보정
-  $current = 0
-  try { $current = [int]((@($errBuckets[$key].n) | Select-Object -First 1) ?? 0) } catch { $current = 0 }
-  $errBuckets[$key].n = $current + 1
-  if ($msgRaw) { $errBuckets[$key].sample = $msgRaw }
+  $item = $errBuckets[$key]
+  $nVal = 0; try { $nVal = [int]((@($item.n) | Select-Object -First 1) ?? 0) } catch { $nVal = 0 }
+  $item.n = $nVal + 1
+  if ($msgRaw) { $item.sample = $msgRaw }
 }
 
-# 정렬 전, n을 확실히 int로 정규화
-$norm = foreach($v in $errBuckets.Values){
-  $nVal = 0
-  try { $nVal = [int]((@($v.n) | Select-Object -First 1) ?? 0) } catch { $nVal = 0 }
-  [pscustomobject]@{ code=$v.code; sig=$v.sig; n=$nVal; sample=$v.sample }
+$topList = @()
+if ($errBuckets.Count -gt 0) {
+  $normList = foreach($v in $errBuckets.Values){
+    $nval=0; try{ $nval=[int]((@($v.n)|Select-Object -First 1) ?? 0) } catch { $nval=0 }
+    [pscustomobject]@{ code=$v.code; sig=$v.sig; n=$nval; sample=$v.sample }
+  }
+  $topList = $normList | Sort-Object -Property n -Descending | Select-Object -First $Top
 }
-$topList = $norm | Sort-Object -Property n -Descending | Select-Object -First $Top
 
 $repo = Split-Path $RepoRoot -Leaf
 $sha='unknown'; try { $tmp=(git -C $RepoRoot rev-parse --short HEAD 2>$null); if ($tmp){ $sha=$tmp.Trim() } } catch {}
@@ -115,7 +114,7 @@ if ($OneLine) {
   $parts=@('G5TRIAGE v1', ("repo={0}@{1}" -f $repo,$sha), ("time={0}" -f $now))
   if ($levels) { $parts += ("levels={0}" -f $levels) }
   if ($outs)   { $parts += ("outcomes={0}" -f $outs) }
-  if ($arr.Count -gt 0){ $parts += ("top={0}" -f ([string]::Join('; ',$arr))) } else { $parts += "top=none" }
+  $parts += ("top={0}" -f (if ($arr.Count -gt 0) { [string]::Join('; ',$arr) } else { 'none' }))
   if ($lastErr) {
     $lastCode = FirstProp $lastErr @('error','errorCode','category','code'); if (-not $lastCode) { $lastCode='UNKNOWN' }
     $lastMsg  = FirstProp $lastErr @('message','msg','detail','errorMessage','exception')
