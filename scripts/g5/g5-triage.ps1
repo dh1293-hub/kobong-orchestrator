@@ -114,7 +114,8 @@ if ($OneLine) {
   $parts=@('G5TRIAGE v1', ("repo={0}@{1}" -f $repo,$sha), ("time={0}" -f $now))
   if ($levels) { $parts += ("levels={0}" -f $levels) }
   if ($outs)   { $parts += ("outcomes={0}" -f $outs) }
-  $parts += ("top={0}" -f (if ($arr.Count -gt 0) { [string]::Join('; ',$arr) } else { 'none' }))
+  $topText = if ($arr.Count -gt 0) { [string]::Join('; ', $arr) } else { 'none' }
+  $parts += ("top={0}" -f $topText)
   if ($lastErr) {
     $lastCode = FirstProp $lastErr @('error','errorCode','category','code'); if (-not $lastCode) { $lastCode='UNKNOWN' }
     $lastMsg  = FirstProp $lastErr @('message','msg','detail','errorMessage','exception')
