@@ -1,3 +1,4 @@
+![Release](https://img.shields.io/github/v/release/dh1293-hub/kobong-orchestrator?display_name=tag&sort=semver)
 <!-- g5:ops-links v1 -->
 **Operations (GPT-5 Ops):** [Standard Guidelines](docs/Standard_Guidelines_GPT5_Ops_v1.0_KobongFirst.md) · [PS7 Guide](docs/powershell7_guidelines_kobong_first_v1.txt) · [Logger Standard](docs/kobong_logger_cli_minimal_standard_v1.txt)
 _Quick access:_ pwsh 7.x only · UTF-8/LF · Dry-Run→Apply · atomic writes · JSONL logs
