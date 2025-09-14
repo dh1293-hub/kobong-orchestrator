@@ -25,7 +25,7 @@ function GetRunMeta([string]$dir){
   $args    = if ($m -and $m.PSObject.Properties['args'])    { $m.args }    else { '' }
   $outcome = if ($m -and $m.PSObject.Properties['outcome']) { $m.outcome } else { '(unknown)' }
   $exit    = if ($m -and $m.PSObject.Properties['exitCode']){ [int]$m.exitCode } else { 0 }
-  # counts: 디렉터리에서 기본 생성 후, run.json 값이 있으면 숫자만 덮어씀
+  # counts: 기본은 디렉터리에서 생성, run.json에 정상 숫자 있으면 덮어씀
   $counts = CountsFromDir $dir
   if ($m -and $m.PSObject.Properties['counts']) {
     foreach($k in 'stdout','stderr','warn','info','verbose','debug'){
@@ -41,6 +41,7 @@ function Pick-Latest2 {
   if ($dirs.Count -eq 1) { return @($dirs[0].FullName,$dirs[0].FullName) }
   return @($dirs[$dirs.Count-2].FullName,$dirs[$dirs.Count-1].FullName)
 }
+
 if (-not $Old -or -not (Test-Path $Old) -or -not $New -or -not (Test-Path $New)) {
   $pair = Pick-Latest2
   if (-not $Old -or -not (Test-Path $Old)) { $Old = $pair[0] }
@@ -58,8 +59,17 @@ Write-Host ("Exit:    {0}  →  {1}" -f $A.exitCode,$B.exitCode)
 
 $keys = 'stdout','warn','stderr','info','verbose','debug'
 foreach($k in $keys){
-  $a = [int]($A.counts[$k])
-  $b = [int]($B.counts[$k])
+  # ← 핵심: counts 속성이 없거나 null이어도, 항상 디렉터리에서 안전 폴백
+  $a = if ($A.PSObject.Properties['counts'] -and $A.counts -is [hashtable] -and $A.counts.ContainsKey($k)) {
+    [int]$A.counts[$k]
+  } else {
+    CountOrZero (Join-Path $A.dir ("{0}.log" -f $k))
+  }
+  $b = if ($B.PSObject.Properties['counts'] -and $B.counts -is [hashtable] -and $B.counts.ContainsKey($k)) {
+    [int]$B.counts[$k]
+  } else {
+    CountOrZero (Join-Path $B.dir ("{0}.log" -f $k))
+  }
   $d = $b - $a
   Write-Host ("{0,-7}: {1,5} → {2,5}   (Δ {3})" -f $k,$a,$b,$d)
 }
