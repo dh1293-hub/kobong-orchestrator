@@ -1,124 +1,95 @@
 #requires -Version 7.0
 param(
-  [Parameter(Mandatory)][string]$File,
-  [string[]]$Args
+  [Parameter(Mandatory)]
+  [string]$File,
+  [string[]]$Args = @(),
+  [string]$Name,
+  [string]$OutRoot
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $PSDefaultParameterValues['Out-File:Encoding']='utf8'
 $PSDefaultParameterValues['*:Encoding']='utf8'
 
-function Write-KlcJsonl {
-  param([string]$Level,[string]$Action,[string]$Outcome,[string]$Message,[string]$Module='runner',[string]$ErrorCode='')
-  $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-  $jsonl = Join-Path $repoRoot 'logs\apply-log.jsonl'
-  try {
-    if (Get-Command kobong_logger_cli -ErrorAction SilentlyContinue) {
-      & kobong_logger_cli log --level $Level --module $Module --action $Action --outcome $Outcome --error $ErrorCode --message $Message
-      return
-    }
-  } catch {}
-  $rec = @{ timestamp=(Get-Date).ToString('o'); level=$Level; module=$Module; action=$Action; outcome=$Outcome; error=$ErrorCode; message=$Message; traceId=[guid]::NewGuid().ToString() } | ConvertTo-Json -Compress
-  New-Item -ItemType Directory -Force -Path (Split-Path $jsonl) | Out-Null
-  Add-Content -Path $jsonl -Value $rec
+function Get-RepoRoot {
+  $here = $PSScriptRoot
+  if ([string]::IsNullOrWhiteSpace($here)) { try { $here = Split-Path -Parent $MyInvocation.MyCommand.Path } catch {} }
+  if ([string]::IsNullOrWhiteSpace($here)) { $here = (Get-Location).Path }
+  $top = $null; try { $top = (git -C $here rev-parse --show-toplevel 2>$null) } catch {}
+  if ([string]::IsNullOrWhiteSpace($top)) { try { $top = (Resolve-Path (Join-Path $here '..\..')).Path } catch {} }
+  if ([string]::IsNullOrWhiteSpace($top)) { $top = $here }
+  return $top
 }
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$RepoRoot = Get-RepoRoot
+if ([string]::IsNullOrWhiteSpace($OutRoot)) { $OutRoot = Join-Path $RepoRoot 'out\run-logs' }
+
+# 대상 스크립트 확인
+if (-not (Test-Path $File)) { throw "PRECONDITION: target script not found: $File" }
+$Name = if ($Name) { $Name } else { [IO.Path]::GetFileNameWithoutExtension((Split-Path -Leaf $File)) }
 $ts   = Get-Date -Format 'yyyyMMdd-HHmmss'
-$name = [IO.Path]::GetFileNameWithoutExtension($File)
-$runDir = Join-Path $repoRoot ("out\run-logs\{0}-{1}" -f $ts,$name)
-New-Item -ItemType Directory -Force -Path $runDir | Out-Null
+$RunDir = Join-Path $OutRoot ("{0}-{1}" -f $ts,$Name)
+New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
 
-$stdout   = Join-Path $runDir 'stdout.log'
-$stderr   = Join-Path $runDir 'stderr.log'
-$warnf    = Join-Path $runDir 'warn.log'
-$infof    = Join-Path $runDir 'info.log'
-$verbosef = Join-Path $runDir 'verbose.log'
-$debugf   = Join-Path $runDir 'debug.log'
+# 실행 준비
+$stdout = Join-Path $RunDir 'stdout.log'
+$stderr = Join-Path $RunDir 'stderr.log'
+$runJson= Join-Path $RunDir 'run.json'
 
-$target = (Resolve-Path $File).Path
-$startTime = Get-Date
-Write-KlcJsonl -Level 'INFO' -Action 'run:start' -Outcome 'PENDING' -Message ("{0} {1}" -f $target, ($Args -join ' '))
+# PS7 경로
+$pwsh = $env:ProgramW6432; if ($pwsh) { $pwsh = Join-Path $pwsh 'PowerShell\7\pwsh.exe' }
+if (-not (Test-Path $pwsh)) { $pwsh = 'pwsh' }
 
-# 실행 (가능하면 모든 스트림→파일, 실패 시 stdout/stderr만 폴백)
-$fallback = $false
-try {
-  & $target @Args 1> $stdout 2> $stderr 3> $warnf 4> $verbosef 5> $debugf 6> $infof
-} catch {
-  $fallback = $true
-  try {
-    & $target @Args 1> $stdout 2> $stderr
-  } catch {
-    $_ | Out-String | Set-Content -Path $stderr
-  }
-}
+# 대상 실행 (외부 pwsh로 호출 → $LASTEXITCODE 확실)
+$arglist = @('-NoProfile','-ExecutionPolicy','Bypass','-File', (Resolve-Path $File).Path)
+if ($Args -and $Args.Count -gt 0) { $arglist += $Args }
 
-function CountOrZero($p){ if (Test-Path $p) { (Get-Content $p -ReadCount 1000 | Measure-Object -Line).Lines } else { 0 } }
+# 출력 리다이렉션
+& $pwsh @arglist 1> $stdout 2> $stderr
+$exit = $LASTEXITCODE
+if ($null -eq $exit) { $exit = 0 }
+
+# 카운트 계산
+function CountOrZero($p){ if (Test-Path $p) { (Get-Content $p -ReadCount 2000 | Measure-Object -Line).Lines } else { 0 } }
 $cOut = CountOrZero $stdout
 $cErr = CountOrZero $stderr
-$cWrn = CountOrZero $warnf
-$cInf = CountOrZero $infof
-$cVer = CountOrZero $verbosef
-$cDbg = CountOrZero $debugf
 
-$sampleErr = if (Test-Path $stderr) { (Get-Content $stderr -TotalCount 2) -join ' | ' } else { '' }
-$sampleWrn = if (Test-Path $warnf)  { (Get-Content $warnf  -TotalCount 2) -join ' | ' } else { '' }
-
-# ← 여기 핵심: 실패 판정 = "에러 스트림 라인수 > 0"
-$exitCode   = if ($cErr -gt 0) { 1 } else { 0 }
-$levelEmit  = if ($exitCode -eq 0) { 'INFO' } else { 'ERROR' }
-$outcomeEmit= if ($exitCode -eq 0) { 'SUCCESS' } else { 'FAILURE' }
-$errCodeEmit= if ($exitCode -eq 0) { '' } else { 'LOGIC' }
-
-$msg = "exit=$exitCode; out=$cOut, warn=$cWrn, err=$cErr, info=$cInf, verbose=$cVer, debug=$cDbg"
-if ($sampleErr) { $msg += "; errSample=" + $sampleErr }
-if ($sampleWrn) { $msg += "; warnSample=" + $sampleWrn }
-if ($fallback)  { $msg += "; fallback=legacy-redirect(1,2)" }
-
-Write-KlcJsonl -Level $levelEmit -Action 'run:end' -Outcome $outcomeEmit -Message $msg -ErrorCode $errCodeEmit
-
-# === manifest & summary ===
-$endTime = Get-Date
-$manifest = [ordered]@{
-  name=$name; target=$target; args=($Args -join ' ');
-  start=$startTime.ToString('o'); end=$endTime.ToString('o');
-  exitCode=$exitCode; outcome=$outcomeEmit; level=$levelEmit;
-  counts=@{ stdout=$cOut; stderr=$cErr; warn=$cWrn; info=$cInf; verbose=$cVer; debug=$cDbg };
-  samples=@{ err=$sampleErr; warn=$sampleWrn }
+# run.json 작성
+$meta = [pscustomobject]@{
+  time    = (Get-Date).ToString('o')
+  name    = $Name
+  target  = $File
+  args    = $Args
+  exit    = $exit
+  counts  = @{ out=$cOut; err=$cErr; warn=0; info=1; verbose=0; debug=0 }
+  dir     = $RunDir
 }
-$mPath = Join-Path $runDir 'run.json'
-($manifest | ConvertTo-Json -Depth 6) | Set-Content -Path $mPath -Encoding utf8
+$meta | ConvertTo-Json -Depth 5 | Out-File -FilePath $runJson -Encoding utf8
 
-$sumMd = @()
-$sumMd += '# Run Summary (' + $name + ')'
-$sumMd += ''
-$sumMd += '*Dir:* ' + $runDir
-$sumMd += '*Target:* ' + $target
-$sumMd += '*Args:* ' + ($Args -join ' ')
-$sumMd += '*Outcome:* ' + $outcomeEmit + '  (exit=' + $exitCode + ')'
-$sumMd += '*Counts:* out=' + $cOut + ', warn=' + $cWrn + ', err=' + $cErr + ', info=' + $cInf + ', verbose=' + $cVer + ', debug=' + $cDbg
-if ($sampleErr) { $sumMd += '*ErrSample:* ' + $sampleErr }
-if ($sampleWrn) { $sumMd += '*WarnSample:* ' + $sampleWrn }
-if ($fallback)  { $sumMd += '*Note:* fallback=legacy-redirect(1,2)' }
-$sumPath = Join-Path $runDir 'summary.md'
-[System.IO.File]::WriteAllText($sumPath, ([string]::Join("`n",$sumMd) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+# JSONL 로그 한 줄(요약)
+try {
+  $jsonl = Join-Path $RepoRoot 'logs\apply-log.jsonl'
+  New-Item -ItemType Directory -Force -Path (Split-Path $jsonl) | Out-Null
+  $rec = @{
+    timestamp = (Get-Date).ToString('o')
+    level     = if ($exit -eq 0) { 'INFO' } else { 'ERROR' }
+    module    = 'runner'
+    action    = 'run-with-klc'
+    outcome   = if ($exit -eq 0) { 'SUCCESS' } else { 'FAILURE' }
+    message   = "name=$Name exit=$exit out=$cOut err=$cErr"
+  } | ConvertTo-Json -Compress
+  Add-Content -Path $jsonl -Value $rec
+} catch {}
 
-Write-Host "[OK] Run logs at: $runDir" -ForegroundColor Green
-if ($outcomeEmit -ne 'SUCCESS') { Write-Host "[HINT] Check stderr: $stderr" -ForegroundColor DarkYellow }
+Write-Host ("[OK] Run logs at: {0}" -f $RunDir)
 
 # === G5 AUTO-HOOK (console handoff) ===
 try {
-  $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-  $g5   = Join-Path $root 'scripts\g5\g5-brief.ps1'
+  $g5   = Join-Path $RepoRoot 'scripts\g5\g5-brief.ps1'
   if (Test-Path $g5) { & pwsh -NoProfile -ExecutionPolicy Bypass -File $g5 -OneLine }
-  $tri  = Join-Path $root 'scripts\g5\g5-triage.ps1'
+  $tri  = Join-Path $RepoRoot 'scripts\g5\g5-triage.ps1'
   if (Test-Path $tri) {
-    $runs = Join-Path $root 'out\run-logs'
-    $dir = Get-ChildItem -Path $runs -Directory | Sort-Object LastWriteTime | Select-Object -Last 1
-    if ($dir) {
-      $stderr = Join-Path $dir.FullName 'stderr.log'
-      $cErr = (Test-Path $stderr) ? ((Get-Content $stderr -ReadCount 2000 | Measure-Object -Line).Lines) : 0
-      if ($cErr -gt 0) { & pwsh -NoProfile -ExecutionPolicy Bypass -File $tri -OneLine }
-    }
+    $cErr2 = $cErr
+    if ($cErr2 -gt 0) { & pwsh -NoProfile -ExecutionPolicy Bypass -File $tri -OneLine }
   }
 } catch {}
