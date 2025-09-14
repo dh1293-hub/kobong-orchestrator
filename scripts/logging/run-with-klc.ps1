@@ -105,3 +105,20 @@ $sumPath = Join-Path $runDir 'summary.md'
 
 Write-Host "[OK] Run logs at: $runDir" -ForegroundColor Green
 if ($outcomeEmit -ne 'SUCCESS') { Write-Host "[HINT] Check stderr: $stderr" -ForegroundColor DarkYellow }
+
+# === G5 AUTO-HOOK (console handoff) ===
+try {
+  $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+  $g5   = Join-Path $root 'scripts\g5\g5-brief.ps1'
+  if (Test-Path $g5) { & pwsh -NoProfile -ExecutionPolicy Bypass -File $g5 -OneLine }
+  $tri  = Join-Path $root 'scripts\g5\g5-triage.ps1'
+  if (Test-Path $tri) {
+    $runs = Join-Path $root 'out\run-logs'
+    $dir = Get-ChildItem -Path $runs -Directory | Sort-Object LastWriteTime | Select-Object -Last 1
+    if ($dir) {
+      $stderr = Join-Path $dir.FullName 'stderr.log'
+      $cErr = (Test-Path $stderr) ? ((Get-Content $stderr -ReadCount 2000 | Measure-Object -Line).Lines) : 0
+      if ($cErr -gt 0) { & pwsh -NoProfile -ExecutionPolicy Bypass -File $tri -OneLine }
+    }
+  }
+} catch {}
