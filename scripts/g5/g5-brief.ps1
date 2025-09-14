@@ -1,7 +1,7 @@
 #requires -Version 7.0
 <#
  G5/BRIEF — 콘솔 전달용 초압축 요약(1줄/10줄)
- 소스: logs/apply-log.jsonl, out/run-logs/*/run.json(+로그 카운트 보정)
+ 소스: logs/apply-log.jsonl, out/run-logs/*/run.json(+로그 보정)
 #>
 param(
   [int]$SinceMinutes = 240,
@@ -21,9 +21,9 @@ function Short([string]$s,[int]$n=180){
   if ($t.Length -le $n) { return $t }
   return $t.Substring(0,$n) + '…'
 }
-function SafeJsonLineParse([string]$line){ try { $line | ConvertFrom-Json } catch { $null } }
-function TryParseIso([string]$s){ try { [datetime]::Parse($s) } catch { $null } }
-function GetGitSha(){
+function SafeJson([string]$line){ try { $line | ConvertFrom-Json } catch { $null } }
+function TryIso([string]$s){ try { [datetime]::Parse($s) } catch { $null } }
+function GitSha(){
   try {
     $sha = (git -C $RepoRoot rev-parse --short HEAD 2>$null)
     if (-not $sha) { return 'unknown' }
@@ -33,7 +33,7 @@ function GetGitSha(){
 function CountOrZero([string]$p){
   if (Test-Path $p) { (Get-Content $p -ReadCount 2000 | Measure-Object -Line).Lines } else { 0 }
 }
-function GetLatestRun(){
+function LatestRun(){
   if (-not (Test-Path $RunsRoot)) { return $null }
   $dir = Get-ChildItem -Path $RunsRoot -Directory | Sort-Object LastWriteTime | Select-Object -Last 1
   if (-not $dir) { return $null }
@@ -54,14 +54,11 @@ function GetLatestRun(){
       }
     }
   } else {
-    # counts 보정(누락/비정상일 때 로그에서 보강)
-    if (-not $man.PSObject.Properties['counts']) {
-      $man | Add-Member -NotePropertyName counts -NotePropertyValue (@{})
-    }
+    if (-not $man.PSObject.Properties['counts']) { $man | Add-Member -NotePropertyName counts -NotePropertyValue (@{}) }
     foreach($k in 'stdout','stderr','warn','info','verbose','debug'){
-      $v = $man.counts.PSObject.Properties[$k]?.Value
-      if ($null -eq $v -or $v -isnot [int]) {
-        $man.counts.$k = CountOrZero (Join-Path $dir.FullName ("{0}.log" -f $k))
+      $prop = $man.counts.PSObject.Properties[$k]
+      if ($null -eq $prop -or $prop.Value -isnot [int]) {
+        $man.counts | Add-Member -NotePropertyName $k -NotePropertyValue (CountOrZero (Join-Path $dir.FullName ("{0}.log" -f $k))) -Force
       }
     }
   }
@@ -70,78 +67,81 @@ function GetLatestRun(){
 
 # 수집 윈도우
 $cut = (Get-Date).AddMinutes(-$SinceMinutes)
-$records = @()
+$recs = @()
 if (Test-Path $Jsonl) {
   foreach($line in (Get-Content -Path $Jsonl)) {
-    $o = SafeJsonLineParse $line
+    $o = SafeJson $line
     if ($null -eq $o) { continue }
-    $t = if ($o.PSObject.Properties['timestamp']) { TryParseIso $o.timestamp } else { $null }
+    $t = $null; if ($o.PSObject.Properties['timestamp']) { $t = TryIso $o.timestamp }
     if ($t -and $t -lt $cut) { continue }
-    $records += $o
+    $recs += $o
   }
 }
 
-# 통계
-$byLevel = @{}; $byOutcome=@{}
-foreach($r in $records){
+# 통계 집계 (PS7 null-coalescing 미사용)
+$byLevel=@{}; $byOutcome=@{}
+foreach($r in $recs){
   $lv = ([string]$r.level).ToUpperInvariant()
   $oc = ([string]$r.outcome).ToUpperInvariant()
-  if ($lv) { $byLevel[$lv]   = 1 + ($byLevel[$lv]   ?? 0) }
-  if ($oc) { $byOutcome[$oc] = 1 + ($byOutcome[$oc] ?? 0) }
+  if ($lv) { if ($byLevel.ContainsKey($lv)) { $byLevel[$lv]++ } else { $byLevel[$lv]=1 } }
+  if ($oc) { if ($byOutcome.ContainsKey($oc)) { $byOutcome[$oc]++ } else { $byOutcome[$oc]=1 } }
 }
 
 # 최근 에러/실패
-$errRec = $records | Where-Object { $_.level -match 'ERROR' -or $_.outcome -match 'FAIL' } | Select-Object -Last 1
-$errCode = if ($errRec) { [string]$errRec.error } else { '' }
-$errMsg  = if ($errRec) { [string]$errRec.message } else { '' }
+$errRec = $recs | Where-Object { $_.level -match 'ERROR' -or $_.outcome -match 'FAIL' } | Select-Object -Last 1
+$errCode = ''; $errMsg = ''
+if ($errRec) {
+  if ($errRec.PSObject.Properties['error'])   { $errCode = [string]$errRec.error }
+  if ($errRec.PSObject.Properties['message']) { $errMsg  = [string]$errRec.message }
+}
 
 # 최신 실행
-$latest = GetLatestRun
-$lr = if ($latest) { $latest.man } else { $null }
-$lrCounts = if ($lr) { $lr.counts } else { $null }
-$lrName   = if ($lr) { $lr.name }   else { '' }
-$lrOutcome= if ($lr) { $lr.outcome }else { '' }
-$lrExit   = if ($lr) { $lr.exitCode }else { 0 }
-$lrErrCnt = [int]($lrCounts?.stderr ?? 0)
-$lrWarnCnt= [int]($lrCounts?.warn   ?? 0)
+$latest  = LatestRun
+$lr      = $null; if ($latest) { $lr = $latest.man }
+$lrName  = '';    if ($lr -and $lr.PSObject.Properties['name'])    { $lrName    = $lr.name }
+$lrOut   = '';    if ($lr -and $lr.PSObject.Properties['outcome']) { $lrOut     = $lr.outcome }
+$lrExit  = 0;     if ($lr -and $lr.PSObject.Properties['exitCode']){ $lrExit    = [int]$lr.exitCode }
+$lrErr   = 0; $lrWarn=0
+if ($lr -and $lr.PSObject.Properties['counts']) {
+  if ($lr.counts.PSObject.Properties['stderr']) { $lrErr = [int]$lr.counts.stderr }
+  if ($lr.counts.PSObject.Properties['warn'])   { $lrWarn= [int]$lr.counts.warn   }
+}
 
 # 출력
 $repoName = Split-Path $RepoRoot -Leaf
-$sha = GetGitSha()
+$sha = GitSha()
 $now = (Get-Date).ToString('yyyy-MM-dd HH:mm:ssK')
 
 function Print-OneLine {
   $parts = @()
-  $parts += 'G5BRIEF v1'
+  $parts += ("G5BRIEF v1")
   $parts += ("repo={0}@{1}" -f $repoName,$sha)
   $parts += ("time={0}" -f $now)
   if ($byLevel.Count -gt 0) {
-    $lvs = ($byLevel.Keys | Sort-Object | ForEach-Object { "{0}={1}" -f $_,$byLevel[$_] }) -join ','
-    $parts += ("levels={0}" -f $lvs)
+    $buf = @(); foreach($k in ($byLevel.Keys | Sort-Object)) { $buf += ("{0}={1}" -f $k,$byLevel[$k]) }
+    $parts += ("levels={0}" -f ([string]::Join(',', $buf)))
   }
   if ($byOutcome.Count -gt 0) {
-    $ocs = ($byOutcome.Keys | Sort-Object | ForEach-Object { "{0}={1}" -f $_,$byOutcome[$_] }) -join ','
-    $parts += ("outcomes={0}" -f $ocs)
+    $buf = @(); foreach($k in ($byOutcome.Keys | Sort-Object)) { $buf += ("{0}={1}" -f $k,$byOutcome[$k]) }
+    $parts += ("outcomes={0}" -f ([string]::Join(',', $buf)))
   }
-  if ($lr) {
-    $parts += ("lastRun={0}:{1}/exit={2}/err={3}/warn={4}" -f $lrName,$lrOutcome,$lrExit,$lrErrCnt,$lrWarnCnt)
-  }
+  if ($lr) { $parts += ("lastRun={0}:{1}/exit={2}/err={3}/warn={4}" -f $lrName,$lrOut,$lrExit,$lrErr,$lrWarn) }
   if ($errRec) { $parts += ("lastErr=[{0}] {1}" -f $errCode, (Short $errMsg 140)) } else { $parts += "lastErr=none" }
-  [string]::Join(' | ',$parts)
+  [string]::Join(' | ', $parts)
 }
 
 function Print-Multi([int]$MaxLines){
   $lines = New-Object System.Collections.Generic.List[string]
   $lines.Add('== G5/BRIEF v1 ==')
   $lines.Add( ("repo: {0}@{1}  |  time: {2}  |  window: {3}m" -f $repoName,$sha,$now,$SinceMinutes) )
-  if ($byLevel.Count -gt 0)   { $lines.Add("levels:  " + (($byLevel.Keys   | Sort-Object | ForEach-Object { "{0}={1}" -f $_,$byLevel[$_] }) -join ', ')) }
-  if ($byOutcome.Count -gt 0) { $lines.Add("outcomes: " + (($byOutcome.Keys | Sort-Object | ForEach-Object { "{0}={1}" -f $_,$byOutcome[$_] }) -join ', ')) }
+  if ($byLevel.Count -gt 0)   { $lines.Add("levels:  " + ([string]::Join(', ', ($byLevel.Keys | Sort-Object | ForEach-Object { "{0}={1}" -f $_,$byLevel[$_] })))) }
+  if ($byOutcome.Count -gt 0) { $lines.Add("outcomes: " + ([string]::Join(', ', ($byOutcome.Keys | Sort-Object | ForEach-Object { "{0}={1}" -f $_,$byOutcome[$_] })))) }
   if ($lr) {
-    $lines.Add(("last-run: {0}  ⇒  {1} (exit={2}, err={3}, warn={4})" -f $lrName,$lrOutcome,$lrExit,$lrErrCnt,$lrWarnCnt))
+    $lines.Add(("last-run: {0}  ⇒  {1} (exit={2}, err={3}, warn={4})" -f $lrName,$lrOut,$lrExit,$lrErr,$lrWarn))
     $lines.Add(("run-dir:  {0}" -f $latest.dir))
   }
   if ($errRec) { $lines.Add( ("last-error: [{0}] {1}" -f $errCode, (Short $errMsg 200)) ) } else { $lines.Add("last-error: (none)") }
-  if ($lrErrCnt -gt 0 -and $latest) {
+  if ($lrErr -gt 0 -and $latest) {
     $lines.Add( ("NEXT: pwsh -File `"{0}`"" -f (Join-Path $PSScriptRoot 'next-stderr.ps1')) )
   } else {
     $lines.Add( "NEXT: OK — continue." )
