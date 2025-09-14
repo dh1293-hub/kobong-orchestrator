@@ -19,6 +19,32 @@ function Short([string]$s,[int]$n=160){
 function Norm([string]$s){
   if ($null -eq $s) { return '' }
   $t = $s.ToLowerInvariant()
+
+  # 1) 윈도우 경로/드라이브: D:\..., C:\... → <path>
+  $t = $t -replace '(?i)\b[a-z]:\\[^\s\|\r\n:]+' , '<path>'
+
+  # 2) "파일:라인" 패턴 → <path>:<n>
+  $t = $t -replace '(?i)<path>:\d+', '<path>:<n>'
+
+  # 3) "Line | 53" / "line|53" → line|<n>
+  $t = $t -replace '(?i)\bline\s*\|\s*\d+', 'line|<n>'
+
+  # 4) "at <ScriptBlock>, ..., line 2" → line <n>
+  $t = $t -replace '(?i)line\s+\d+', 'line <n>'
+
+  # 5) 한글 PowerShell 에러 위치: "위치 줄:53 문자:10" → 위치 줄:<n> 문자:<n>
+  $t = $t -replace '위치\s*줄:\s*\d+', '위치 줄:<n>'
+  $t = $t -replace '문자:\s*\d+', '문자:<n>'
+
+  # 6) 타임스탬프/해시 치환
+  $t = $t -replace '\b[0-9a-f]{8,}\b','<hex>'
+  $t = $t -replace '\d{4}-\d{2}-\d{2}[t\s]\d{2}:\d{2}:\d{2}(\.\d+)?(z|[+\-]\d{2}:\d{2})?','<ts>'
+
+  # 7) 공백 정리
+  $t = $t -replace '\s+',' '
+  return $t.Trim()
+}
+  $t = $s.ToLowerInvariant()
   $t = $t -replace '\b[0-9a-f]{8,}\b','<hex>'
   $t = $t -replace '\d{4}-\d{2}-\d{2}[t\s]\d{2}:\d{2}:\d{2}(\.\d+)?(z|[+\-]\d{2}:\d{2})?','<ts>'
   $t = $t -replace '\s+',' '
