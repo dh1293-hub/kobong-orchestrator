@@ -5,6 +5,10 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag name to release (e.g. v0.1.1)"
+        required: true
 
 permissions:
   contents: write
@@ -16,7 +20,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Create or update GitHub Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # gh CLI uses GH_TOKEN
         run: |
-          tag="${GITHUB_REF#refs/tags/}"
-          gh release create "$tag" --generate-notes || gh release edit "$tag" --latest
+          set -e
+          tag="${{ github.event.inputs.tag }}"
+          if [ -z "$tag" ]; then
+            tag="${GITHUB_REF#refs/tags/}"
+          fi
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --latest
+          else
+            gh release create "$tag" --generate-notes
+          fi
