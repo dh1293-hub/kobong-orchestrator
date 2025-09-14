@@ -40,19 +40,15 @@ $target = (Resolve-Path $File).Path
 $startTime = Get-Date
 Write-KlcJsonl -Level 'INFO' -Action 'run:start' -Outcome 'PENDING' -Message ("{0} {1}" -f $target, ($Args -join ' '))
 
-$exitCode = 0
+# 실행 (가능하면 모든 스트림→파일, 실패 시 stdout/stderr만 폴백)
 $fallback = $false
 try {
-  # 모든 스트림 분리 캡처(PS7). 일부 환경에서 예외나면 폴백으로 재시도.
   & $target @Args 1> $stdout 2> $stderr 3> $warnf 4> $verbosef 5> $debugf 6> $infof
-  if ($LASTEXITCODE) { $exitCode = $LASTEXITCODE }
 } catch {
   $fallback = $true
   try {
     & $target @Args 1> $stdout 2> $stderr
-    if ($LASTEXITCODE) { $exitCode = $LASTEXITCODE }
   } catch {
-    $exitCode = 1
     $_ | Out-String | Set-Content -Path $stderr
   }
 }
@@ -68,9 +64,11 @@ $cDbg = CountOrZero $debugf
 $sampleErr = if (Test-Path $stderr) { (Get-Content $stderr -TotalCount 2) -join ' | ' } else { '' }
 $sampleWrn = if (Test-Path $warnf)  { (Get-Content $warnf  -TotalCount 2) -join ' | ' } else { '' }
 
-$levelEmit   = $(if ($exitCode -eq 0 -and $cErr -eq 0) { 'INFO' } else { 'ERROR' })
-$outcomeEmit = $(if ($exitCode -eq 0 -and $cErr -eq 0) { 'SUCCESS' } else { 'FAILURE' })
-$errCodeEmit = $(if ($exitCode -eq 0 -and $cErr -eq 0) { '' } else { 'LOGIC' })
+# ← 여기 핵심: 실패 판정 = "에러 스트림 라인수 > 0"
+$exitCode   = if ($cErr -gt 0) { 1 } else { 0 }
+$levelEmit  = if ($exitCode -eq 0) { 'INFO' } else { 'ERROR' }
+$outcomeEmit= if ($exitCode -eq 0) { 'SUCCESS' } else { 'FAILURE' }
+$errCodeEmit= if ($exitCode -eq 0) { '' } else { 'LOGIC' }
 
 $msg = "exit=$exitCode; out=$cOut, warn=$cWrn, err=$cErr, info=$cInf, verbose=$cVer, debug=$cDbg"
 if ($sampleErr) { $msg += "; errSample=" + $sampleErr }

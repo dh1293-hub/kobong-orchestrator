@@ -4,10 +4,22 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $Runs = Join-Path $Root 'out\run-logs'
-function Pick-Latest2 { $dirs = Get-ChildItem -Path $Runs -Directory | Sort-Object LastWriteTime | Select-Object -Last 2; @($dirs[0].FullName,$dirs[1].FullName) }
-if (-not $Old -or -not $New) { $pair = Pick-Latest2; $Old = $Old ?? $pair[0]; $New = $New ?? $pair[1] }
-$mOld = Join-Path $Old 'run.json'; $mNew = Join-Path $New 'run.json'
 function CountOrZero($p){ if (Test-Path $p) { (Get-Content $p -ReadCount 1000 | Measure-Object -Line).Lines } else { 0 } }
+function Pick-Latest2 {
+  $dirs = Get-ChildItem -Path $Runs -Directory | Sort-Object LastWriteTime
+  if (-not $dirs -or $dirs.Count -eq 0) { throw "No run-logs found." }
+  if ($dirs.Count -eq 1) { return @($dirs[0].FullName, $dirs[0].FullName) }
+  return @($dirs[$dirs.Count-2].FullName, $dirs[$dirs.Count-1].FullName)
+}
+if (-not $Old -or -not (Test-Path $Old)) {
+  $pair = Pick-Latest2; $Old = $pair[0]; if (-not $New) { $New = $pair[1] }
+}
+if (-not $New -or -not (Test-Path $New)) {
+  $pair = Pick-Latest2; $New = $pair[1]
+}
+
+$mOld = Join-Path $Old 'run.json'
+$mNew = Join-Path $New 'run.json'
 function Read-Man($m,$dir){
   if (Test-Path $m) { return Get-Content -Raw -Path $m | ConvertFrom-Json }
   else {
@@ -22,7 +34,9 @@ function Read-Man($m,$dir){
     return ($obj | ConvertTo-Json | ConvertFrom-Json)
   }
 }
-$A = Read-Man $mOld $Old; $B = Read-Man $mNew $New
+
+$A = Read-Man $mOld $Old
+$B = Read-Man $mNew $New
 Write-Host "== RUN DIFF ==" -ForegroundColor Magenta
 Write-Host ("Old: {0}" -f $Old)
 Write-Host ("New: {0}" -f $New)
