@@ -9,10 +9,7 @@ $PSDefaultParameterValues['Out-File:Encoding']='utf8'
 $PSDefaultParameterValues['*:Encoding']='utf8'
 
 function Write-KlcJsonl {
-  param(
-    [string]$Level,[string]$Action,[string]$Outcome,[string]$Message,
-    [string]$Module='runner',[string]$ErrorCode=''
-  )
+  param([string]$Level,[string]$Action,[string]$Outcome,[string]$Message,[string]$Module='runner',[string]$ErrorCode='')
   $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
   $jsonl = Join-Path $repoRoot 'logs\apply-log.jsonl'
   try {
@@ -21,9 +18,7 @@ function Write-KlcJsonl {
       return
     }
   } catch {}
-  $rec = @{
-    timestamp=(Get-Date).ToString('o'); level=$Level; module=$Module; action=$Action; outcome=$Outcome; error=$ErrorCode; message=$Message; traceId=[guid]::NewGuid().ToString()
-  } | ConvertTo-Json -Compress
+  $rec = @{ timestamp=(Get-Date).ToString('o'); level=$Level; module=$Module; action=$Action; outcome=$Outcome; error=$ErrorCode; message=$Message; traceId=[guid]::NewGuid().ToString() } | ConvertTo-Json -Compress
   New-Item -ItemType Directory -Force -Path (Split-Path $jsonl) | Out-Null
   Add-Content -Path $jsonl -Value $rec
 }
@@ -46,13 +41,20 @@ $startTime = Get-Date
 Write-KlcJsonl -Level 'INFO' -Action 'run:start' -Outcome 'PENDING' -Message ("{0} {1}" -f $target, ($Args -join ' '))
 
 $exitCode = 0
+$fallback = $false
 try {
-  # 모든 스트림 분리 캡처 (PS7)
+  # 모든 스트림 분리 캡처(PS7). 일부 환경에서 예외나면 폴백으로 재시도.
   & $target @Args 1> $stdout 2> $stderr 3> $warnf 4> $verbosef 5> $debugf 6> $infof
   if ($LASTEXITCODE) { $exitCode = $LASTEXITCODE }
 } catch {
-  $exitCode = 1
-  $_ | Out-String | Set-Content -Path $stderr
+  $fallback = $true
+  try {
+    & $target @Args 1> $stdout 2> $stderr
+    if ($LASTEXITCODE) { $exitCode = $LASTEXITCODE }
+  } catch {
+    $exitCode = 1
+    $_ | Out-String | Set-Content -Path $stderr
+  }
 }
 
 function CountOrZero($p){ if (Test-Path $p) { (Get-Content $p -ReadCount 1000 | Measure-Object -Line).Lines } else { 0 } }
@@ -73,6 +75,7 @@ $errCodeEmit = $(if ($exitCode -eq 0 -and $cErr -eq 0) { '' } else { 'LOGIC' })
 $msg = "exit=$exitCode; out=$cOut, warn=$cWrn, err=$cErr, info=$cInf, verbose=$cVer, debug=$cDbg"
 if ($sampleErr) { $msg += "; errSample=" + $sampleErr }
 if ($sampleWrn) { $msg += "; warnSample=" + $sampleWrn }
+if ($fallback)  { $msg += "; fallback=legacy-redirect(1,2)" }
 
 Write-KlcJsonl -Level $levelEmit -Action 'run:end' -Outcome $outcomeEmit -Message $msg -ErrorCode $errCodeEmit
 
@@ -88,7 +91,6 @@ $manifest = [ordered]@{
 $mPath = Join-Path $runDir 'run.json'
 ($manifest | ConvertTo-Json -Depth 6) | Set-Content -Path $mPath -Encoding utf8
 
-# 배열 안에서 if를 쓰지 말고, 조건부 추가는 += 로 분리
 $sumMd = @()
 $sumMd += '# Run Summary (' + $name + ')'
 $sumMd += ''
@@ -99,9 +101,9 @@ $sumMd += '*Outcome:* ' + $outcomeEmit + '  (exit=' + $exitCode + ')'
 $sumMd += '*Counts:* out=' + $cOut + ', warn=' + $cWrn + ', err=' + $cErr + ', info=' + $cInf + ', verbose=' + $cVer + ', debug=' + $cDbg
 if ($sampleErr) { $sumMd += '*ErrSample:* ' + $sampleErr }
 if ($sampleWrn) { $sumMd += '*WarnSample:* ' + $sampleWrn }
+if ($fallback)  { $sumMd += '*Note:* fallback=legacy-redirect(1,2)' }
 $sumPath = Join-Path $runDir 'summary.md'
 [System.IO.File]::WriteAllText($sumPath, ([string]::Join("`n",$sumMd) + "`n"), (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host "[OK] Run logs at: $runDir" -ForegroundColor Green
-if ($outcomeEmit -ne 'SUCCESS') { Write-Host "[HINT] Check stderr: $stderr" -ForegroundColor DarkYellow }Write-Host "[OK] Run logs at: $runDir" -ForegroundColor Green
 if ($outcomeEmit -ne 'SUCCESS') { Write-Host "[HINT] Check stderr: $stderr" -ForegroundColor DarkYellow }
