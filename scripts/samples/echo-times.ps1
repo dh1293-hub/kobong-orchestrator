@@ -1,8 +1,9 @@
-#requires -Version 7.0
-param([string]$Name='Alice',[int]$Count=3)
+param(
+  [string]$Name = "World",
+  [int]$Count = 1
+)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
-for($i=1;$i -le $Count;$i++){
-  Write-Host ("[{0}/{1}] Hello, {2}!" -f $i,$Count,$Name)
-  Start-Sleep -Milliseconds 50
+for ($i=1; $i -le $Count; $i++) {
+  Write-Output ("{0} {1}" -f $i, $Name)
 }
