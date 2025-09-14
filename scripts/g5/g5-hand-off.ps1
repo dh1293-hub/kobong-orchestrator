@@ -58,6 +58,6 @@ Write-Host "==== G5 HAND-OFF (copy & paste) ====" -ForegroundColor Cyan
 $lines | ForEach-Object { Write-Host $_ }
 
 # 클립보드
-if (-not $NoClipboard) {
+if (-not $NoClipboard -and ($env:KOBONG_NO_CLIPBOARD -ne '1')) {
   try { $packet | Set-Clipboard; Write-Host "[OK] Copied to clipboard." -ForegroundColor Green } catch { Write-Warning "Clipboard copy failed: $($_.Exception.Message)" }
 }
