@@ -1,3 +1,11 @@
+#requires -Version 7.0
+param([switch]$ConfirmApply,[string]$Root)
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+$PSDefaultParameterValues['Out-File:Encoding']='utf8'
+$PSDefaultParameterValues['*:Encoding']='utf8'
+if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
+
 # APPLY IN SHELL
 # doctor.ps1 — no pager hang (generated: 2025-09-15 03:28:55 +09:00)
 #requires -Version 7.0

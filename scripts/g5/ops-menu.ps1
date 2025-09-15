@@ -1,81 +1,100 @@
 # APPLY IN SHELL
-# Kobong — OPS MENU v1.1  (generated: KST: 2025-09-15 02:30:28 +09:00)
 #requires -Version 7.0
-param([string]$Root)
+param([switch]$ConfirmApply,[string]$Root)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $PSDefaultParameterValues['Out-File:Encoding']='utf8'
 $PSDefaultParameterValues['*:Encoding']='utf8'
+if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
 
-function Get-RepoRoot {
-  if ($Root -and (Test-Path $Root)) { return (Resolve-Path $Root).Path }
-  try { $r = git rev-parse --show-toplevel 2>$null; if ($r) { return $r } } catch {}
-  return (Get-Location).Path
-}
-function Pause-Enter([string]$msg='Press Enter to continue...'){ Read-Host $msg | Out-Null }
-$RepoRoot = Get-RepoRoot
+# === Preflight ===
+$RepoRoot = if ($Root) { (Resolve-Path -LiteralPath $Root).Path } else { (git rev-parse --show-toplevel 2>$null) ?? (Get-Location).Path }
+if (-not (Test-Path $RepoRoot)) { Write-Error "PRECONDITION: RepoRoot not found -> $RepoRoot"; exit 10 }
 Set-Location $RepoRoot
+$Branch = (git rev-parse --abbrev-ref HEAD 2>$null) ?? '<unknown>'
+$now    = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date),'Asia/Seoul').ToString('yyyy-MM-dd HH:mm:ss')
 
-function Path-Ensure([string]$rel){
-  $p = Join-Path $RepoRoot $rel
-  if(-not(Test-Path $p)){ Write-Host "[MISSING] $rel" -ForegroundColor Yellow; return $null }
-  return $p
+# === Menu header ===
+Write-Host ("`n[ops] kobong orchestrator on {0} @ {1} (KST)" -f $Branch,$now)
+Write-Host (" mode = {0}" -f ($(if($ConfirmApply){"APPLY"}else{"DRY-RUN"})))
+
+# === Lock (stale >= 15s auto-unlock) ===
+$LockFile = Join-Path $RepoRoot '.gpt5.lock.ops-menu'
+if (Test-Path $LockFile) {
+  try { $age = [int]((Get-Date) - (Get-Item $LockFile).LastWriteTime).TotalSeconds } catch { $age = 999999 }
+  if ($age -ge 15) {
+    $ts  = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $rot = "{0}.stale-{1}" -f $LockFile, $ts
+    Move-Item -Force $LockFile $rot
+    Write-Host ("[auto-unlock] rotated stale lock -> {0}" -f $rot)
+  } else { Write-Error 'CONFLICT: .gpt5.lock.ops-menu exists (recent)'; exit 11 }
+}
+"locked $(Get-Date -Format o)" | Out-File $LockFile -Encoding utf8 -NoNewline
+
+$sw=[Diagnostics.Stopwatch]::StartNew()
+$trace=[guid]::NewGuid().ToString()
+function Write-Log($level,$action,$message,$outcome='',$errorCode=''){
+  $rec=[ordered]@{timestamp=(Get-Date).ToString('o');level=$level;traceId=$trace;module='ops-menu';action=$action;outcome=$outcome;durationMs=$sw.ElapsedMilliseconds;errorCode=$errorCode;message=$message} | ConvertTo-Json -Compress
+  $log=Join-Path $RepoRoot 'logs/apply-log.jsonl'; New-Item -ItemType Directory -Force -Path (Split-Path $log)|Out-Null; Add-Content -Path $log -Value $rec
 }
 
-do {
-  Clear-Host
-  Write-Host ("KOBONG — OPS MENU  @ " + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) -ForegroundColor Cyan
-  Write-Host ("Repo: " + $RepoRoot) -ForegroundColor DarkGray
-  Write-Host ""
-  Write-Host "  1) Monitor status (once)"
-  Write-Host "  2) Error trend (24h)"
-  Write-Host "  3) Generate badges (DRY-RUN → out/badges-smoke)"
-  Write-Host "  4) Generate badges (APPLY → README 갱신)"
-  Write-Host "  5) CI summary (gh 필요)"
-  Write-Host "  6) Run Orchestrator (필요시 deps 설치)"
-  Write-Host "  7) Open README.md"
-  Write-Host "  0) Exit"
-  $sel = Read-Host "Select"
-  switch ($sel) {
-    '1' {
-      $scr = Path-Ensure 'scripts/g5/monitor-status.ps1'; if(-not $scr){ Pause-Enter; break }
-      $port = Read-Host "Port (Enter=8080)"; if([string]::IsNullOrWhiteSpace($port)){ $port='8080' }
-      pwsh -File $scr -Once -Port ([int]$port)
-      Pause-Enter
+function Run-Step {
+  param(
+    [Parameter(Mandatory)] [string]$Title,
+    [Parameter(Mandatory)] [string]$RelPath,
+    [string[]]$ArgsApply = @()
+  )
+  $full = Join-Path $RepoRoot $RelPath
+  if (-not (Test-Path $full)) { Write-Host ("[skip] {0} (missing: {1})" -f $Title,$RelPath); return }
+  Write-Host ("`n--- [{0}] {1} ---" -f ($(if($ConfirmApply){"APPLY"}else{"DRY-RUN"}), $Title))
+  $prev = $env:CONFIRM_APPLY
+  try {
+    if ($ConfirmApply) { $env:CONFIRM_APPLY='true' } else { Remove-Item Env:\CONFIRM_APPLY -ErrorAction SilentlyContinue }
+    # 1st try
+    if ($ConfirmApply) {
+      pwsh -NoProfile -File $full @ArgsApply
+    } else {
+      pwsh -NoProfile -File $full
     }
-    '2' {
-      $scr = Path-Ensure 'scripts/g5/error-trend.ps1'; if(-not $scr){ Pause-Enter; break }
-      pwsh -File $scr
-      Pause-Enter
+    $code=$LASTEXITCODE
+    if ($code -eq 11) {
+      Write-Host "[hint] conflict detected, retrying after short wait..."
+      Start-Sleep -Seconds 2
+      if ($ConfirmApply) {
+        pwsh -NoProfile -File $full @ArgsApply
+      } else {
+        pwsh -NoProfile -File $full
+      }
+      $code=$LASTEXITCODE
     }
-    '3' {
-      $scr = Path-Ensure 'scripts/g5/generate-badges.ps1'; if(-not $scr){ Pause-Enter; break }
-      pwsh -File $scr -OutDir (Join-Path $RepoRoot 'out/badges-smoke')
-      Pause-Enter
+    if ($code -ne 0) {
+      Write-Host ("[warn] step exit code {0}" -f $code)
+      Write-Log 'WARN' ("step:{0}" -f $Title) ("exit code {0}" -f $code) 'PARTIAL' $code
+    } else {
+      Write-Log 'INFO' ("step:{0}" -f $Title) 'ok' 'OK'
     }
-    '4' {
-      $scr = Path-Ensure 'scripts/g5/generate-badges.ps1'; if(-not $scr){ Pause-Enter; break }
-      $env:CONFIRM_APPLY='true'
-      pwsh -File $scr -ConfirmApply
-      Pause-Enter
-    }
-    '5' {
-      $scr = Path-Ensure 'scripts/view-ci-summary.ps1'; if(-not $scr){ Pause-Enter; break }
-      pwsh -File $scr
-      Pause-Enter
-    }
-    '6' {
-      $scr = Path-Ensure 'scripts/g5/run-kobong-orchestrator.ps1'; if(-not $scr){ Pause-Enter; break }
-      $yn = Read-Host "Install deps if needed? (y/N)"
-      if ($yn -match '^[Yy]'){ pwsh -File $scr -ConfirmApply } else { pwsh -File $scr }
-      Pause-Enter
-    }
-    '7' {
-      $md = Join-Path $RepoRoot 'README.md'
-      if (Test-Path $md) { Start-Process $md } else { Write-Host "[INFO] README.md not found." -ForegroundColor Yellow }
-      Pause-Enter
-    }
-    '0' { break }
-    default { }
+  } finally {
+    if ($null -ne $prev) { $env:CONFIRM_APPLY=$prev } else { Remove-Item Env:\CONFIRM_APPLY -ErrorAction SilentlyContinue }
+    Start-Sleep -Milliseconds 400
   }
-} while ($true)
+}
+
+try {
+  # 실행 순서: var-colon -> EOL/LF -> PS7 header
+  Run-Step -Title 'Fix "$(Var):" parse bug'       -RelPath 'scripts/g5/fix-var-colon.ps1'     -ArgsApply @('-ConfirmApply')
+  Run-Step -Title 'Normalize EOL (LF / CRLF)'   -RelPath 'scripts/g5/guard-eol-lf.ps1'     -ArgsApply @('-ConfirmApply')
+  Run-Step -Title 'Enforce PS7 Safe Header'     -RelPath 'scripts/g5/guard-ps7-header.ps1' -ArgsApply @('-ConfirmApply')
+
+  Write-Host "`n[i] YAML paste guard usage:"
+  Write-Host " - monitor 120s :  `$env:CONFIRM_APPLY='true'; pwsh -File scripts/g5/guard-yaml-paste.ps1 -ConfirmApply -MonitorSeconds 120"
+  Write-Host " - one-shot save :  `$env:CONFIRM_APPLY='true'; pwsh -File scripts/g5/guard-yaml-paste.ps1 -ConfirmApply -Once"
+
+  Write-Host ("`nDONE {0} — reviewed guards." -f ($(if($ConfirmApply){"APPLIED"}else{"DRY-RUN"})))
+}
+catch {
+  Write-Log 'ERROR' 'exception' $_.Exception.Message 'FAILURE' ($_.FullyQualifiedErrorId ?? 'Unknown')
+  throw
+}
+finally {
+  Remove-Item -Force $LockFile -ErrorAction SilentlyContinue
+}

@@ -1,3 +1,11 @@
+#requires -Version 7.0
+param([switch]$ConfirmApply,[string]$Root)
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+$PSDefaultParameterValues['Out-File:Encoding']='utf8'
+$PSDefaultParameterValues['*:Encoding']='utf8'
+if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
+
 # APPLY IN SHELL
 # Kobong-Orchestrator — Monitor Logs v1.3  (generated: 2025-09-15 00:53:23 +09:00)
 #requires -Version 7.0

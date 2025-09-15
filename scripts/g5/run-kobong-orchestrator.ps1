@@ -1,4 +1,12 @@
-﻿# APPLY IN SHELL
+#requires -Version 7.0
+param([switch]$ConfirmApply,[string]$Root)
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+$PSDefaultParameterValues['Out-File:Encoding']='utf8'
+$PSDefaultParameterValues['*:Encoding']='utf8'
+if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
+
+# APPLY IN SHELL
 # Run-Kobong-Orchestrator v1 — 필요시 설치 후 실행 (generated: 2025-09-15 01:15:47 +09:00)
 #requires -Version 7.0
 param([switch]$ConfirmApply,[string]$Root)

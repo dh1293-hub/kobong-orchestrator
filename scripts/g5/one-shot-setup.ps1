@@ -1,4 +1,12 @@
-﻿# APPLY IN SHELL
+#requires -Version 7.0
+param([switch]$ConfirmApply,[string]$Root)
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+$PSDefaultParameterValues['Out-File:Encoding']='utf8'
+$PSDefaultParameterValues['*:Encoding']='utf8'
+if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
+
+# APPLY IN SHELL
 # One-Shot-Setup v1.1 — 상태 준비 + 모니터/CI 실행 준비 (generated: 2025-09-15 01:21:31 +09:00)
 #requires -Version 7.0
 param([switch]$ConfirmApply,[string]$Root)
