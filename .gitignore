@@ -1,1 +1,5 @@
 logs/
+
+# CI: ignore logs
+logs/
+!logs/.gitkeep
