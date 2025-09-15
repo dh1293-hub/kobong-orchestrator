@@ -7,11 +7,10 @@ if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { Write-Error "GitHub CLI(gh) 필요"; exit 10 }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Write-Error "git 필요"; exit 10 }
 
-# 작업트리 깨끗해야 적용
-$dirty = (& git status --porcelain)
-if ($dirty) { Write-Error "작업트리가 깨끗해야 합니다. (stash/commit 후 재시도)"; exit 10 }
+# 중요: 추적된 변경만 검사 (untracked 파일은 무시)  ← 새로 만든 스크립트로 인해 막히지 않도록
+$dirtyTracked = (& git status --porcelain --untracked-files=no)
+if ($dirtyTracked) { Write-Error "작업트리에 추적된 변경이 있습니다. (commit/stash 후 재시도)"; exit 10 }
 
-# repo
 $nwo = & gh repo view --json nameWithOwner -q .nameWithOwner
 if (-not $nwo) { Write-Error "원격 리포 확인 실패"; exit 10 }
 $owner,$repo = $nwo.Split('/')
@@ -40,7 +39,6 @@ function Retrigger-Checks([string]$branch,[string]$why){
   return ($LASTEXITCODE -eq 0)
 }
 
-# OPEN PRs
 $openJson = & gh pr list --state open --json number -q '.[].number' 2>$null
 if (-not $openJson) { Write-Host "No open PRs."; exit 0 }
 $nums = $openJson | ConvertFrom-Json

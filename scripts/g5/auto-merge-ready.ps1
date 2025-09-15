@@ -4,6 +4,7 @@ param([switch]$AllOpen,[int[]]$PR,[switch]$ConfirmApply,[switch]$Json)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
+
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { Write-Error "GitHub CLI(gh) 필요"; exit 10 }
 
 # owner/name
@@ -11,14 +12,15 @@ $nwo = (& gh repo view --json nameWithOwner -q .nameWithOwner 2>$null)
 if (-not $nwo) { Write-Error "gh repo view 실패"; exit 10 }
 $owner,$repo = $nwo.Split('/')
 
-# 대상 PR들
+# 대상 PR 목록 수집 (항상 배열 보장)
 $targets = @()
-if ($PR -and $PR.Count -gt 0) { $targets = $PR }
+if ($PR -and $PR.Count -gt 0) { $targets += $PR }
 elseif ($AllOpen -or -not $PR) {
   $ls = & gh pr list --state open --json number -q '.[].number' 2>$null
-  if ($ls) { $targets = ($ls | ConvertFrom-Json) }
+  if ($ls) { $targets += ($ls | ConvertFrom-Json) }
 }
-if (-not $targets -or $targets.Count -eq 0) { Write-Host "READY PRs: (none)"; if($Json){'[]'}; exit 0 }
+$targets = @($targets)  # ← 핵심: 배열로 강제
+if ($targets.Count -eq 0) { Write-Host "READY PRs: (none)"; if($Json){'[]'}; exit 0 }
 
 $rows = @()
 foreach($n in $targets){
@@ -26,7 +28,7 @@ foreach($n in $targets){
   if (-not $raw) { Write-Host ("PR #{0} — 조회 실패" -f $n); continue }
   $i = $raw | ConvertFrom-Json
 
-  # checks
+  # checks 요약
   $tot=0;$ok=0;$bad=0;$pend=0
   if ($i.headRefOid) {
     try {
@@ -54,8 +56,9 @@ foreach($n in $targets){
   if (-not $checksPass) { $why += ("체크 실패/진행중 (total={0} ok={1} bad={2} pend={3})" -f $tot,$ok,$bad,$pend) }
   if ($reviewBlk) { $why += ("리뷰={0}" -f $i.reviewDecision) }
 
-  $label = $ready ? 'READY' : 'NOT_READY'
-  Write-Host ("PR #{0} — {1} :: {2}" -f $i.number,$i.title,$label) -ForegroundColor ($ready?'Green':'Yellow')
+  $label = if ($ready) { 'READY' } else { 'NOT_READY' }
+  $fg = if ($ready) { 'Green' } else { 'Yellow' }
+  Write-Host ("PR #{0} — {1} :: {2}" -f $i.number,$i.title,$label) -ForegroundColor $fg
   if ($why.Count -gt 0) { Write-Host ("  Why: {0}" -f ($why -join '; ')) }
 
   if ($ready -and $ConfirmApply) {
@@ -70,8 +73,10 @@ foreach($n in $targets){
     ready=$ready; reasons=$why
   }
 }
-if ($Json) { $rows | ConvertTo-Json -Depth 6 }
-else {
+
+if ($Json) {
+  $rows | ConvertTo-Json -Depth 6
+} else {
   $readyNums = ($rows | Where-Object {$_.ready} | Select-Object -ExpandProperty number)
   if ($readyNums) { Write-Host ("READY PRs: {0}" -f ($readyNums -join ', ')) -ForegroundColor Green } else { Write-Host "READY PRs: (none)" }
 }
