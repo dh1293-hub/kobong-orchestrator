@@ -1,0 +1,10 @@
+name: "Release Gate (auto)"
+on:
+  pull_request:
+    branches: [ "main" ]
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: noop
+        run: echo "ok"
