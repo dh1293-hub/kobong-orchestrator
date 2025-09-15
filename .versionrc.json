@@ -1,8 +1,0 @@
-{
-  "preset": "conventionalcommits",
-  "header": "# Changelog\n\nAll notable changes to this project will be documented in this file.\n",
-  "skip": { "commit": false, "tag": false },
-  "bumpFiles": [
-    { "filename": "package.json", "type": "json" }
-  ]
-}

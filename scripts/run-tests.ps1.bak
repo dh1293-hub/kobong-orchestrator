@@ -1,4 +1,0 @@
-﻿$ErrorActionPreference='Stop'
-. "$PSScriptRoot/_preamble.ps1"
-& "$PSScriptRoot/validate-decl.ps1"
-Write-Host "[OK] Pre-flight done. (Add pytest or other runners next)"

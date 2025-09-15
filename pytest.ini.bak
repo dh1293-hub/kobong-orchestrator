@@ -1,4 +1,0 @@
-﻿[pytest]
-addopts = -q
-filterwarnings =
-    ignore:jsonschema.RefResolver is deprecated:DeprecationWarning
