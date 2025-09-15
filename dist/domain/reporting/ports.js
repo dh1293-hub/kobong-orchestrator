@@ -1,0 +1,2 @@
+/** ===== Domain Contracts (Reporting) ===== */
+export {};
