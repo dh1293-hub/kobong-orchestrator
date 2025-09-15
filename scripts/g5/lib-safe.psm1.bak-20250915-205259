@@ -1,12 +1,4 @@
-#requires -Version 7.0
-param([switch]$ConfirmApply,[string]$Root)
-Set-StrictMode -Version Latest
-$ErrorActionPreference='Stop'
-$PSDefaultParameterValues['Out-File:Encoding']='utf8'
-$PSDefaultParameterValues['*:Encoding']='utf8'
-if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
-
-# NO-SHELL
+﻿# NO-SHELL
 # lib-safe.psm1 — common safe utilities (PS7)
 #requires -Version 7.0
 Set-StrictMode -Version Latest

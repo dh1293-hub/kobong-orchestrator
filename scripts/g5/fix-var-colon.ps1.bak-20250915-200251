@@ -1,0 +1,103 @@
+# APPLY IN SHELL
+#requires -Version 7.0
+param([switch]$ConfirmApply,[string]$Root)
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+$PSDefaultParameterValues['Out-File:Encoding']='utf8'
+$PSDefaultParameterValues['*:Encoding']='utf8'
+if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
+
+# === Gate-0: Preflight ===
+$RepoRoot = if ($Root) { (Resolve-Path -LiteralPath $Root).Path } else { (git rev-parse --show-toplevel 2>$null) ?? (Get-Location).Path }
+if (-not (Test-Path $RepoRoot)) { Write-Error "PRECONDITION: RepoRoot not found → $RepoRoot"; exit 10 }
+Set-Location $RepoRoot
+$Branch = (git rev-parse --abbrev-ref HEAD 2>$null) ?? '<unknown>'
+$nowKst = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date),'Asia/Seoul')
+Write-Host ("`n[verify] files on {0} @ {1} (KST)" -f $Branch,$nowKst.ToString('yyyy-MM-dd HH:mm:ss'))
+
+# Lock
+$LockFile = Join-Path $RepoRoot '.gpt5.lock'
+if (Test-Path $LockFile) { Write-Error 'CONFLICT: .gpt5.lock exists.'; exit 11 }
+"locked $(Get-Date -Format o)" | Out-File $LockFile -Encoding utf8 -NoNewline
+$sw=[Diagnostics.Stopwatch]::StartNew()
+$trace=[guid]::NewGuid().ToString()
+
+# Logger
+function Write-Log($level,$module,$action,$message,$outcome='',$errorCode='',$inputHash='') {
+  $rec = [ordered]@{
+    timestamp=(Get-Date).ToString('o')
+    level=$level; traceId=$trace; module=$module; action=$action
+    inputHash=$inputHash; outcome=$outcome; durationMs=$sw.ElapsedMilliseconds; errorCode=$errorCode; message=$message
+  } | ConvertTo-Json -Compress
+  $log = Join-Path $RepoRoot 'logs/apply-log.jsonl'
+  New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
+  Add-Content -Path $log -Value $rec
+}
+
+try {
+  # === Gate-1: Scan ===
+  $rx = [regex]'(?i)\$(?!(?:global|script|local|private|env|using|psstyle))([A-Za-z_]\w*):'
+  $files = Get-ChildItem -Recurse -File -Include *.ps1,*.psm1
+  $plan = @()
+  foreach ($f in $files) {
+    $src = Get-Content -Raw -Encoding utf8 $f.FullName
+    if (-not $rx.IsMatch($src)) { continue }
+    $matches = $rx.Matches($src)
+    $plan += [pscustomobject]@{
+      Path = $f.FullName
+      Count = $matches.Count
+      Sample = ($matches | Select-Object -First 2 | ForEach-Object { $_.Value }) -join ', '
+    }
+  }
+
+  if (-not $plan) {
+    Write-Host "✅ 파싱오류 패턴 없음(`$(Var):`) — 안전."
+    Write-Log 'INFO' 'ops-guard' 'scan' 'no matches' 'OK'
+    exit 0
+  }
+
+  Write-Host ("📝 대상 {0}개 파일, 총 {1}건 치환 예정" -f $plan.Count, ($plan | Measure-Object Count -Sum).Sum)
+  $plan | ForEach-Object { Write-Host (" - {0} (x{1}) :: {2}" -f $_.Path,$_.Count,$_.Sample) }
+
+  if (-not $ConfirmApply) {
+    Write-Host "`nDRY-RUN ✅ 실제 파일은 변경하지 않았습니다."
+    Write-Host "적용하려면:"
+    Write-Host "  `$env:CONFIRM_APPLY='true'; pwsh -File scripts/g5/fix-var-colon.ps1 -ConfirmApply"
+    Write-Log 'INFO' 'ops-guard' 'dryrun' ("would change {0} files" -f $plan.Count) 'NOT_APPLIED'
+    exit 0
+  }
+
+  # === Gate-2: Apply (backup + atomic replace) ===
+  $ts = Get-Date -Format 'yyyyMMdd-HHmmss'
+  $changed = 0; $occTotal = 0
+  foreach ($it in $plan) {
+    $p = $it.Path
+    $src = Get-Content -Raw -Encoding utf8 $p
+    $hash = (Get-FileHash -Algorithm SHA256 -Path $p).Hash
+    $new = $rx.Replace($src, { param($m) '$(' + $m.Groups[1].Value + '):' })
+    if ($new -ne $src) {
+      $bak = "$p.bak-$ts"
+      Copy-Item $p $bak -Force
+      $tmp = "$p.tmp"
+      Set-Content -Encoding utf8 -NoNewline -Path $tmp -Value $new
+      Move-Item -Force $tmp $p
+      $changed++
+      $occTotal += $it.Count
+      Write-Log 'INFO' 'ops-guard' 'apply' "fixed $($it.Count) occurrences" 'APPLIED' '' $hash
+      Write-Host ("[fixed] {0} (x{1}) — backup: {2}" -f $p,$it.Count,$bak)
+    }
+  }
+
+  # === Gate-3: Verify & Summary ===
+  Write-Host ("`nDONE ✅ files changed={0}, total replacements={1}" -f $changed,$occTotal)
+  Write-Log 'INFO' 'ops-guard' 'summary' ("changed=$changed, replaced=$occTotal") 'OK'
+  exit 0
+}
+catch {
+  Write-Log 'ERROR' 'ops-guard' 'exception' $_.Exception.Message 'FAILURE' ($_.FullyQualifiedErrorId ?? 'Unknown')
+  Write-Error $_
+  exit 13
+}
+finally {
+  Remove-Item -Force $LockFile -ErrorAction SilentlyContinue
+}

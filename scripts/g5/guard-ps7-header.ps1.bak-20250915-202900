@@ -1,0 +1,108 @@
+# APPLY IN SHELL
+#requires -Version 7.0
+param([switch]$ConfirmApply,[string]$Root)
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+$PSDefaultParameterValues['Out-File:Encoding']='utf8'
+$PSDefaultParameterValues['*:Encoding']='utf8'
+if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
+
+# === Preflight ===
+$RepoRoot = if ($Root) { (Resolve-Path -LiteralPath $Root).Path } else { (git rev-parse --show-toplevel 2>$null) ?? (Get-Location).Path }
+if (-not (Test-Path $RepoRoot)) { Write-Error "PRECONDITION: RepoRoot not found → $RepoRoot"; exit 10 }
+Set-Location $RepoRoot
+$Branch = (git rev-parse --abbrev-ref HEAD 2>$null) ?? '<unknown>'
+$now = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date),'Asia/Seoul').ToString('yyyy-MM-dd HH:mm:ss')
+Write-Host ("`n[verify] PS7 headers on {0} @ {1} (KST)" -f $Branch,$now)
+
+# 전용 락
+$LockFile = Join-Path $RepoRoot '.gpt5.lock.ps7-headers'
+if (Test-Path $LockFile) { Write-Error 'CONFLICT: .gpt5.lock.ps7-headers exists.'; exit 11 }
+"locked $(Get-Date -Format o)" | Out-File $LockFile -Encoding utf8 -NoNewline
+$sw=[Diagnostics.Stopwatch]::StartNew()
+$trace=[guid]::NewGuid().ToString()
+function Write-Log($level,$action,$message,$outcome='',$errorCode='',$inputHash=''){
+  $rec=[ordered]@{timestamp=(Get-Date).ToString('o');level=$level;traceId=$trace;module='ps7-guard';action=$action;inputHash=$inputHash;outcome=$outcome;durationMs=$sw.ElapsedMilliseconds;errorCode=$errorCode;message=$message}|ConvertTo-Json -Compress
+  $log=Join-Path $RepoRoot 'logs/apply-log.jsonl'; New-Item -ItemType Directory -Force -Path (Split-Path $log)|Out-Null; Add-Content -Path $log -Value $rec
+}
+
+# 요구 헤더(표준 가이드)
+$RequiredHeader = @(
+  "#requires -Version 7.0",
+  "param([switch]`$ConfirmApply,[string]`$Root)",
+  "Set-StrictMode -Version Latest",
+  "`$ErrorActionPreference='Stop'",
+  "`$PSDefaultParameterValues['Out-File:Encoding']='utf8'",
+  "`$PSDefaultParameterValues['*:Encoding']='utf8'",
+  "if (`$env:CONFIRM_APPLY -eq 'true') { `$ConfirmApply = `$true }"
+) -join "`n"
+
+$rxRequires = [regex]'(?m)^\s*#requires\s+-Version\s+7(\.0+)?\s*$'
+$rxStrict   = [regex]'(?m)^\s*Set-StrictMode\s+-Version\s+Latest\s*$'
+$rxEAP      = [regex]'(?m)^\s*\$ErrorActionPreference\s*=\s*''Stop''\s*$'
+$rxParam    = [regex]'(?m)^\s*param\s*\(\s*\[switch\]\$ConfirmApply.*\[string\]\$Root.*\)\s*$'
+$rxEnc1     = [regex]'(?m)\$PSDefaultParameterValues\[''Out-File:Encoding''\]\s*=\s*''utf8'''
+$rxEnc2     = [regex]'(?m)\$PSDefaultParameterValues\[''\*:Encoding''\]\s*=\s*''utf8'''
+$rxEnv      = [regex]'(?m)if\s*\(\s*\$env:CONFIRM_APPLY\s*-eq\s*''true''\s*\)\s*\{\s*\$ConfirmApply\s*=\s*\$true\s*\}'
+
+# 스캔 대상
+$skipDirs = @('\.git\','node_modules','dist','out','coverage','\.venv','\.pytest_cache','\.idea','\.vscode')
+$files = Get-ChildItem -Recurse -File -Include *.ps1,*.psm1 | Where-Object {
+  ($skipDirs | ForEach-Object { $_ -notmatch '' }) | Out-Null
+  ($skipDirs | Where-Object { $_ -and $_ -match '.' }) | Out-Null
+  $full = $_.FullName
+  -not ($skipDirs | ForEach-Object { $full -match $_ } | Where-Object { $_ } )
+}
+
+$plan = @()
+foreach ($f in $files) {
+  $txt = Get-Content -Raw -Encoding utf8 $f.FullName
+  $missing = @()
+  if (-not $rxRequires.IsMatch($txt)) { $missing += '#requires' }
+  if (-not $rxParam.IsMatch($txt))    { $missing += 'param(ConfirmApply,Root)' }
+  if (-not $rxStrict.IsMatch($txt))   { $missing += 'Set-StrictMode' }
+  if (-not $rxEAP.IsMatch($txt))      { $missing += 'ErrorActionPreference' }
+  if (-not $rxEnc1.IsMatch($txt))     { $missing += "PSDefault Out-File:Encoding" }
+  if (-not $rxEnc2.IsMatch($txt))     { $missing += "PSDefault *:Encoding" }
+  if (-not $rxEnv.IsMatch($txt))      { $missing += 'CONFIRM_APPLY bridge' }
+
+  if ($missing.Count -gt 0) {
+    $plan += [pscustomobject]@{ Path=$f.FullName; Missing=$missing -join ', ' }
+  }
+}
+
+if (-not $plan) {
+  Write-Host "✅ 모든 PowerShell 스크립트가 PS7 안전 헤더를 갖추었습니다."
+  Write-Log 'INFO' 'scan' 'all good' 'OK'
+  exit 0
+}
+
+Write-Host ("📝 헤더 누락 파일 {0}개" -f $plan.Count)
+$plan | ForEach-Object { Write-Host (" - {0} :: {1}" -f $_.Path, $_.Missing) }
+
+if (-not $ConfirmApply) {
+  Write-Host "`nDRY-RUN ✅ 실제 수정은 하지 않았습니다."
+  Write-Host "적용하려면:"
+  Write-Host "  `$env:CONFIRM_APPLY='true'; pwsh -File scripts/g5/guard-ps7-header.ps1 -ConfirmApply"
+  Write-Log 'INFO' 'dryrun' ("would fix {0} files" -f $plan.Count) 'NOT_APPLIED'
+  exit 0
+}
+
+# === Apply: 헤더 자동 삽입(백업+원자교체) ===
+$ts = Get-Date -Format 'yyyyMMdd-HHmmss'
+foreach ($it in $plan) {
+  $p = $it.Path
+  $src = Get-Content -Raw -Encoding utf8 $p
+  # 맨 위 주석 블록/공백 보존, 그 위에 헤더 삽입
+  $new = ($RequiredHeader + "`n`n" + $src)
+  $bak = "$p.bak-$ts"
+  Copy-Item $p $bak -Force
+  $tmp = "$p.tmp"
+  Set-Content -Path $tmp -Value $new -Encoding utf8 -NoNewline
+  Move-Item -Force $tmp $p
+  Write-Log 'INFO' 'apply' "inserted header → $p" 'APPLIED' '' ((Get-FileHash -Algorithm SHA256 $p).Hash)
+  Write-Host "[fixed] $p — backup: $bak"
+}
+
+Write-Host "`nDONE ✅ 헤더 삽입 완료"
+exit 0

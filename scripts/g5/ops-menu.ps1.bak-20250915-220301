@@ -1,0 +1,100 @@
+# APPLY IN SHELL
+#requires -Version 7.0
+param([switch]$ConfirmApply,[string]$Root)
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+$PSDefaultParameterValues['Out-File:Encoding']='utf8'
+$PSDefaultParameterValues['*:Encoding']='utf8'
+if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
+
+# === Preflight ===
+$RepoRoot = if ($Root) { (Resolve-Path -LiteralPath $Root).Path } else { (git rev-parse --show-toplevel 2>$null) ?? (Get-Location).Path }
+if (-not (Test-Path $RepoRoot)) { Write-Error "PRECONDITION: RepoRoot not found -> $RepoRoot"; exit 10 }
+Set-Location $RepoRoot
+$Branch = (git rev-parse --abbrev-ref HEAD 2>$null) ?? '<unknown>'
+$now    = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date),'Asia/Seoul').ToString('yyyy-MM-dd HH:mm:ss')
+
+# === Menu header ===
+Write-Host ("`n[ops] kobong orchestrator on {0} @ {1} (KST)" -f $Branch,$now)
+Write-Host (" mode = {0}" -f ($(if($ConfirmApply){"APPLY"}else{"DRY-RUN"})))
+
+# === Lock (stale >= 15s auto-unlock) ===
+$LockFile = Join-Path $RepoRoot '.gpt5.lock.ops-menu'
+if (Test-Path $LockFile) {
+  try { $age = [int]((Get-Date) - (Get-Item $LockFile).LastWriteTime).TotalSeconds } catch { $age = 999999 }
+  if ($age -ge 15) {
+    $ts  = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $rot = "{0}.stale-{1}" -f $LockFile, $ts
+    Move-Item -Force $LockFile $rot
+    Write-Host ("[auto-unlock] rotated stale lock -> {0}" -f $rot)
+  } else { Write-Error 'CONFLICT: .gpt5.lock.ops-menu exists (recent)'; exit 11 }
+}
+"locked $(Get-Date -Format o)" | Out-File $LockFile -Encoding utf8 -NoNewline
+
+$sw=[Diagnostics.Stopwatch]::StartNew()
+$trace=[guid]::NewGuid().ToString()
+function Write-Log($level,$action,$message,$outcome='',$errorCode=''){
+  $rec=[ordered]@{timestamp=(Get-Date).ToString('o');level=$level;traceId=$trace;module='ops-menu';action=$action;outcome=$outcome;durationMs=$sw.ElapsedMilliseconds;errorCode=$errorCode;message=$message} | ConvertTo-Json -Compress
+  $log=Join-Path $RepoRoot 'logs/apply-log.jsonl'; New-Item -ItemType Directory -Force -Path (Split-Path $log)|Out-Null; Add-Content -Path $log -Value $rec
+}
+
+function Run-Step {
+  param(
+    [Parameter(Mandatory)] [string]$Title,
+    [Parameter(Mandatory)] [string]$RelPath,
+    [string[]]$ArgsApply = @()
+  )
+  $full = Join-Path $RepoRoot $RelPath
+  if (-not (Test-Path $full)) { Write-Host ("[skip] {0} (missing: {1})" -f $Title,$RelPath); return }
+  Write-Host ("`n--- [{0}] {1} ---" -f ($(if($ConfirmApply){"APPLY"}else{"DRY-RUN"}), $Title))
+  $prev = $env:CONFIRM_APPLY
+  try {
+    if ($ConfirmApply) { $env:CONFIRM_APPLY='true' } else { Remove-Item Env:\CONFIRM_APPLY -ErrorAction SilentlyContinue }
+    # 1st try
+    if ($ConfirmApply) {
+      pwsh -NoProfile -File $full @ArgsApply
+    } else {
+      pwsh -NoProfile -File $full
+    }
+    $code=$LASTEXITCODE
+    if ($code -eq 11) {
+      Write-Host "[hint] conflict detected, retrying after short wait..."
+      Start-Sleep -Seconds 2
+      if ($ConfirmApply) {
+        pwsh -NoProfile -File $full @ArgsApply
+      } else {
+        pwsh -NoProfile -File $full
+      }
+      $code=$LASTEXITCODE
+    }
+    if ($code -ne 0) {
+      Write-Host ("[warn] step exit code {0}" -f $code)
+      Write-Log 'WARN' ("step:{0}" -f $Title) ("exit code {0}" -f $code) 'PARTIAL' $code
+    } else {
+      Write-Log 'INFO' ("step:{0}" -f $Title) 'ok' 'OK'
+    }
+  } finally {
+    if ($null -ne $prev) { $env:CONFIRM_APPLY=$prev } else { Remove-Item Env:\CONFIRM_APPLY -ErrorAction SilentlyContinue }
+    Start-Sleep -Milliseconds 400
+  }
+}
+
+try {
+  # 실행 순서: var-colon -> EOL/LF -> PS7 header
+  Run-Step -Title 'Fix "$Var:" parse bug'       -RelPath 'scripts/g5/fix-var-colon.ps1'     -ArgsApply @('-ConfirmApply')
+  Run-Step -Title 'Normalize EOL (LF / CRLF)'   -RelPath 'scripts/g5/guard-eol-lf.ps1'     -ArgsApply @('-ConfirmApply')
+  Run-Step -Title 'Enforce PS7 Safe Header'     -RelPath 'scripts/g5/guard-ps7-header.ps1' -ArgsApply @('-ConfirmApply')
+
+  Write-Host "`n[i] YAML paste guard usage:"
+  Write-Host " - monitor 120s :  `$env:CONFIRM_APPLY='true'; pwsh -File scripts/g5/guard-yaml-paste.ps1 -ConfirmApply -MonitorSeconds 120"
+  Write-Host " - one-shot save :  `$env:CONFIRM_APPLY='true'; pwsh -File scripts/g5/guard-yaml-paste.ps1 -ConfirmApply -Once"
+
+  Write-Host ("`nDONE {0} — reviewed guards." -f ($(if($ConfirmApply){"APPLIED"}else{"DRY-RUN"})))
+}
+catch {
+  Write-Log 'ERROR' 'exception' $_.Exception.Message 'FAILURE' ($_.FullyQualifiedErrorId ?? 'Unknown')
+  throw
+}
+finally {
+  Remove-Item -Force $LockFile -ErrorAction SilentlyContinue
+}

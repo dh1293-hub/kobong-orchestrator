@@ -1,0 +1,81 @@
+# APPLY IN SHELL
+# Kobong — OPS MENU v1.1  (generated: KST: 2025-09-15 02:30:28 +09:00)
+#requires -Version 7.0
+param([string]$Root)
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+$PSDefaultParameterValues['Out-File:Encoding']='utf8'
+$PSDefaultParameterValues['*:Encoding']='utf8'
+
+function Get-RepoRoot {
+  if ($Root -and (Test-Path $Root)) { return (Resolve-Path $Root).Path }
+  try { $r = git rev-parse --show-toplevel 2>$null; if ($r) { return $r } } catch {}
+  return (Get-Location).Path
+}
+function Pause-Enter([string]$msg='Press Enter to continue...'){ Read-Host $msg | Out-Null }
+$RepoRoot = Get-RepoRoot
+Set-Location $RepoRoot
+
+function Path-Ensure([string]$rel){
+  $p = Join-Path $RepoRoot $rel
+  if(-not(Test-Path $p)){ Write-Host "[MISSING] $rel" -ForegroundColor Yellow; return $null }
+  return $p
+}
+
+do {
+  Clear-Host
+  Write-Host ("KOBONG — OPS MENU  @ " + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) -ForegroundColor Cyan
+  Write-Host ("Repo: " + $RepoRoot) -ForegroundColor DarkGray
+  Write-Host ""
+  Write-Host "  1) Monitor status (once)"
+  Write-Host "  2) Error trend (24h)"
+  Write-Host "  3) Generate badges (DRY-RUN → out/badges-smoke)"
+  Write-Host "  4) Generate badges (APPLY → README 갱신)"
+  Write-Host "  5) CI summary (gh 필요)"
+  Write-Host "  6) Run Orchestrator (필요시 deps 설치)"
+  Write-Host "  7) Open README.md"
+  Write-Host "  0) Exit"
+  $sel = Read-Host "Select"
+  switch ($sel) {
+    '1' {
+      $scr = Path-Ensure 'scripts/g5/monitor-status.ps1'; if(-not $scr){ Pause-Enter; break }
+      $port = Read-Host "Port (Enter=8080)"; if([string]::IsNullOrWhiteSpace($port)){ $port='8080' }
+      pwsh -File $scr -Once -Port ([int]$port)
+      Pause-Enter
+    }
+    '2' {
+      $scr = Path-Ensure 'scripts/g5/error-trend.ps1'; if(-not $scr){ Pause-Enter; break }
+      pwsh -File $scr
+      Pause-Enter
+    }
+    '3' {
+      $scr = Path-Ensure 'scripts/g5/generate-badges.ps1'; if(-not $scr){ Pause-Enter; break }
+      pwsh -File $scr -OutDir (Join-Path $RepoRoot 'out/badges-smoke')
+      Pause-Enter
+    }
+    '4' {
+      $scr = Path-Ensure 'scripts/g5/generate-badges.ps1'; if(-not $scr){ Pause-Enter; break }
+      $env:CONFIRM_APPLY='true'
+      pwsh -File $scr -ConfirmApply
+      Pause-Enter
+    }
+    '5' {
+      $scr = Path-Ensure 'scripts/view-ci-summary.ps1'; if(-not $scr){ Pause-Enter; break }
+      pwsh -File $scr
+      Pause-Enter
+    }
+    '6' {
+      $scr = Path-Ensure 'scripts/g5/run-kobong-orchestrator.ps1'; if(-not $scr){ Pause-Enter; break }
+      $yn = Read-Host "Install deps if needed? (y/N)"
+      if ($yn -match '^[Yy]'){ pwsh -File $scr -ConfirmApply } else { pwsh -File $scr }
+      Pause-Enter
+    }
+    '7' {
+      $md = Join-Path $RepoRoot 'README.md'
+      if (Test-Path $md) { Start-Process $md } else { Write-Host "[INFO] README.md not found." -ForegroundColor Yellow }
+      Pause-Enter
+    }
+    '0' { break }
+    default { }
+  }
+} while ($true)

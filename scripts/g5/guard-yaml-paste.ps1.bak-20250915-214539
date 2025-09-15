@@ -1,0 +1,114 @@
+# APPLY IN SHELL
+#requires -Version 7.0
+param(
+  [switch]$ConfirmApply,
+  [string]$Root,
+  [int]$MonitorSeconds,
+  [string]$OutDir,
+  [switch]$Once
+)
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+$PSDefaultParameterValues['Out-File:Encoding']='utf8'
+$PSDefaultParameterValues['*:Encoding']='utf8'
+if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
+
+# ==== Defaults (safe) ====
+if (-not $PSBoundParameters.ContainsKey('MonitorSeconds') -or $MonitorSeconds -le 0) { $MonitorSeconds = 120 }
+if (-not $PSBoundParameters.ContainsKey('OutDir') -or [string]::IsNullOrWhiteSpace($OutDir)) { $OutDir = 'drafts' }
+
+# === Preflight ===
+$RepoRoot = if ($Root) { (Resolve-Path -LiteralPath $Root).Path } else { (git rev-parse --show-toplevel 2>$null) ?? (Get-Location).Path }
+if (-not (Test-Path $RepoRoot)) { Write-Error "PRECONDITION: RepoRoot not found → $RepoRoot"; exit 10 }
+Set-Location $RepoRoot
+$Branch = (git rev-parse --abbrev-ref HEAD 2>$null) ?? '<unknown>'
+$now = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date),'Asia/Seoul').ToString('yyyy-MM-dd HH:mm:ss')
+Write-Host ("`n[verify] YAML paste guard on {0} @ {1} (KST)" -f $Branch,$now)
+
+# === Lock (stale >= 15s auto-unlock) ===
+$LockFile = Join-Path $RepoRoot '.gpt5.lock.yaml-guard'
+if (Test-Path $LockFile) {
+  try { $age = [int]((Get-Date) - (Get-Item $LockFile).LastWriteTime).TotalSeconds } catch { $age = 999999 }
+  if ($age -ge 15) {
+    $ts  = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $rot = "{0}.stale-{1}" -f $LockFile, $ts
+    Move-Item -Force $LockFile $rot
+    Write-Host ("[auto-unlock] rotated stale lock → {0}" -f $rot)
+  } else { Write-Error 'CONFLICT: .gpt5.lock.yaml-guard exists (recent)'; exit 11 }
+}
+"locked $(Get-Date -Format o)" | Out-File $LockFile -Encoding utf8 -NoNewline
+
+$sw=[Diagnostics.Stopwatch]::StartNew()
+$trace=[guid]::NewGuid().ToString()
+function Write-Log($level,$action,$message,$outcome='',$errorCode='',$inputHash=''){
+  $rec=[ordered]@{
+    timestamp=(Get-Date).ToString('o');level=$level;traceId=$trace;module='yaml-guard';action=$action
+    inputHash=$inputHash;outcome=$outcome;durationMs=$sw.ElapsedMilliseconds;errorCode=$errorCode;message=$message
+  } | ConvertTo-Json -Compress
+  $log=Join-Path $RepoRoot 'logs/apply-log.jsonl'; New-Item -ItemType Directory -Force -Path (Split-Path $log)|Out-Null; Add-Content -Path $log -Value $rec
+}
+
+function Test-YamlSignature([string]$text) {
+  if (-not $text) { return $false }
+  $lines = $text -split "`r?`n"
+  $first = $lines | Where-Object { $_ -match '\S' } | Select-Object -First 1
+  if (-not $first) { return $false }
+  if ($first -match '^(?i)\s*(name|on|jobs)\s*:\s*') { return $true }
+  $top = $lines | Select-Object -First ([Math]::Min(20,$lines.Count))
+  $kv = ($top | Where-Object { $_ -match '^\s*[\w\-\."''\[\]]+\s*:\s*' }).Count
+  return ($kv -ge 3)
+}
+
+function Get-TextClipboard {
+  try { return (Get-Clipboard -Format Text) } catch { return "" }
+}
+
+function Save-YamlFromClipboard() {
+  $txt = Get-TextClipboard
+  if (-not (Test-YamlSignature $txt)) { return $false }
+  $draftDir = Join-Path $RepoRoot $OutDir
+  New-Item -ItemType Directory -Force -Path $draftDir | Out-Null
+  $ts = Get-Date -Format 'yyyyMMdd-HHmmss'
+  $out = Join-Path $draftDir ("paste-{0}.yml" -f $ts)
+  $lf = $txt -replace "`r?`n","`n"
+  Set-Content -Path $out -Value $lf -Encoding utf8 -NoNewline
+  Write-Log 'INFO' 'capture' ("saved YAML from clipboard → {0}" -f $out) 'APPLIED' ''
+  Write-Host ("[saved] YAML detected — {0}" -f $out)
+  return $true
+}
+
+try {
+  if (-not $ConfirmApply) {
+    Write-Host "DRY-RUN ✅  실제 감시는 하지 않았습니다."
+    Write-Host "사용법:"
+    Write-Host "  1) 웹에서 GitHub Actions 예시(YAML)를 복사"
+    Write-Host "  2) 감시 모드 실행:"
+    Write-Host "     `$env:CONFIRM_APPLY='true'; pwsh -File scripts/g5/guard-yaml-paste.ps1 -ConfirmApply -MonitorSeconds 120"
+    Write-Host "  3) YAML 감지 시 drafts/*.yml로 저장 (콘솔 오입력 방지)"
+    return
+  }
+
+  if ($Once) {
+    if (-not (Save-YamlFromClipboard)) { Write-Host "ℹ️ YAML 시그니처를 발견하지 못했습니다."; Write-Log 'INFO' 'once' 'no yaml'; return }
+    else { return }
+  }
+
+  Write-Host ("[monitor] clipboard for {0}s — YAML will be saved to '{1}\*.yml'" -f $MonitorSeconds,$OutDir)
+  $deadline = (Get-Date).AddSeconds($MonitorSeconds)
+  $prev=''
+  while ((Get-Date) -lt $deadline) {
+    $cur = Get-TextClipboard
+    if ($cur -and $cur -ne $prev) {
+      if (Save-YamlFromClipboard) { $prev = $cur } else { $prev = $cur }
+    }
+    Start-Sleep -Milliseconds 250
+  }
+  Write-Host "[done] monitor finished."
+}
+catch {
+  Write-Log 'ERROR' 'exception' $_.Exception.Message 'FAILURE' ($_.FullyQualifiedErrorId ?? 'Unknown')
+  throw
+}
+finally {
+  Remove-Item -Force $LockFile -ErrorAction SilentlyContinue
+}
