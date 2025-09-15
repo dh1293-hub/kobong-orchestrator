@@ -1,50 +1,57 @@
-name: contracts-ci
+﻿# NO-SHELL
+name: contract-tests
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ main ]
-    paths:
-      - "contracts/**"
-      - "scripts/run-contract-tests.ps1"
-      - "scripts/check-release-notes.ps1"
-      - "CHANGELOG.md"
-      - ".github/workflows/contracts-ci.yml"
+    branches:
+      - ops/health-monitor-20250915-082721
+      - ops/**
+      - feature/**
+      - main
+      - master
   pull_request:
-    paths:
-      - "contracts/**"
-      - "scripts/run-contract-tests.ps1"
-      - "scripts/check-release-notes.ps1"
-      - "CHANGELOG.md"
-      - ".github/workflows/contracts-ci.yml"
 
-permissions:
-  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  contracts:
-    runs-on: windows-latest
-    steps:
-      - name: Set PYTHONPATH
-        shell: bash
-        run: |
-          echo "PYTHONPATH=$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/src:$GITHUB_WORKSPACE/tools/kobong_logger_cli:$GITHUB_WORKSPACE/tools/kobong_logger_cli/src" >> $GITHUB_ENV      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Ensure pytest
-        shell: pwsh
-        run: |
-          python -m pip install -U pip
-          python -m pip install -U pytest
-      - name: Show Python env
-        shell: pwsh
-        run: |
-          python --version
-          pip --version
-          pip list
-      - name: Run contract tests
-        shell: pwsh
-        run: pwsh -File scripts/run-contract-tests.ps1
-      - name: Check release notes
-        shell: pwsh
-        run: pwsh -File scripts/check-release-notes.ps1
+  contract:
+    name: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
 
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+        env:
+          CI: true
+          npm_config_fund: "false"
+          npm_config_audit: "false"
+
+      - name: Run contract tests
+        run: npm run run-contract --if-present
+        env:
+          CI: true
+          FORCE_COLOR: "0"
+          NO_COLOR: "1"
+          NODE_ENV: test
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-logs
+          path: |
+            logs/**
+            **/junit*.xml
+          if-no-files-found: ignore
