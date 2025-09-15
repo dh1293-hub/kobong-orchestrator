@@ -7,22 +7,20 @@ if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
 
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { Write-Error "GitHub CLI(gh) 필요"; exit 10 }
 
-function Get-NWO {
-  $nw = & gh repo view --json nameWithOwner -q .nameWithOwner 2>$null
-  if (-not $nw) { Write-Error "gh repo view 실패(로그인/위치 확인)"; exit 10 }
-  return $nw.Trim()
-}
-$nwo = Get-NWO
+# owner/name
+$nwo = (& gh repo view --json nameWithOwner -q .nameWithOwner 2>$null)
+if (-not $nwo) { Write-Error "gh repo view 실패"; exit 10 }
 $owner,$repo = $nwo.Split('/')
 
-# 대상 PR 목록
+# 대상 PR 목록 수집 (항상 배열 보장)
 $targets = @()
-if ($PR -and $PR.Count -gt 0) { $targets = $PR }
+if ($PR -and $PR.Count -gt 0) { $targets += $PR }
 elseif ($AllOpen -or -not $PR) {
   $ls = & gh pr list --state open --json number -q '.[].number' 2>$null
-  if ($ls) { $targets = ($ls | ConvertFrom-Json) }
+  if ($ls) { $targets += ($ls | ConvertFrom-Json) }
 }
-if (-not $targets -or $targets.Count -eq 0) { Write-Host "READY PRs: (none)"; if($Json){'[]'}; exit 0 }
+$targets = @($targets)  # ← 핵심: 배열로 강제
+if ($targets.Count -eq 0) { Write-Host "READY PRs: (none)"; if($Json){'[]'}; exit 0 }
 
 $rows = @()
 foreach($n in $targets){
@@ -30,6 +28,7 @@ foreach($n in $targets){
   if (-not $raw) { Write-Host ("PR #{0} — 조회 실패" -f $n); continue }
   $i = $raw | ConvertFrom-Json
 
+  # checks 요약
   $tot=0;$ok=0;$bad=0;$pend=0
   if ($i.headRefOid) {
     try {
@@ -46,19 +45,20 @@ foreach($n in $targets){
   $checksPass = ($tot -eq 0) -or ($bad -eq 0 -and $pend -eq 0)
 
   $mergeState = ''+$i.mergeStateStatus
-  $blocked = ($mergeState -in 'BLOCKED','DIRTY','BEHIND')
-  $reviewBlock = ($i.reviewDecision -in 'CHANGES_REQUESTED','REVIEW_REQUIRED')
-  $ready = ($i.state -eq 'OPEN') -and (-not $i.isDraft) -and (-not $blocked) -and $checksPass -and (-not $reviewBlock)
+  $blocked    = ($mergeState -in 'BLOCKED','DIRTY','BEHIND')
+  $reviewBlk  = ($i.reviewDecision -in 'CHANGES_REQUESTED','REVIEW_REQUIRED')
+  $ready = ($i.state -eq 'OPEN') -and (-not $i.isDraft) -and (-not $blocked) -and $checksPass -and (-not $reviewBlk)
 
-  $why = @()
+  $why=@()
   if ($i.state -ne 'OPEN') { $why += ("PR 상태={0}" -f $i.state) }
   if ($i.isDraft) { $why += "Draft" }
-  if ($blocked) { $why += ("상태={0}" -f $mergeState) }
+  if ($blocked)   { $why += ("상태={0}" -f $mergeState) }
   if (-not $checksPass) { $why += ("체크 실패/진행중 (total={0} ok={1} bad={2} pend={3})" -f $tot,$ok,$bad,$pend) }
-  if ($reviewBlock) { $why += ("리뷰={0}" -f $i.reviewDecision) }
+  if ($reviewBlk) { $why += ("리뷰={0}" -f $i.reviewDecision) }
 
-  $label = $ready ? 'READY' : 'NOT_READY'
-  Write-Host ("PR #{0} — {1} :: {2}" -f $i.number,$i.title,$label) -ForegroundColor ($ready?'Green':'Yellow')
+  $label = if ($ready) { 'READY' } else { 'NOT_READY' }
+  $fg = if ($ready) { 'Green' } else { 'Yellow' }
+  Write-Host ("PR #{0} — {1} :: {2}" -f $i.number,$i.title,$label) -ForegroundColor $fg
   if ($why.Count -gt 0) { Write-Host ("  Why: {0}" -f ($why -join '; ')) }
 
   if ($ready -and $ConfirmApply) {
@@ -74,9 +74,9 @@ foreach($n in $targets){
   }
 }
 
-if ($Json) { $rows | ConvertTo-Json -Depth 6 }
-else {
+if ($Json) {
+  $rows | ConvertTo-Json -Depth 6
+} else {
   $readyNums = ($rows | Where-Object {$_.ready} | Select-Object -ExpandProperty number)
-  if ($readyNums) { Write-Host ("READY PRs: {0}" -f ($readyNums -join ', ')) -ForegroundColor Green }
-  else { Write-Host "READY PRs: (none)" }
+  if ($readyNums) { Write-Host ("READY PRs: {0}" -f ($readyNums -join ', ')) -ForegroundColor Green } else { Write-Host "READY PRs: (none)" }
 }
