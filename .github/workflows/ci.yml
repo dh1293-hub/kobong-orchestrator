@@ -1,7 +1,9 @@
-name: Contracts CI
+﻿name: Contracts CI
 
 on:
   push:
+    branches-ignore:
+      - ops/**
     branches: [ main ]
     tags: [ 'v*.*.*' ]
   pull_request:

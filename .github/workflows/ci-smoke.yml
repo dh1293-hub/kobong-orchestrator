@@ -3,6 +3,8 @@
 on:
   workflow_dispatch:
   push:
+    branches-ignore:
+      - ops/**
     branches: [ "main", "feature/**", "dev/**" ]
     paths:
       - "app/**"

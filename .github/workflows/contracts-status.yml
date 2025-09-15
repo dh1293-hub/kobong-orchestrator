@@ -1,6 +1,12 @@
-name: contracts-status
+﻿name: contracts-status
 
 on:
+
+  push:
+
+    branches-ignore:
+
+      - ops/**
   pull_request:
     branches: [ main ]
 
