@@ -1,0 +1,2 @@
+[health] listening on http://localhost:8080/health (pid=3864)
+{"timestamp":"2025-09-14T23:23:46.284Z","module":"app","action":"bootstrap","outcome":"ok"}
