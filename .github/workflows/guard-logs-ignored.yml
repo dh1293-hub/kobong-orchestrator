@@ -1,0 +1,13 @@
+name: guard-logs-ignored
+on: [pull_request]
+jobs:
+  no-tracked-logs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure no tracked files under logs/
+        run: |
+          if git ls-files -- logs/ | grep .; then
+            echo "Tracked files under logs/ found!"
+            exit 1
+          fi
