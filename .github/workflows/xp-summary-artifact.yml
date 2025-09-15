@@ -1,0 +1,103 @@
+﻿# NO-SHELL
+name: xp-summary-artifact
+
+on:
+  push:
+    branches:
+      - ops/health-monitor-20250915-082721
+      - ops/**
+      - feature/**
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: xp-summary-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  xp:
+    name: xp-summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate XP Summary (if missing)
+        shell: pwsh
+        run: |
+          #requires -Version 7.0
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference='Stop'
+          $dir = 'logs/experience'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $existing = Get-ChildItem $dir -Filter 'summary-*.md' -ErrorAction SilentlyContinue | Sort-Object -Property LastWriteTime -Descending | Select-Object -First 1
+          if (-not $existing) {
+            $ts = Get-Date -Format 'yyyyMMdd-HHmmss'
+            $md = Join-Path $dir ("summary-$ts.md")
+            $lines = @(
+              "# Error Experience Snapshot (Auto)",
+              "",
+              "- No pre-existing ledger found in repo at CI time.",
+              "- Run ID: $env:GITHUB_RUN_ID",
+              "- Commit: $env:GITHUB_SHA",
+              "- Ref: $env:GITHUB_REF",
+              "- Actor: $env:GITHUB_ACTOR",
+              "",
+              "This file is generated automatically if no local summary exists."
+            )
+            ($lines -join "`n") + "`n" | Out-File -FilePath $md -Encoding utf8 -NoNewline
+            Write-Host "Created $md"
+            $existing = Get-Item $md
+          }
+          # 미리보기(최대 20줄)
+          $preview = (Get-Content $existing.FullName | Select-Object -First 20) -join "`n"
+          "file=$($existing.FullName)"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "preview<<EOF"                 | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $preview                        | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "EOF"                           | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        id: collect
+
+      - name: Upload XP summary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xp-summary
+          path: |
+            logs/experience/summary-*.md
+            logs/experience/error-ledger.jsonl
+            logs/experience/xp-milestones.jsonl
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Comment on PR with artifact link and preview
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${{ toJson(github.server_url) }}/${{ toJson(github.repository) }}/actions/runs/${{ github.run_id }}`;
+            const body = [
+              '### ✅ XP Summary artifact uploaded',
+              '',
+              `**Run:** ${runUrl}`,
+              '',
+              '**Preview (first 20 lines):**',
+              '```markdown',
+              `${{ toJson(steps.collect.outputs.preview) }}`,
+              '```',
+              '',
+              '> Download the full artifact from the "Artifacts" section of the run.'
+            ].join('\n');
+            const pr = context.payload.pull_request;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body
+            });
