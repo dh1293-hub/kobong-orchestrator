@@ -1,4 +1,4 @@
-# GPT5 ignore rules
+﻿# GPT5 ignore rules
 .tmp/
 logs/
 *.bak-PS*
@@ -28,3 +28,7 @@ out/*
 # g5-ops artifacts
 .gpt5.lock
 logs/*.jsonl
+# ---- GPT5 (node_modules ignore) @ 2025-09-15 09:30:57 +09:00
+node_modules/
+**/node_modules/
+# ----
