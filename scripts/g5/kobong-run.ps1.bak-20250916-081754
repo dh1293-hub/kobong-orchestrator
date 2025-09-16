@@ -1,0 +1,36 @@
+#requires -Version 7.0
+param(
+  [Parameter(Mandatory)][string]$Script,
+  [string[]]$Args,
+  [switch]$KeepOpen
+)
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+
+$keep = $KeepOpen -or ($env:KOBONG_KEEP_OPEN -eq '1')
+
+# Read-Host shunt: auto-close 모드에서만 작동, “창 닫힘 방지/press enter/엔터 종료”류 프롬프트만 무시
+if (-not $keep) {
+  function Read-Host {
+    [CmdletBinding(DefaultParameterSetName='Default')]
+    param(
+      [Parameter(Position=0, ParameterSetName='Default')]
+      [string]$Prompt,
+      [Parameter(ParameterSetName='Secure')]
+      [switch]$AsSecureString,
+      [Parameter(ParameterSetName='Mask')]
+      [switch]$MaskInput
+    )
+    $p = if ($PSBoundParameters.ContainsKey('Prompt')) { $Prompt } else { '' }
+    if ($p -match '(창\s*닫힘\s*방지|press\s+.*enter|엔터\s*.*종료|enter\s*.*exit)') {
+      return ""  # pause만 우회
+    }
+    return Microsoft.PowerShell.Utility\Read-Host @PSBoundParameters
+  }
+}
+
+& $Script @Args
+
+if ($keep) {
+  try { Microsoft.PowerShell.Utility\Read-Host "창 닫힘 방지: Enter 를 누르면 종료" } catch {}
+}
