@@ -44,3 +44,4 @@ $tmp = Join-Path $RepoRoot ("logs/.release-notes-" + $Tag + ".md.tmp")
 $newNotes | Out-File -FilePath $tmp -Encoding utf8
 gh release edit $Tag --notes-file "$tmp" | Out-Null
 Write-Output "[OK] release notes updated for $Tag"
+# noop
