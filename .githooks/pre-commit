@@ -1,18 +1,6 @@
-#!/usr/bin/env bash
-set -euo pipefail
-changed=$(git diff --cached --name-only)
-if [ -z "$changed" ]; then exit 0; fi
-block_regex='(^|/|\\)logs(/|/)|\.log($|\.)|\.(out|err)\.log$|\.log\.jsonl$'
-bad=""
-while IFS= read -r f; do
-  if [[ "$f" =~ $block_regex ]]; then
-    bad="$bad\n  - $f"
-  fi
-done <<< "$changed"
-if [ -n "$bad" ]; then
-  echo "[BLOCK] The following paths look like logs and must not be committed:"
-  echo -e "$bad"
-  echo "Fix: add to .gitignore or remove from index (git rm --cached <path>)"
-  exit 1
-fi
-exit 0
+#!/usr/bin/env pwsh
+#requires -Version 7.0
+$ErrorActionPreference = 'Stop'
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+& pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'pre-commit.ps1') @args
+exit $LASTEXITCODE
