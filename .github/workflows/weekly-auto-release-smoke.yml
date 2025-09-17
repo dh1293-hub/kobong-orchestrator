@@ -1,0 +1,40 @@
+name: Weekly Auto-Release Smoke
+on:
+  schedule:
+    - cron: "0 0 * * 0"
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cli/gh-actions@v2
+        with:
+          version: latest
+      - name: Push v0.0.X smoke tag
+        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags
+          base="v0.0."; i=0
+          while git tag -l | grep -qx "${base}${i}"; do i=$((i+1)); done
+          tag="${base}${i}"
+          sha="$(git rev-parse HEAD)"
+          git tag -a "$tag" "$sha" -m "smoke(auto-release): $tag"
+          git push origin "$tag"
+          echo "TAG=$tag" >> $GITHUB_ENV
+      - name: Wait for release, then clean up
+        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${TAG}"
+          for _ in $(seq 1 36); do
+            if gh release view "$tag" >/dev/null 2>&1; then break; fi
+            sleep 5
+          done
+          gh release delete "$tag" -y || true
+          git push origin ":refs/tags/$tag" || true
