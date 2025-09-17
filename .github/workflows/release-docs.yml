@@ -1,0 +1,58 @@
+# NO-SHELL
+name: Release Docs (README badge)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-readme-badge:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-docs-${{ github.ref_name }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Update README badge
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "${{ github.ref_name }}"
+          $remote = git config --get remote.origin.url
+          if ($remote -match 'github\.com[:/](?<o>[^/]+)/(?<r>[^/.]+)') { $owner=$Matches.o; $repo=$Matches.r } else { throw "remote parse failed" }
+          $badge = "[![Release](https://img.shields.io/github/v/release/$owner/$repo?display_name=tag&sort=semver)](https://github.com/$owner/$repo/releases/tag/$tag)"
+          $path = 'README.md'
+          $orig = (Test-Path $path) ? (Get-Content $path -Raw -Encoding utf8) : ''
+          $ownEsc=[regex]::Escape($owner); $repEsc=[regex]::Escape($repo)
+          $reBadge = "\[!\[Release\]\(https://img\.shields\.io/github/v/release/$ownEsc/$repEsc\?display_name=tag&sort=semver\)\]\(https://github\.com/$ownEsc/$repEsc/releases/tag/[^)]+\)"
+          if ($orig -match $reBadge) {
+            $updated = [regex]::Replace($orig, $reBadge, [regex]::EscapeReplacement($badge), 1)
+          } elseif ($orig -match '^# .+') {
+            $updated = $orig -replace '^(# .+\R?)', "`$0$badge`n"
+          } else {
+            $updated = $badge + "`n`n" + $orig
+          }
+          $updated | Out-File $path -Encoding utf8
+          if (git diff --quiet) { echo "No change."; exit 0 }
+          git config user.name  "github-actions"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "docs/readme-badge-$tag"
+          git add README.md
+          git commit -m "docs(readme): update release badge ($tag)"
+          git push --set-upstream origin "docs/readme-badge-$tag"
+      - name: Open PR and enable auto-merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          head="docs/readme-badge-${{ github.ref_name }}"
+          gh pr create --title "docs(readme): update release badge (${{ github.ref_name }})" --body "- Auto-updated Release badge." --base main --head "$head" || true
+          pr=$(gh pr view "$head" --json number -q .number)
+          gh pr merge "$pr" --auto --squash --delete-branch
