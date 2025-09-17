@@ -13,12 +13,19 @@ $PSDefaultParameterValues['*:Encoding']='utf8'
 if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
 
 $RepoRoot = if ($Root) { (Resolve-Path -LiteralPath $Root).Path } else { (git rev-parse --show-toplevel 2>$null) ?? (Get-Location).Path }
+function Normalize-Path([string]$p) {
+  $n=[IO.Path]::GetFullPath($p) -replace '/','\'
+  if ($n[-1] -ne '\') { return $n } else { return $n.TrimEnd('\') }
+}
 
 function Assert-InRepo([string]$Path) {
-  $full = (Resolve-Path -LiteralPath $Path).Path
-  if (-not $full.StartsWith($RepoRoot, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "Path not inside repo root: $full (RepoRoot=$RepoRoot)"
+  $full = Normalize-Path (Resolve-Path -LiteralPath $Path).Path
+  $root = (Normalize-Path $RepoRoot)
+  $rootWithSep = $root + '\'
+  if ($full.Length -lt $rootWithSep.Length -or -not $full.StartsWith($rootWithSep,[StringComparison]::OrdinalIgnoreCase)) {
+    throw "Path not inside repo root: $full (RepoRoot=$root)"
   }
+}
 }
 
 $trace=[guid]::NewGuid().ToString()
