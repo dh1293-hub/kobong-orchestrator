@@ -2,3 +2,7 @@ logs/
 
 !logs/.gitkeep
 *.bak-*
+*.log
+*.out.log
+*.err.log
+*.log.jsonl
