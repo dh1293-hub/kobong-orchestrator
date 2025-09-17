@@ -43,23 +43,25 @@ try {
   $remote = git remote get-url origin
   if ($remote -match 'github\.com[:/](.+?)/(.+?)(?:\.git)?$') { $owner=$Matches[1]; $repo=$Matches[2] } else { throw "Cannot parse origin URL: $remote" }
 
+  # 오토머지 예약(실패해도 진행)
   try { gh pr merge $Pr --auto --squash 2>$null | Out-Null } catch { Write-Warning "gh pr merge --auto failed: $($_.Exception.Message)" }
 
   $deadline = (Get-Date).AddSeconds($TimeoutSec)
   do {
     $prJson = gh api ("repos/{0}/{1}/pulls/{2}" -f $owner,$repo,$Pr) 2>$null
     if (-not $prJson) { throw "PR#$Pr not found via API." }
-    $pr = $prJson | ConvertFrom-Json
-    $state = $pr.state
-    $merged = [bool]$pr.merged
-    $mergeable_state = $pr.mergeable_state
-    $sha = $pr.head.sha
-    $headRef = $pr.head.ref   # ← FIX: .@{ref} → .ref
+    $prObj = $prJson | ConvertFrom-Json   # ← 변수 이름 충돌 방지
+
+    $state = $prObj.state
+    $merged = [bool]$prObj.merged
+    $mergeable_state = $prObj.mergeable_state
+    $sha = $prObj.head.sha
+    $headRef = $prObj.head.ref
 
     $checksState = 'unknown'
     try {
       $st = gh api ("repos/{0}/{1}/commits/{2}/status" -f $owner,$repo,$sha) 2>$null | ConvertFrom-Json
-      if ($st) { $checksState = $st.state }
+      if ($st) { $checksState = $st.state } # success|failure|pending
     } catch { $checksState = 'unknown' }
 
     Write-Host ("[watch] PR#{0} state={1} merged={2} mergeable_state={3} checks={4} ref={5}" -f $Pr,$state,$merged,$mergeable_state,$checksState,$headRef)
