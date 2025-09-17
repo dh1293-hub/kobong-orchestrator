@@ -1,9 +1,9 @@
 #requires -Version 7.0
 param(
+  [switch]$ConfirmApply,
   [string]$Root,
-  [int]$MaxLines = 50000,
-  [int]$MaxBytes = 5MB,
-  [switch]$ConfirmApply
+  [int]$RotateMaxLines = 5000,
+  [int]$RotateMaxSizeMB = 10
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -11,75 +11,54 @@ $PSDefaultParameterValues['Out-File:Encoding']='utf8'
 $PSDefaultParameterValues['*:Encoding']='utf8'
 if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
 
-function Resolve-RepoRoot {
-  param([string]$Root)
-  if (-not [string]::IsNullOrWhiteSpace($Root)) { return (Resolve-Path $Root).Path }
-  $top = (& git rev-parse --show-toplevel 2>$null)
-  if (-not [string]::IsNullOrWhiteSpace($top)) { return $top }
-  return (Get-Location).Path
+# Resolve repo root (git → CWD → param)
+$RepoRoot = if ($Root) { (Resolve-Path -LiteralPath $Root).Path } else { (git rev-parse --show-toplevel 2>$null) ?? (Get-Location).Path }
+
+function Normalize-Path([string]$p) {
+  $n=[IO.Path]::GetFullPath($p) -replace '/','\'
+  if ($n[-1] -ne '\') { return $n } else { return $n.TrimEnd('\') }
+}
+$RepoRoot = Normalize-Path $RepoRoot
+
+function Assert-InRepo([string]$Path) {
+  $full = Normalize-Path (Resolve-Path -LiteralPath $Path).Path
+  $root = (Normalize-Path $RepoRoot)
+  $rootWithSep = $root + '\'
+  if ($full.Length -lt $rootWithSep.Length -or -not $full.StartsWith($rootWithSep,[StringComparison]::OrdinalIgnoreCase)) {
+    throw "Path not inside repo root: $full (RepoRoot=$root)"
+  }
 }
 
-$RepoRoot = Resolve-RepoRoot -Root $Root
-if ([string]::IsNullOrWhiteSpace($RepoRoot)) { throw "PRECONDITION: RepoRoot resolved empty." }
-if (-not (Test-Path $RepoRoot)) { throw "PRECONDITION: RepoRoot not found: $RepoRoot" }
-Set-Location $RepoRoot
-
-$WrapLock = Join-Path $RepoRoot '.gpt5.housekeeping.lock'
-if (Test-Path $WrapLock) { Write-Error 'CONFLICT: .gpt5.housekeeping.lock exists.'; exit 11 }
-"locked $(Get-Date -Format o)" | Out-File $WrapLock -NoNewline
-
-$sw=[Diagnostics.Stopwatch]::StartNew()
 $trace=[guid]::NewGuid().ToString()
+$sw=[Diagnostics.Stopwatch]::StartNew()
+$LockFile = Join-Path $RepoRoot '.gpt5.lock'
+
 try {
-  $env:GIT_PAGER='' ; $env:LESS='-FRX'
+  if (Test-Path $LockFile) { throw 'CONFLICT: .gpt5.lock exists.' }
+  "locked $(Get-Date -Format o)" | Out-File $LockFile -Encoding utf8 -NoNewline
 
-  $bp = Join-Path $RepoRoot 'scripts\g5\branch-prune-quiet.ps1'
-  $rot= Join-Path $RepoRoot 'scripts\g5\rotate-apply-log.ps1'
+  # 1) 회전: logs/apply-log.jsonl
+  & pwsh -File (Join-Path $RepoRoot 'scripts/g5/rotate-apply-log.ps1') `
+      -Root $RepoRoot -MaxLines $RotateMaxLines -MaxSizeMB $RotateMaxSizeMB @(@{ }[0]) 2>$null | Out-Null
 
-  $bpCode = $null; $rotCode = $null
-
-  if (Test-Path $bp) {
-    $args=@()
-    if ($ConfirmApply) { $args += '-ConfirmApply' }
-    pwsh -File $bp @args
-    $bpCode = $LASTEXITCODE
-  } else {
-    Write-Warning "branch-prune-quiet.ps1 not found — skipping"
-    $bpCode = 0
+  # 2) 조용한 브랜치 정리(있으면)
+  $prune = Join-Path $RepoRoot 'scripts/g5/branch-prune-quiet.ps1'
+  if (Test-Path $prune) {
+    & pwsh -File $prune -Root $RepoRoot @(@{ }[0]) 2>$null | Out-Null
   }
 
-  if (Test-Path $rot) {
-    $args=@('-MaxLines', $MaxLines, '-MaxBytes', $MaxBytes)
-    if ($ConfirmApply) { $args += '-ConfirmApply' }
-    pwsh -File $rot @args
-    $rotCode = $LASTEXITCODE
-  } else {
-    Write-Warning "rotate-apply-log.ps1 not found — skipping"
-    $rotCode = 0
-  }
-
-  $outcome = if ($bpCode -eq 0 -and $rotCode -eq 0) { 'OK' } elseif ($bpCode -ne 0 -and $rotCode -ne 0) { 'FAILURE' } else { 'PARTIAL' }
-  $msg = "branchPrune=$bpCode; rotate=$rotCode"
-
-  $rec=@{
-    timestamp=(Get-Date).ToString('o'); level='INFO'; traceId=$trace;
-    module='ops'; action='housekeeping-weekly'; inputHash="$MaxLines/$MaxBytes";
-    outcome=$outcome; durationMs=$sw.ElapsedMilliseconds; errorCode=''; message=$msg
+  # 3) 로그로 기록 남기기
+  $log = Join-Path $RepoRoot 'logs/apply-log.jsonl'
+  Assert-InRepo $log
+  New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
+  $rec = @{
+    timestamp=(Get-Date).ToString('o'); level='INFO'; traceId=$trace
+    module='housekeeping-weekly'; action='run'; inputHash=''
+    outcome=($(if($ConfirmApply){'APPLY'}else{'PREVIEW'})); durationMs=0; errorCode=''
+    message="rotate=$RotateMaxLines/$RotateMaxSizeMB; prune=optional"
   } | ConvertTo-Json -Compress
-  $log=Join-Path $RepoRoot 'logs\apply-log.jsonl'
-  New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
   Add-Content -Path $log -Value $rec
-
-  if ($outcome -eq 'OK') { exit 0 } elseif ($outcome -eq 'PARTIAL') { exit 12 } else { exit 13 }
-}
-catch {
-  $err=$_.Exception.Message; $stk=$_.ScriptStackTrace
-  $rec=@{timestamp=(Get-Date).ToString('o');level='ERROR';traceId=$trace;module='ops';action='housekeeping-weekly';inputHash='';outcome='FAILURE';durationMs=$sw.ElapsedMilliseconds;errorCode=$err;message=$stk} | ConvertTo-Json -Compress
-  $log=Join-Path $RepoRoot 'logs\apply-log.jsonl'
-  New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
-  Add-Content -Path $log -Value $rec
-  exit 13
 }
 finally {
-  Remove-Item -Force $WrapLock -ErrorAction SilentlyContinue
+  Remove-Item -Force $LockFile -ErrorAction SilentlyContinue
 }

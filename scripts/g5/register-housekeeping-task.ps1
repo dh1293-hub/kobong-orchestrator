@@ -1,71 +1,75 @@
 #requires -Version 7.0
 param(
-  [string]$Repo = (Get-Location).Path,
-  [string]$TaskName = 'Kobong Housekeeping Weekly',
-  [ValidateSet('Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday')]
-  [string]$Day = 'Sunday',
-  [string]$At  = '10:00', # HH:mm (local)
-  [int]$MaxLines = 50000,
-  [int]$MaxBytes = 5MB,
-  [switch]$Unregister
+  [switch]$ConfirmApply,
+  [string]$Root,
+  [string]$TaskName = "Kobong Weekly Housekeeping",
+  [ValidatePattern("^\d{2}:\d{2}$")] [string]$At = "03:30",   # HH:mm (local)
+  [ValidateSet("SUN","MON","TUE","WED","THU","FRI","SAT")] [string]$Day = "SUN"
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+$PSDefaultParameterValues['Out-File:Encoding']='utf8'
+$PSDefaultParameterValues['*:Encoding']='utf8'
+if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
 
-function Get-IsElevated {
-  $id=[Security.Principal.WindowsIdentity]::GetCurrent()
-  $p = New-Object Security.Principal.WindowsPrincipal($id)
-  return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+# Resolve repo root (git → CWD → param)
+$RepoRoot = if ($Root) { (Resolve-Path -LiteralPath $Root).Path } else { (git rev-parse --show-toplevel 2>$null) ?? (Get-Location).Path }
+
+function Normalize-Path([string]$p) {
+  $n=[IO.Path]::GetFullPath($p) -replace '/','\'
+  if ($n[-1] -ne '\') { return $n } else { return $n.TrimEnd('\') }
 }
+$RepoRoot = Normalize-Path $RepoRoot
 
-if ($Unregister) {
-  $tn = "Kobong\$TaskName"
-  if (Get-ScheduledTask -TaskPath '\Kobong\' -TaskName $TaskName -ErrorAction SilentlyContinue) {
-    Unregister-ScheduledTask -TaskPath '\Kobong\' -TaskName $TaskName -Confirm:$false
-    Write-Host "[OK] unregistered: $tn"
-  } else {
-    # schtasks 경로까지 병행 제거
-    schtasks /Delete /TN "$tn" /F 2>$null | Out-Null
-    Write-Host "[SKIP] task not found: $tn"
-  }
-  exit 0
-}
+# Admin check
+$IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
-$pwsh = (Get-Command pwsh).Source
-$script = Join-Path $Repo 'scripts\g5\housekeeping-weekly.ps1'
-if (-not (Test-Path $script)) { throw "housekeeping-weekly.ps1 not found: $script" }
+# Build action
+$Pwsh = (Get-Command pwsh -ErrorAction Stop).Source
+$Script = Join-Path $RepoRoot 'scripts/g5/housekeeping-weekly.ps1'
+$args = @('-NoProfile','-ExecutionPolicy','Bypass','-File',"`"$Script`"","-ConfirmApply","-Root","`"$RepoRoot`"")
+$ArgLine = $args -join ' '
 
-# 인자: repo + ConfirmApply + 로테이션 한계
-$argLine = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$script`" -Root `"$Repo`" -MaxLines $MaxLines -MaxBytes $MaxBytes -ConfirmApply"
+# Parse time
+$hh,$mm = $At.Split(':')
+$hour=[int]$hh; $minute=[int]$mm
 
-# 트리거/액션
-$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $Day -At ([DateTime]::Parse($At))
-$action  = New-ScheduledTaskAction -Execute $pwsh -Argument $argLine
+# Preview
+$plan = @{
+  task=$TaskName; when="$Day $At"; pwsh=$Pwsh; script=$Script; args=$ArgLine; admin=$IsAdmin
+} | ConvertTo-Json -Compress
+Write-Host $plan
 
-# 권한 자동 감지
-$elevated = Get-IsElevated
-$runLevel = if ($elevated) { 'Highest' } else { 'Limited' }
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel $runLevel
+if (-not $ConfirmApply) { return }
 
-# 먼저 Windows ScheduledTasks로 시도(폴더: \Kobong\)
 try {
-  if (Get-ScheduledTask -TaskPath '\Kobong\' -TaskName $TaskName -ErrorAction SilentlyContinue) {
-    Unregister-ScheduledTask -TaskPath '\Kobong\' -TaskName $TaskName -Confirm:$false
+  if ($IsAdmin) {
+    $action = New-ScheduledTaskAction -Execute $Pwsh -Argument $ArgLine -WorkingDirectory $RepoRoot
+    $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $Day -At ([datetime]::Today.Date.AddHours($hour).AddMinutes($minute).TimeOfDay)
+    $principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -RunLevel Highest
+    $st = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal
+    try {
+      Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
+    } catch {}
+    Register-ScheduledTask -TaskName $TaskName -InputObject $st | Out-Null
+  } else {
+    # Fallback to schtasks (limited)
+    $dow = $Day.Substring(0,3)  # SUN→SUN
+    $cmd = 'schtasks.exe'
+    $schArgs = @('/Create','/SC','WEEKLY','/D',$dow,'/TN',"`"$TaskName`"","/TR", "`"$Pwsh $ArgLine`"","/ST",$At,'/F')
+    # Try remove old
+    & schtasks.exe /Delete /TN "`"$TaskName`"" /F 2>$null | Out-Null
+    & $cmd $schArgs | Out-Null
   }
-  Register-ScheduledTask -TaskPath '\Kobong\' -TaskName $TaskName -Trigger $trigger -Action $action -Principal $principal `
-    -Description "Prune gone branches + rotate logs for kobong-orchestrator (weekly, PS7)" | Out-Null
-  Write-Host "[OK] registered via ScheduledTasks: \Kobong\$TaskName ($Day $At, RunLevel=$runLevel)"
+
+  # Log
+  $log = Join-Path $RepoRoot 'logs/apply-log.jsonl'
+  New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
+  Add-Content -Path $log -Value (@{timestamp=(Get-Date).ToString('o');level='INFO';traceId=[guid]::NewGuid().ToString();module='register-housekeeping-task';action='register';inputHash='';outcome='APPLIED';durationMs=0;errorCode='';message="Task=$TaskName; When=$Day $At; Admin=$IsAdmin"} | ConvertTo-Json -Compress)
 }
 catch {
-  # Access Denied 등일 때 schtasks로 폴백(항상 LIMITED)
-  $msg=$_.Exception.Message
-  Write-Warning "ScheduledTasks registration failed: $msg — fallback to schtasks"
-  $tn = "Kobong\$TaskName"
-  $abbr = @{Sunday='SUN';Monday='MON';Tuesday='TUE';Wednesday='WED';Thursday='THU';Friday='FRI';Saturday='SAT'}[$Day]
-  $bytes = [int]$MaxBytes
-  $tr = 'pwsh -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass ' +
-        "-File `"$script`" -Root `"$Repo`" -MaxLines $MaxLines -MaxBytes $bytes -ConfirmApply"
-  schtasks /Delete /TN "$tn" /F 2>$null | Out-Null
-  schtasks /Create /SC WEEKLY /D $abbr /ST $At /RL LIMITED /TN "$tn" /TR "$tr" /F | Out-Null
-  Write-Host "[OK] registered via schtasks: $tn ($Day $At, RL=LIMITED)"
+  $err=$_.Exception.Message
+  $log = Join-Path $RepoRoot 'logs/apply-log.jsonl'
+  Add-Content -Path $log -Value (@{timestamp=(Get-Date).ToString('o');level='ERROR';traceId=[guid]::NewGuid().ToString();module='register-housekeeping-task';action='register';inputHash='';outcome='FAILURE';durationMs=0;errorCode=$err;message=$_.ScriptStackTrace} | ConvertTo-Json -Compress)
+  throw
 }
