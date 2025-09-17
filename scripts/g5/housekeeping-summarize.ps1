@@ -1,28 +1,19 @@
 #requires -Version 7.0
 param([switch]$ConfirmApply,[string]$Root)
 Set-StrictMode -Version Latest
-$
-ErrorActionPreference='Stop'
-$
-PSDefaultParameterValues['Out-File:Encoding']='utf8'
-$
-PSDefaultParameterValues['*:Encoding']='utf8'
-if ($
-env:CONFIRM_APPLY -eq 'true') { $
-ConfirmApply = $true }
-='utf8'
+$ErrorActionPreference='Stop'
+$PSDefaultParameterValues['Out-File:Encoding']='utf8'
 $PSDefaultParameterValues['*:Encoding']='utf8'
 if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
 
-# ===== body (keep ASCII only) =====
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
-# Resolve repo root (Root   )
+# prefer $Root if given; otherwise discover repo root
 $RepoRoot = if ($Root) { (Resolve-Path $Root).Path } else { (git rev-parse --show-toplevel 2>$null) ?? (Get-Location).Path }
 $Tail=2000; $Days=3
 $log = Join-Path $RepoRoot 'logs/apply-log.jsonl'
 
-# No logs  short summary and exit 0
+# No logs → short summary and exit 0
 if (-not (Test-Path $log)) {
   $md = "# Housekeeping Summary`n`n_No logs found._"
   if ($env:GITHUB_STEP_SUMMARY) { $md | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8 -NoNewline } else { Write-Output $md }
