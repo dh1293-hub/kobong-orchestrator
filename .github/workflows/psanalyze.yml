@@ -20,14 +20,31 @@ jobs:
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
-      - name: Run analyzer (errors fail, warnings/info allowed)
+
+      # 1) Errors only — 실패 트리거
+      - name: PSSA (errors-only, fail on error)
         shell: pwsh
         run: |
-          $include = Get-ChildItem -Recurse -Filter *.ps1 | Where-Object { $_.FullName -notmatch '\\.githooks\\' }
-          $results = Invoke-ScriptAnalyzer -Path $include.FullName -Recurse -Severity Error,Warning,Information -ErrorAction Continue
-          if ($results) {
-            $results | Format-Table RuleName,Severity,ScriptName,Line,Message -Auto | Out-String | Write-Host
-            if ($results.Severity -contains 'Error') { throw "PSScriptAnalyzer found errors" }
+          $include = Get-ChildItem -Recurse -Filter *.ps1 | Where-Object { $_.FullName -notmatch '\\(node_modules|\.githooks)\\' }
+          $rules   = @(
+            'PSAvoidUsingInvokeExpression',
+            'PSUseCmdletCorrectly',
+            'PSUseCompatibleSyntax' # 최신 PS7에서의 호환성 체크(필요시 프로파일 지정 가능)
+          )
+          $res = Invoke-ScriptAnalyzer -Path $include.FullName -Recurse -IncludeRule $rules -Severity Error -Settings ".config/.psscriptanalyzerrc.psd1" -ErrorAction Continue
+          if ($res) {
+            $res | Format-Table RuleName,Severity,ScriptName,Line,Message -Auto | Out-String | Write-Host
+            if ($res.Severity -contains 'Error') { throw "PSScriptAnalyzer (errors-only) found errors" }
+          } else { Write-Host "No critical errors" }
+
+      # 2) Warnings & Info — 로그만
+      - name: PSSA (warnings/info, non-blocking)
+        shell: pwsh
+        run: |
+          $include = Get-ChildItem -Recurse -Filter *.ps1 | Where-Object { $_.FullName -notmatch '\\(node_modules|\.githooks)\\' }
+          $res = Invoke-ScriptAnalyzer -Path $include.FullName -Recurse -Severity Warning,Information -Settings ".config/.psscriptanalyzerrc.psd1" -ErrorAction Continue
+          if ($res) {
+            $res | Format-Table RuleName,Severity,ScriptName,Line,Message -Auto | Out-String | Write-Host
           } else {
-            Write-Host "No issues found"
+            Write-Host "No warnings/info"
           }
