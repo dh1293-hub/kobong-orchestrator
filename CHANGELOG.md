@@ -1,4 +1,12 @@
 
+## v0.1.7 — 2025-09-17
+
+  ??68dab260 chore(release): v0.1.6 changelog (#70) (dh1293-hub, 2025-09-17)
+  ??4146570e ci(release): release-vpatch.ps1 v1.2.1 (auto-stash & cleanup) (#69) (dh1293-hub, 2025-09-17)
+  ??a91be768 ci(docs): release-docs perms harden (#68) (dh1293-hub, 2025-09-17)
+  ??a7a0dc49 docs(readme): update release badge (v0.1.5) (#67) (dh1293-hub, 2025-09-17)
+
+
 ## v0.1.6 — 2025-09-17
 
   ??d266d0cd ci(docs): fix release-docs (final hotfix) (#66) (dh1293-hub, 2025-09-17)
@@ -102,6 +110,7 @@
 - e5f93d0c	docs: add README badges (Contracts CI, Release Gate) (#1)
 - e40e79ef	ci: set upload-artifact retention-days=14 across workflows
 - 0f9ae9eb	chore: tidy repo (.gitignore for backups/logs)
+
 
 
 
