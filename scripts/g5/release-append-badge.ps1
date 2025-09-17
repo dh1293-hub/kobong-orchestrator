@@ -20,22 +20,26 @@ $rdm = if ($ReadmeOk -eq $true) { 'OK' } elseif ($ReadmeOk -eq $false) { 'NO' } 
 $chk = if ($ChecksOk -eq $true) { 'OK' } elseif ($ChecksOk -eq $false) { 'NO' } else { 'UNKNOWN' }
 $stamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss K')
 
+# details 블록 (멀티라인은 배열 → 조인)
 if ($WatchOutput) {
-  $details = '```' + "`n" + $WatchOutput + "`n" + '```'
+  $detailsLines = @('```', $WatchOutput, '```')
+  $details = ($detailsLines -join "`n")
 } else {
   $details = '_(no details)_'
 }
 
-$section = @"
-### Badge & Checks - $Tag
-- README badge: $rdm
-- Required checks: $chk
-- Timestamp: $stamp
+# 섹션 본문(변수 보간 포함)도 배열 → 조인 (here-string 미사용)
+$sectionLines = @(
+  "### Badge & Checks - $Tag",
+  "- README badge: $rdm",
+  "- Required checks: $chk",
+  "- Timestamp: $stamp",
+  "",
+  $details
+)
+$section = ($sectionLines -join "`n")
 
-$details
-"@
-
-$newNotes = $body.TrimEnd() + "`n`n" + $section.Trim() + "`n"
+$newNotes = $body.TrimEnd() + "`n`n" + $section + "`n"
 $tmp = Join-Path $RepoRoot ("logs/.release-notes-" + $Tag + ".md.tmp")
 $newNotes | Out-File -FilePath $tmp -Encoding utf8
 gh release edit $Tag --notes-file "$tmp" | Out-Null
