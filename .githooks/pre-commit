@@ -1,6 +1,0 @@
-#!/usr/bin/env pwsh
-#requires -Version 7.0
-$ErrorActionPreference = 'Stop'
-$here = Split-Path -Parent $MyInvocation.MyCommand.Path
-& pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $here 'pre-commit.ps1') @args
-exit $LASTEXITCODE
