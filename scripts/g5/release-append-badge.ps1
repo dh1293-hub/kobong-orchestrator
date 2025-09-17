@@ -38,8 +38,8 @@ if (-not $checks.HasValue -and $WatchOutput) { $checks = [bool]([regex]::IsMatch
 if (-not $readme.HasValue -and $WatchOutput) { $readme = [bool]([regex]::IsMatch($WatchOutput,'readme\s*=\s*True','IgnoreCase')) }
 
 $stamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss (KST)')
-$chk = if ($checks) { '✅' } else { '❌' }
-$rdm = if ($readme) { '✅' } else { '❌' }
+$chk = if ($checks) { 'OK' } else { 'NO' }
+$rdm = if ($readme) { 'OK' } else { 'NO' }
 
 # <- 여기를 if/else 문으로 수정
 if ($WatchOutput) {
@@ -49,17 +49,14 @@ $WatchOutput
 } else {
   $details = "_(no details)_"
 }
-
 $section = @"
-### Badge & Checks — $Tag
+### Badge & Checks - $Tag
 - README badge: $rdm
 - Required checks: $chk
 - Timestamp: $stamp
 
 $details
-"@
-
-$newNotes = ($body.TrimEnd() + "`n`n" + $section.Trim() + "`n")
+"@$newNotes = ($body.TrimEnd() + "`n`n" + $section.Trim() + "`n")
 
 # 임시파일로 안전 편집
 $tmp = Join-Path $RepoRoot ('logs\.release-notes-'+$Tag+'.md.tmp')
