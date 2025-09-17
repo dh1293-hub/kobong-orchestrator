@@ -1,4 +1,9 @@
 
+## v0.1.9 — 2025-09-17
+
+  ??e68a322d chore(release): v0.1.8 changelog (#72) (dh1293-hub, 2025-09-17)
+
+
 ## v0.1.8 — 2025-09-17
 
   ??f9040664 chore(release): v0.1.7 changelog (#71) (dh1293-hub, 2025-09-17)
@@ -115,6 +120,7 @@
 - e5f93d0c	docs: add README badges (Contracts CI, Release Gate) (#1)
 - e40e79ef	ci: set upload-artifact retention-days=14 across workflows
 - 0f9ae9eb	chore: tidy repo (.gitignore for backups/logs)
+
 
 
 
