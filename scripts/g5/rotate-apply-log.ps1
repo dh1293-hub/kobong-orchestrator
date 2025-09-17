@@ -33,18 +33,17 @@ try {
   if (-not (Test-Path $log)) { Write-Host "[SKIP] no log file"; exit 0 }
 
   $fi = Get-Item $log
-  $need = $fi.Length -gt $MaxBytes
 
-  # 라인 수도 검사(빠름)
-  $lineCount = (Measure-Object -Line -Path $log).Lines
-  if ($lineCount -gt $MaxLines) { $need = $true }
+  # 빠른 라인 카운트(.NET ReadLines) — PowerShell 7 이상
+  $lineCount = [int][Linq.Enumerable]::Count([System.IO.File]::ReadLines($log))
+  $need = ($fi.Length -gt $MaxBytes) -or ($lineCount -gt $MaxLines)
 
   if (-not $need) {
     Write-Host "[OK] rotation not needed (size=$($fi.Length) bytes, lines=$lineCount)"
     exit 0
   }
 
-  # 최신 N줄만 보존 (뒤에서부터 잘라내기)
+  # 최신 N줄만 보존
   $tail = Get-Content $log -Tail $MaxLines -Encoding utf8
   $tmp2 = "$log.tmp"
   $tail | Out-File -FilePath $tmp2 -Encoding utf8
@@ -54,16 +53,16 @@ try {
 
   Write-Host "[ROTATE] kept last $MaxLines lines (old → $([System.IO.Path]::GetFileName($bak)))"
 
-  # 기록
+  # 기록(회전된 새 로그에 남김)
   $rec=@{timestamp=(Get-Date).ToString('o');level='INFO';traceId=$trace;module='logs';action='rotate-apply-log';inputHash="$MaxLines/$MaxBytes";outcome='APPLIED';durationMs=$sw.ElapsedMilliseconds;errorCode='';message="sizeWas=$($fi.Length) linesWas=$lineCount"} | ConvertTo-Json -Compress
   Add-Content -Path $log -Value $rec
 }
 catch {
   $err=$_.Exception.Message; $stk=$_.ScriptStackTrace
   $rec=@{timestamp=(Get-Date).ToString('o');level='ERROR';traceId=$trace;module='logs';action='rotate-apply-log';inputHash='';outcome='FAILURE';durationMs=$sw.ElapsedMilliseconds;errorCode=$err;message=$stk} | ConvertTo-Json -Compress
-  $log=Join-Path $RepoRoot 'logs\apply-log.jsonl'
-  New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
-  Add-Content -Path $log -Value $rec
+  $log2=Join-Path $RepoRoot 'logs\apply-log.jsonl'
+  New-Item -ItemType Directory -Force -Path (Split-Path $log2) | Out-Null
+  Add-Content -Path $log2 -Value $rec
   exit 13
 }
 finally {
