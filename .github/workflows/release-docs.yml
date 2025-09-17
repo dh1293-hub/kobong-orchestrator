@@ -49,8 +49,10 @@ jobs:
           $ownEsc=[regex]::Escape($owner); $repEsc=[regex]::Escape($repo)
           $reBadge = ('\[!\[Release\]\(https://img\.shields\.io/github/v/release/{0}/{1}\?display_name=tag&sort=semver\)\]\(https://github\.com/{0}/{1}/releases/tag/[^)]+\)' -f $ownEsc,$repEsc)
 
+          # ⚠️ EscapeReplacement 는 없음 → MatchEvaluator 로 "리터럴 치환"
+          $rx = [regex]::new($reBadge)
           if ($orig -match $reBadge) {
-            $updated = [regex]::Replace($orig, $reBadge, [regex]::EscapeReplacement($badge), 1)
+            $updated = $rx.Replace($orig, { param([System.Text.RegularExpressions.Match]$m) $badge }, 1)
           } elseif ($orig -match '^# .+') {
             $updated = $orig -replace '^(# .+\R?)', "`$0$badge`n"
           } else {
@@ -60,6 +62,7 @@ jobs:
           $updated | Out-File $path -Encoding utf8
           if (git diff --quiet) {
             "did_change=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            "tag=$tag"        | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
             exit 0
           }
 
@@ -72,14 +75,16 @@ jobs:
           git push --set-upstream origin $head
 
           "did_change=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "tag=$tag"        | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Open PR and enable auto-merge
         if: steps.update.outputs.did_change == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.update.outputs.tag }}
         run: |
           set -e
-          head="docs/readme-badge-${{ env.TAG }}"
-          gh pr create --title "docs(readme): update release badge (${{ env.TAG }})" --body "- Auto-updated Release badge." --base main --head "$head" || true
+          head="docs/readme-badge-${TAG}"
+          gh pr create --title "docs(readme): update release badge (${TAG})" --body "- Auto-updated Release badge." --base main --head "$head" || true
           pr=$(gh pr view "$head" --json number -q .number)
           gh pr merge "$pr" --auto --squash --delete-branch
