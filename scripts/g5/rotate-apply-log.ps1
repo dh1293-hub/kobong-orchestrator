@@ -1,9 +1,10 @@
 #requires -Version 7.0
 param(
-  [int]$MaxLines = 50000,
-  [int]$MaxBytes = 5MB,
+  [switch]$ConfirmApply,
   [string]$Root,
-  [switch]$ConfirmApply
+  [string]$LogPath = "logs/apply-log.jsonl",
+  [int]$MaxLines = 5000,
+  [int]$MaxSizeMB = 10
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -11,59 +12,84 @@ $PSDefaultParameterValues['Out-File:Encoding']='utf8'
 $PSDefaultParameterValues['*:Encoding']='utf8'
 if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
 
-function Resolve-RepoRoot {
-  param([string]$Root)
-  if (-not [string]::IsNullOrWhiteSpace($Root)) { return (Resolve-Path $Root).Path }
-  $top = (& git rev-parse --show-toplevel 2>$null)
-  if (-not [string]::IsNullOrWhiteSpace($top)) { return $top }
-  return (Get-Location).Path
+$RepoRoot = if ($Root) { (Resolve-Path -LiteralPath $Root).Path } else { (git rev-parse --show-toplevel 2>$null) ?? (Get-Location).Path }
+
+function Assert-InRepo([string]$Path) {
+  $full = (Resolve-Path -LiteralPath $Path).Path
+  if (-not $full.StartsWith($RepoRoot, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Path not inside repo root: $full (RepoRoot=$RepoRoot)"
+  }
 }
-$RepoRoot = Resolve-RepoRoot -Root $Root
-if ([string]::IsNullOrWhiteSpace($RepoRoot)) { throw "PRECONDITION: RepoRoot resolved empty." }
-Set-Location $RepoRoot
 
-$LockFile = Join-Path $RepoRoot '.gpt5.lock'
-if (Test-Path $LockFile) { Write-Error 'CONFLICT: .gpt5.lock exists.'; exit 11 }
-"locked $(Get-Date -Format o)" | Out-File $LockFile -NoNewline
-$sw=[Diagnostics.Stopwatch]::StartNew()
 $trace=[guid]::NewGuid().ToString()
-
+$sw=[Diagnostics.Stopwatch]::StartNew()
+$LockFile = Join-Path $RepoRoot '.gpt5.lock'
 try {
-  $log = Join-Path $RepoRoot 'logs\apply-log.jsonl'
-  if (-not (Test-Path $log)) { Write-Host "[SKIP] no log file"; exit 0 }
+  if (Test-Path $LockFile) { throw 'CONFLICT: .gpt5.lock exists.' }
+  "locked $(Get-Date -Format o)" | Out-File $LockFile -Encoding utf8 -NoNewline
 
-  $fi = Get-Item $log
-
-  # 빠른 라인 카운트(.NET ReadLines) — PowerShell 7 이상
-  $lineCount = [int][Linq.Enumerable]::Count([System.IO.File]::ReadLines($log))
-  $need = ($fi.Length -gt $MaxBytes) -or ($lineCount -gt $MaxLines)
-
-  if (-not $need) {
-    Write-Host "[OK] rotation not needed (size=$($fi.Length) bytes, lines=$lineCount)"
-    exit 0
+  $LogFull = Join-Path $RepoRoot $LogPath
+  Assert-InRepo $LogFull
+  if (-not (Test-Path $LogFull)) {
+    New-Item -ItemType Directory -Force -Path (Split-Path $LogFull) | Out-Null
+    New-Item -ItemType File -Force -Path $LogFull | Out-Null
   }
 
-  # 최신 N줄만 보존
-  $tail = Get-Content $log -Tail $MaxLines -Encoding utf8
-  $tmp2 = "$log.tmp"
-  $tail | Out-File -FilePath $tmp2 -Encoding utf8
-  $bak  = "$log.bak-$(Get-Date -Format yyyyMMdd-HHmmss)"
-  Move-Item -Force $log $bak
-  Move-Item -Force $tmp2 $log
+  $fi = Get-Item $LogFull
+  $sizeMB = [math]::Round($fi.Length/1MB,2)
+  $lines = (Measure-Object -Line -Path $LogFull).Lines
+  $needRotate = ($lines -gt $MaxLines) -or ($sizeMB -gt $MaxSizeMB)
 
-  Write-Host "[ROTATE] kept last $MaxLines lines (old → $([System.IO.Path]::GetFileName($bak)))"
+  $preview = @{
+    timestamp=(Get-Date).ToString('o'); level='INFO'; traceId=$trace
+    module='rotate-apply-log'; action='plan'; inputHash=''
+    outcome='PREVIEW'; durationMs=0; errorCode=''
+    message="sizeMB=$sizeMB, lines=$lines, MaxSizeMB=$MaxSizeMB, MaxLines=$MaxLines, rotate=$needRotate"
+  } | ConvertTo-Json -Compress
+  Write-Host $preview
 
-  # 기록(회전된 새 로그에 남김)
-  $rec=@{timestamp=(Get-Date).ToString('o');level='INFO';traceId=$trace;module='logs';action='rotate-apply-log';inputHash="$MaxLines/$MaxBytes";outcome='APPLIED';durationMs=$sw.ElapsedMilliseconds;errorCode='';message="sizeWas=$($fi.Length) linesWas=$lineCount"} | ConvertTo-Json -Compress
-  Add-Content -Path $log -Value $rec
+  if (-not $needRotate) {
+    if ($ConfirmApply) {
+      Add-Content -Path $LogFull -Value ($preview -replace '"PREVIEW"','"NOOP"')
+    }
+    return
+  }
+
+  $dir = Split-Path $LogFull
+  $name = Split-Path $LogFull -Leaf
+  $ts = (Get-Date).ToString('yyyyMMdd-HHmmss')
+  $bak = Join-Path $dir "$name.bak-$ts"
+  $tmp = Join-Path $dir ".$name.tmp"
+
+  if (-not $ConfirmApply) {
+    Write-Host (@{action='write'; path=$LogFull; backup=$bak; tmp=$tmp; keepLines=$MaxLines} | ConvertTo-Json -Compress)
+    return
+  }
+
+  $tail = Get-Content -LiteralPath $LogFull -Tail $MaxLines
+  Copy-Item -LiteralPath $LogFull -Destination $bak -Force
+  $tail | Out-File -LiteralPath $tmp -Encoding utf8 -NoNewline
+  Move-Item -LiteralPath $tmp -Destination $LogFull -Force
+
+  $sw.Stop()
+  $rec = @{
+    timestamp=(Get-Date).ToString('o'); level='INFO'; traceId=$trace
+    module='rotate-apply-log'; action='rotate'; inputHash=''
+    outcome='APPLIED'; durationMs=$sw.ElapsedMilliseconds; errorCode=''
+    message="rotated to last $MaxLines lines; prevSizeMB=$sizeMB; backup=$(Split-Path $bak -Leaf)"
+  } | ConvertTo-Json -Compress
+  Add-Content -Path $LogFull -Value $rec
 }
 catch {
-  $err=$_.Exception.Message; $stk=$_.ScriptStackTrace
-  $rec=@{timestamp=(Get-Date).ToString('o');level='ERROR';traceId=$trace;module='logs';action='rotate-apply-log';inputHash='';outcome='FAILURE';durationMs=$sw.ElapsedMilliseconds;errorCode=$err;message=$stk} | ConvertTo-Json -Compress
-  $log2=Join-Path $RepoRoot 'logs\apply-log.jsonl'
-  New-Item -ItemType Directory -Force -Path (Split-Path $log2) | Out-Null
-  Add-Content -Path $log2 -Value $rec
-  exit 13
+  $err=$_.Exception.Message
+  $sw.Stop()
+  try {
+    $LogFull ??= Join-Path $RepoRoot $LogPath
+    if ($ConfirmApply -and $LogFull) {
+      Add-Content -Path $LogFull -Value (@{timestamp=(Get-Date).ToString('o');level='ERROR';traceId=$trace;module='rotate-apply-log';action='rotate';inputHash='';outcome='FAILURE';durationMs=$sw.ElapsedMilliseconds;errorCode=$err;message=$_.ScriptStackTrace} | ConvertTo-Json -Compress)
+    }
+  } catch {}
+  throw
 }
 finally {
   Remove-Item -Force $LockFile -ErrorAction SilentlyContinue
