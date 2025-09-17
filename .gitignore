@@ -6,3 +6,5 @@ logs/
 *.out.log
 *.err.log
 *.log.jsonl
+
+.githooks/*.bak
