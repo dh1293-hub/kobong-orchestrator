@@ -1,3 +1,13 @@
+
+## v0.1.6 — 2025-09-17
+
+  ??d266d0cd ci(docs): fix release-docs (final hotfix) (#66) (dh1293-hub, 2025-09-17)
+  ??636789dc ci(docs): fix release-docs (no EscapeReplacement; safe replacement) (#65) (dh1293-hub, 2025-09-17)
+  ??f8fae50a ci(docs): add 'tag' input to release-docs workflow (#64) (dh1293-hub, 2025-09-17)
+  ??90f0deba ci(docs): add workflow_dispatch to release-docs (#63) (dh1293-hub, 2025-09-17)
+  ??aad52074 ci(docs): guard PR when no README change (#62) (dh1293-hub, 2025-09-17)
+  ??402ab355 chore(release): v0.1.5 changelog (#61) (dh1293-hub, 2025-09-17)
+
 # v0.1.5 — 2025-09-17
 
 * 01698569 ci(docs): auto-update README badge on tag push (#60) (dh1293-hub, 2025-09-17)
@@ -92,6 +102,7 @@
 - e5f93d0c	docs: add README badges (Contracts CI, Release Gate) (#1)
 - e40e79ef	ci: set upload-artifact retention-days=14 across workflows
 - 0f9ae9eb	chore: tidy repo (.gitignore for backups/logs)
+
 
 
 
