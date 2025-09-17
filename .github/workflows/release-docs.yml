@@ -49,7 +49,6 @@ jobs:
           $ownEsc=[regex]::Escape($owner); $repEsc=[regex]::Escape($repo)
           $reBadge = ('\[!\[Release\]\(https://img\.shields\.io/github/v/release/{0}/{1}\?display_name=tag&sort=semver\)\]\(https://github\.com/{0}/{1}/releases/tag/[^)]+\)' -f $ownEsc,$repEsc)
 
-          # ⚠️ EscapeReplacement 는 없음 → MatchEvaluator 로 "리터럴 치환"
           $rx = [regex]::new($reBadge)
           if ($orig -match $reBadge) {
             $updated = $rx.Replace($orig, { param([System.Text.RegularExpressions.Match]$m) $badge }, 1)
