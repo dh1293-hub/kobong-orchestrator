@@ -25,7 +25,7 @@ if ($RunNow) { schtasks.exe /Run /TN $TaskName | Out-Null }
 $deadline = (Get-Date).AddSeconds($TimeoutSec)
 $newLine = $null
 do {
-  Start-Sleep 2
+  Write-Host -NoNewline "."; Start-Sleep 2
   $last = Get-Content -LiteralPath $Log -Tail 1
   if ($last -ne $before -and $last.Trim().Length -gt 0) { $newLine = $last; break }
 } while ((Get-Date) -lt $deadline)
