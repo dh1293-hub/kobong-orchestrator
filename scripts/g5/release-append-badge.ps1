@@ -31,7 +31,7 @@ if ($remote -match 'github\.com[:/](.+?)/(.+?)(?:\.git)?$') {
 $info = gh release view $Tag --json body 2>$null | ConvertFrom-Json
 $body = $info.body ?? ''
 
-# watch 결과 파싱(없으면 그대로 둠)
+# watch 결과 파싱
 $checks = $ChecksOk
 $readme = $ReadmeOk
 if (-not $checks.HasValue -and $WatchOutput) { $checks = [bool]([regex]::IsMatch($WatchOutput,'checks\s*=\s*True','IgnoreCase')) }
@@ -40,7 +40,15 @@ if (-not $readme.HasValue -and $WatchOutput) { $readme = [bool]([regex]::IsMatch
 $stamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss (KST)')
 $chk = if ($checks) { '✅' } else { '❌' }
 $rdm = if ($readme) { '✅' } else { '❌' }
-$details = if ($WatchOutput) { "```\n$WatchOutput\n```" } else { "_(no details)_" }
+
+# <- 여기를 if/else 문으로 수정
+if ($WatchOutput) {
+  $details = "```
+$WatchOutput
+```"
+} else {
+  $details = "_(no details)_"
+}
 
 $section = @"
 ### Badge & Checks — $Tag

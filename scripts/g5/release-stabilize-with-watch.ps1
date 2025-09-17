@@ -5,7 +5,7 @@ param(
   [switch]$CreateReleasePage,
   [int]$BadgeTimeoutSec = 900,
   [int]$WatchIntervalSec = 6,
-  [switch]$CommentRelease,   # 릴리즈 노트에 결과 추가
+  [switch]$CommentRelease,
   [switch]$ConfirmApply
 )
 Set-StrictMode -Version Latest
@@ -24,10 +24,6 @@ function Resolve-RepoRoot {
 $RepoRoot = Resolve-RepoRoot -Root $Root
 Set-Location $RepoRoot
 
-# 락
-$LockFile = Join-Path $RepoRoot '.gpt5.lock'
-if (Test-Path $LockFile) { Write-Error 'CONFLICT: .gpt5.lock exists.'; exit 11 }
-"locked $(Get-Date -Format o)" | Out-File $LockFile -NoNewline
 $sw=[Diagnostics.Stopwatch]::StartNew()
 $trace=[guid]::NewGuid().ToString()
 $log=Join-Path $RepoRoot 'logs\apply-log.jsonl'
@@ -36,13 +32,13 @@ New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
 try {
   $env:GIT_PAGER='' ; $env:LESS='-FRX' ; $env:GIT_TERMINAL_PROMPT='0'
 
-  # 1) 최신 태그 감지(미지정 시)
+  # 1) 태그 자동 감지
   if ([string]::IsNullOrWhiteSpace($Tag)) {
     $Tag = (git tag --sort=-v:refname | Select-Object -First 1).Trim()
     if (-not $Tag) { throw "No tags found." }
   }
 
-  # 2) 원래 stabilize 실행(있을 때만)
+  # 2) stabilize 실행(자식이 자체 락을 사용)
   $st = Join-Path $RepoRoot 'scripts\g5\release-stabilize.ps1'
   if (Test-Path $st) {
     $args=@('-Tag',$Tag)
@@ -53,8 +49,9 @@ try {
     Write-Warning "release-stabilize.ps1 not found — skipping stabilize step"
   }
 
-  # 3) 배지 감시(있을 때만)
+  # 3) 배지 감시 실행(자식이 자체 락을 사용)
   $watch = Join-Path $RepoRoot 'scripts\g5\watch-badge-ready.ps1'
+  $checksOk=$false; $readmeOk=$false; $out=''
   if (Test-Path $watch) {
     $args=@('-Tag',$Tag,'-Root',$RepoRoot,'-BadgeTimeoutSec',$BadgeTimeoutSec,'-WatchIntervalSec',$WatchIntervalSec)
     if ($ConfirmApply) { $args += '-ConfirmApply' }
@@ -63,7 +60,6 @@ try {
     $checksOk = [bool]([regex]::IsMatch($out,'checks=True','IgnoreCase'))
     $readmeOk = [bool]([regex]::IsMatch($out,'readme=True','IgnoreCase'))
 
-    # 4) 릴리즈 노트에 결과 추가(옵션)
     if ($CommentRelease) {
       $append = Join-Path $RepoRoot 'scripts\g5\release-append-badge.ps1'
       if (Test-Path $append) {
@@ -88,7 +84,4 @@ catch {
   $rec=@{timestamp=(Get-Date).ToString('o');level='ERROR';traceId=$trace;module='release';action='stabilize-with-watch';inputHash=$Tag;outcome='FAILURE';durationMs=$sw.ElapsedMilliseconds;errorCode=$err;message=$stk} | ConvertTo-Json -Compress
   Add-Content -Path $log -Value $rec
   exit 13
-}
-finally {
-  Remove-Item -Force $LockFile -ErrorAction SilentlyContinue
 }
