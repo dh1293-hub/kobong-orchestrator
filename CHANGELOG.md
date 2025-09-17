@@ -1,3 +1,10 @@
+# v0.1.5 — 2025-09-17
+
+* 01698569 ci(docs): auto-update README badge on tag push (#60) (dh1293-hub, 2025-09-17)
+* a850d8c8 docs(readme): update release badge (v0.1.4) (#59) (dh1293-hub, 2025-09-17)
+* 8c91be79 chore(release): v0.1.4 changelog (#58) (dh1293-hub, 2025-09-17)
+
+
 # v0.1.4 — 2025-09-17
 
 * ee44cfa8 ops(hardening): repo safety pack (hooks/ignore/logs guard) (#57) (dh1293-hub, 2025-09-17)
@@ -85,6 +92,7 @@
 - e5f93d0c	docs: add README badges (Contracts CI, Release Gate) (#1)
 - e40e79ef	ci: set upload-artifact retention-days=14 across workflows
 - 0f9ae9eb	chore: tidy repo (.gitignore for backups/logs)
+
 
 
 
