@@ -16,22 +16,30 @@ jobs:
     concurrency:
       group: release-docs-${{ github.ref_name }}
       cancel-in-progress: false
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Update README badge
+        id: update
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $tag = "${{ github.ref_name }}"
+
           $remote = git config --get remote.origin.url
           if ($remote -match 'github\.com[:/](?<o>[^/]+)/(?<r>[^/.]+)') { $owner=$Matches.o; $repo=$Matches.r } else { throw "remote parse failed" }
-          $badge = "[![Release](https://img.shields.io/github/v/release/$owner/$repo?display_name=tag&sort=semver)](https://github.com/$owner/$repo/releases/tag/$tag)"
+
+          $badge = ("[![Release](https://img.shields.io/github/v/release/{0}/{1}?display_name=tag&sort=semver)](https://github.com/{0}/{1}/releases/tag/{2})" -f $owner,$repo,$tag)
+
           $path = 'README.md'
           $orig = (Test-Path $path) ? (Get-Content $path -Raw -Encoding utf8) : ''
+
           $ownEsc=[regex]::Escape($owner); $repEsc=[regex]::Escape($repo)
-          $reBadge = "\[!\[Release\]\(https://img\.shields\.io/github/v/release/$ownEsc/$repEsc\?display_name=tag&sort=semver\)\]\(https://github\.com/$ownEsc/$repEsc/releases/tag/[^)]+\)"
+          $reBadge = ('\[!\[Release\]\(https://img\.shields\.io/github/v/release/{0}/{1}\?display_name=tag&sort=semver\)\]\(https://github\.com/{0}/{1}/releases/tag/[^)]+\)' -f $ownEsc,$repEsc)
+
           if ($orig -match $reBadge) {
             $updated = [regex]::Replace($orig, $reBadge, [regex]::EscapeReplacement($badge), 1)
           } elseif ($orig -match '^# .+') {
@@ -39,15 +47,25 @@ jobs:
           } else {
             $updated = $badge + "`n`n" + $orig
           }
+
           $updated | Out-File $path -Encoding utf8
-          if (git diff --quiet) { echo "No change."; exit 0 }
+          if (git diff --quiet) {
+            "did_change=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            exit 0
+          }
+
           git config user.name  "github-actions"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -b "docs/readme-badge-$tag"
+          $head = "docs/readme-badge-$tag"
+          git checkout -b $head
           git add README.md
-          git commit -m "docs(readme): update release badge ($tag)"
-          git push --set-upstream origin "docs/readme-badge-$tag"
+          git commit -m ("docs(readme): update release badge ({0})" -f $tag)
+          git push --set-upstream origin $head
+
+          "did_change=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
       - name: Open PR and enable auto-merge
+        if: steps.update.outputs.did_change == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
