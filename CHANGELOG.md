@@ -1,3 +1,6 @@
+## v0.1.10 (2025-09-17)
+- Maintenance: release docs & badges.
+
 
 ## v0.1.9 — 2025-09-17
 
