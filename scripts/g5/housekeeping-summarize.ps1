@@ -1,13 +1,17 @@
 #requires -Version 7.0
-param([switch]$ConfirmApply,[string]$RepoRoot,[int]$Tail=2000,[int]$Days=3)
+param([switch]$ConfirmApply,[string]$Root)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $PSDefaultParameterValues['Out-File:Encoding']='utf8'
 $PSDefaultParameterValues['*:Encoding']='utf8'
 if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
+
+# ===== body (keep ASCII only) =====
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
-if (-not $RepoRoot) { $RepoRoot = (git rev-parse --show-toplevel 2>$null) ?? (Get-Location).Path }
+# Resolve repo root (Root가 오면 그걸 우선)
+$RepoRoot = if ($Root) { (Resolve-Path $Root).Path } else { (git rev-parse --show-toplevel 2>$null) ?? (Get-Location).Path }
+$Tail=2000; $Days=3
 $log = Join-Path $RepoRoot 'logs/apply-log.jsonl'
 
 # No logs → short summary and exit 0
