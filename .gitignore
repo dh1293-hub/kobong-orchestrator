@@ -8,3 +8,4 @@ logs/
 *.log.jsonl
 
 .githooks/*.bak
+.gpt5.lock
