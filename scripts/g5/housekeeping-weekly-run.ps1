@@ -112,8 +112,8 @@ try {
   }
 
   # Flush remaining lines
- = Flush-Queue $stdoutQ 'child'
- = Flush-Queue $stderrQ 'child-err'
+ $null = Flush-Queue $stdoutQ 'child'
+ $null = Flush-Queue $stderrQ 'child-err'
   Write-Host "`r`n[exit] code=$($proc.ExitCode)"
   exit $proc.ExitCode
 }
