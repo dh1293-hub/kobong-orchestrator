@@ -6,3 +6,4 @@ logs/
 *.out.log
 *.err.log
 *.log.jsonl
+.gpt5.lock
