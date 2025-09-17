@@ -1,16 +1,13 @@
 #requires -Version 7.0
-param(
-  [string]$RepoRoot,
-  [int]$Tail = 2000,
-  [int]$Days = 3
-)
+param([switch]$ConfirmApply,[string]$RepoRoot,[int]$Tail=2000,[int]$Days=3)
 Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference='Stop'
+$PSDefaultParameterValues['Out-File:Encoding']='utf8'
+$PSDefaultParameterValues['*:Encoding']='utf8'
+if ($env:CONFIRM_APPLY -eq 'true') { $ConfirmApply = $true }
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
 
-if (-not $RepoRoot) {
-  $RepoRoot = (git rev-parse --show-toplevel 2>$null) ?? (Get-Location).Path
-}
+if (-not $RepoRoot) { $RepoRoot = (git rev-parse --show-toplevel 2>$null) ?? (Get-Location).Path }
 $log = Join-Path $RepoRoot 'logs/apply-log.jsonl'
 
 # No logs → short summary and exit 0
@@ -32,11 +29,9 @@ try {
     $o
   }
 
-  $total = 0
   $byOutcome = @{}
   $latest = $null
   foreach ($it in $items) {
-    $total++
     $key = if ($it.outcome) { $it.outcome.ToString().ToUpperInvariant() } else { 'UNKNOWN' }
     $byOutcome[$key] = 1 + ($byOutcome[$key] ?? 0)
     $t = if ($it.timestamp) { [datetime]$it.timestamp } else { Get-Date }
