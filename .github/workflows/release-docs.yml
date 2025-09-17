@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to process (e.g., v0.1.5). Leave empty to use current ref name."
+        description: "Release tag to process (e.g., v0.1.5). Leave empty to use latest v*."
         required: false
         default: ""
   push:
@@ -27,16 +27,20 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Update README badge
         id: update
         env:
-          TAG: ${{ github.event.inputs.tag != '' && github.event.inputs.tag || github.ref_name }}
+          TAG_IN: ${{ github.event.inputs.tag }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $tag = $env:TAG
-          if ([string]::IsNullOrWhiteSpace($tag)) { throw "Missing tag (TAG env not set)" }
+          $tag = $env:TAG_IN
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            $tag = (git tag --list "v*" --sort=-v:refname | Select-Object -First 1)
+            if ([string]::IsNullOrWhiteSpace($tag)) { throw "No semver tag found (v*)" }
+          }
 
           $remote = git config --get remote.origin.url
           if ($remote -match 'github\.com[:/](?<o>[^/]+)/(?<r>[^/.]+)') { $owner=$Matches.o; $repo=$Matches.r } else { throw "remote parse failed" }
@@ -47,10 +51,9 @@ jobs:
           $orig = (Test-Path $path) ? (Get-Content $path -Raw -Encoding utf8) : ''
 
           $ownEsc=[regex]::Escape($owner); $repEsc=[regex]::Escape($repo)
-          $reBadge = ('\[!\[Release\]\(https://img\.shields\.io/github/v/release/{0}/{1}\?display_name=tag&sort=semver\)\]\(https://github\.com/{0}/{1}/releases/tag/[^)]+\)' -f $ownEsc,$repEsc)
-
-          $rx = [regex]::new($reBadge)
-          if ($orig -match $reBadge) {
+          $pattern = '\[!\[Release\]\(https://img\.shields\.io/github/v/release/{0}/{1}\?display_name=tag&sort=semver\)\]\(https://github\.com/{0}/{1}/releases/tag/[^)]+\)' -f $ownEsc,$repEsc
+          $rx = [regex]::new($pattern)
+          if ($orig -match $pattern) {
             $updated = $rx.Replace($orig, { param([System.Text.RegularExpressions.Match]$m) $badge }, 1)
           } elseif ($orig -match '^# .+') {
             $updated = $orig -replace '^(# .+\R?)', "`$0$badge`n"
@@ -79,11 +82,17 @@ jobs:
       - name: Open PR and enable auto-merge
         if: steps.update.outputs.did_change == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.BOT_PR_PAT != '' && secrets.BOT_PR_PAT || github.token }}
           TAG: ${{ steps.update.outputs.tag }}
+        shell: bash
         run: |
           set -e
           head="docs/readme-badge-${TAG}"
-          gh pr create --title "docs(readme): update release badge (${TAG})" --body "- Auto-updated Release badge." --base main --head "$head" || true
-          pr=$(gh pr view "$head" --json number -q .number)
-          gh pr merge "$pr" --auto --squash --delete-branch
+          if ! gh pr create --title "docs(readme): update release badge (${TAG})" --body "- Auto-updated Release badge." --base main --head "$head"; then
+            echo "::warning::PR create failed (likely policy blocking GitHub Actions bot). Leaving branch $head for manual review."
+            exit 0
+          fi
+          pr=$(gh pr view "$head" --json number -q .number || echo "")
+          if [ -n "$pr" ]; then
+            gh pr merge "$pr" --auto --squash --delete-branch || true
+          fi
