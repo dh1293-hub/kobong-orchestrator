@@ -1,3 +1,6 @@
+## v0.1.28 (2025-09-17)
+- Maintenance: automated patch release.
+
 ## v0.1.27 (2025-09-17)
 - Maintenance: automated patch release.
 
