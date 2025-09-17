@@ -1,55 +1,73 @@
 #requires -Version 7.0
-param()
+param(
+  [string]$RepoRoot,
+  [int]$Tail = 2000,
+  [int]$Days = 3
+)
 Set-StrictMode -Version Latest
-$ErrorActionPreference='Stop'
-[Console]::OutputEncoding=[Text.Encoding]::UTF8
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
 
-$log = Join-Path (Get-Location) 'logs/apply-log.jsonl'
+# Resolve repo root
+if (-not $RepoRoot) {
+  $RepoRoot = (git rev-parse --show-toplevel 2>$null) ?? (Get-Location).Path
+}
+$log = Join-Path $RepoRoot 'logs/apply-log.jsonl'
+
+# No logs → short summary and exit 0
 if (-not (Test-Path $log)) {
-  $md = "# Housekeeping Summary`n`n_No logs found (dry-run produced no file)._"
+  $md = "# Housekeeping Summary`n`n_No logs found._"
   if ($env:GITHUB_STEP_SUMMARY) { $md | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8 -NoNewline } else { Write-Host $md }
   exit 0
 }
 
-$lines = Get-Content $log -ErrorAction Stop
-$recs = @()
-foreach ($ln in $lines) {
-  try { $recs += ($ln | ConvertFrom-Json) } catch { }
-}
-if (-not $recs) {
-  $md = "# Housekeeping Summary`n`n_Log file present but no valid JSON lines._"
-  if ($env:GITHUB_STEP_SUMMARY) { $md | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8 -NoNewline } else { Write-Host $md }
-  exit 0
-}
-
-$latestTrace = $recs | Sort-Object timestamp -Descending | Select-Object -First 1 -ExpandProperty traceId
-$house = $recs | Where-Object {$_.module -eq 'housekeeping-weekly'}
-$git   = $recs | Where-Object {$_.module -eq 'git' -and $_.action -eq 'branch-prune-quiet'}
-
-$applied = ($house + $git) | Where-Object {$_.outcome -in 'APPLY','APPLIED'} | Measure-Object | Select-Object -ExpandProperty Count
-$preview = ($house + $git) | Where-Object {$_.outcome -eq 'PREVIEW'} | Measure-Object | Select-Object -ExpandProperty Count
-$errors  = $recs | Where-Object {$_.level -eq 'ERROR'}
-
-$md = @()
-$md += "# Housekeeping Summary"
-$md += ""
-$md += "- Records: $($recs.Count)"
-$md += "- Applied: $applied · Preview: $preview"
-$md += "- Latest trace: `$latestTrace`"
-if ($errors) {
-  $md += ""
-  $md += "## Errors"
-  $errors | Select-Object -First 5 | ForEach-Object {
-    $md += "- `$( $_.timestamp )` **$($_.module)/$($_.action)** — $($_.message)"
+try {
+  $cutoff = (Get-Date).AddDays(-1 * [Math]::Abs($Days))
+  $lines = Get-Content -Encoding utf8 -Tail $Tail $log
+  $items = foreach ($ln in $lines) {
+    try { $o = $ln | ConvertFrom-Json -ErrorAction Stop } catch { continue }
+    if ($o.timestamp) {
+      $ts = [datetime]$o.timestamp
+      if ($ts -lt $cutoff) { continue }
+    }
+    $o
   }
-}
-$md += ""
-$md += "## Recent Events"
-($recs | Sort-Object timestamp -Descending | Select-Object -First 10 |
-  ForEach-Object { "- `$( $_.timestamp )` **$($_.module)/$($_.action)** `[$($_.outcome)]` — $($_.message)" }) | ForEach-Object { $md += $_ }
 
-$mdStr = ($md -join "`n")
-# step summary
-if ($env:GITHUB_STEP_SUMMARY) { $mdStr | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8 -NoNewline } else { Write-Host $mdStr }
-# save for PR comment
-$mdStr | Out-File 'housekeeping-summary.md' -Encoding utf8 -NoNewline
+  $total = 0
+  $byOutcome = @{}
+  $latest = $null
+  foreach ($it in $items) {
+    $total++
+    $key = (($it.outcome) ?? 'UNKNOWN')
+    if ($key -is [string]) { $key = $key.ToUpperInvariant() } else { $key = 'UNKNOWN' }
+    $byOutcome[$key] = 1 + ($byOutcome[$key] ?? 0)
+
+    $t = [datetime]($it.timestamp ?? (Get-Date))
+    if (-not $latest -or $t -gt $latest.time) { $latest = @{ time = $t; traceId = ($it.traceId ?? '') } }
+  }
+
+  $rows = ($byOutcome.GetEnumerator() | Sort-Object Name | ForEach-Object { "| $($_.Name) | $($_.Value) |" }) -join "`n"
+  if (-not $rows) { $rows = "| (none) | 0 |" }
+
+  $latestInfo = ""
+  if ($latest) {
+    $latestInfo = "`n_Last entry_: **$($latest.time.ToString('yyyy-MM-dd HH:mm:ss K'))** (trace **$($latest.traceId)**)"
+  }
+
+  $md = @()
+  $md += "# Housekeeping Summary"
+  $md += ""
+  $md += "*Window:* last $Days day(s) - *Scanned:* last $Tail line(s) - *File:* logs/apply-log.jsonl"
+  $md += ""
+  $md += "| Outcome | Count |"
+  $md += "|---|---|"
+  $md += $rows
+  if ($latestInfo) { $md += $latestInfo }
+
+  $text = ($md -join "`n")
+  if ($env:GITHUB_STEP_SUMMARY) { $text | Out-File $env:GITHUB_STEP_SUMMARY -Encoding utf8 -NoNewline } else { Write-Host $text }
+}
+catch {
+  Write-Error $_.Exception.Message
+  exit 13
+}
