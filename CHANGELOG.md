@@ -1,3 +1,6 @@
+## v0.1.11 (2025-09-17)
+- Maintenance: automated patch release.
+
 ## v0.1.10 (2025-09-17)
 - Maintenance: release docs & badges.
 
