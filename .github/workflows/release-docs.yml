@@ -2,6 +2,7 @@
 name: Release Docs (README badge)
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
