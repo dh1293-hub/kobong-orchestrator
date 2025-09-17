@@ -1,0 +1,33 @@
+# NO-SHELL
+name: psanalyze
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+permissions:
+  contents: read
+jobs:
+  analyze:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PowerShell 7
+        uses: PowerShell/installer@v1
+        with:
+          version: "7.4.4"
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+      - name: Run analyzer (errors fail, warnings/info allowed)
+        shell: pwsh
+        run: |
+          $include = Get-ChildItem -Recurse -Filter *.ps1 | Where-Object { $_.FullName -notmatch '\\.githooks\\' }
+          $results = Invoke-ScriptAnalyzer -Path $include.FullName -Recurse -Severity Error,Warning,Information -ErrorAction Continue
+          if ($results) {
+            $results | Format-Table RuleName,Severity,ScriptName,Line,Message -Auto | Out-String | Write-Host
+            if ($results.Severity -contains 'Error') { throw "PSScriptAnalyzer found errors" }
+          } else {
+            Write-Host "No issues found"
+          }
