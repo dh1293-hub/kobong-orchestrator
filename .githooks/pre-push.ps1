@@ -4,16 +4,17 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.Encoding]::UTF8
 
-# Determine upstream for current branch
-$upstream = (git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>$null)
+# Determine upstream for current branch (quote '@{u}' to avoid PS hashtable literal)
+$upstream = (& git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>$null)
 if (-not $upstream) { $upstream = 'origin/main' }
 
-# Files changed between upstream and HEAD
+# Changed PowerShell files to be pushed (exclude node_modules and .githooks)
 $changed = & git diff --name-only --diff-filter=ACM "$upstream...HEAD" |
   Where-Object { $_ -like '*.ps1' -and $_ -notmatch '\\(node_modules|\.githooks)\\' }
 
 if (-not $changed) { exit 0 }
 
+# Block invalid Flush-Queue assignment
 $bad = @()
 foreach ($f in $changed) {
   $txt = & git show "HEAD:$f" 2>$null
@@ -28,7 +29,7 @@ if ($bad.Count -gt 0) {
   exit 1
 }
 
-# Warnings only
+# Soft warnings
 foreach ($f in $changed) {
   $txt = & git show "HEAD:$f" 2>$null
   if ($txt -notmatch '(?m)^\s*#requires\s+-Version\s+7\.0\b') {
