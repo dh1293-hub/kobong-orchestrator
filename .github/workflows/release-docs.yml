@@ -3,6 +3,11 @@ name: Release Docs (README badge)
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to process (e.g., v0.1.5). Leave empty to use current ref name."
+        required: false
+        default: ""
   push:
     tags:
       - "v*"
@@ -15,7 +20,7 @@ jobs:
   update-readme-badge:
     runs-on: ubuntu-latest
     concurrency:
-      group: release-docs-${{ github.ref_name }}
+      group: release-docs-${{ github.ref_name || github.run_id }}
       cancel-in-progress: false
 
     steps:
@@ -25,10 +30,13 @@ jobs:
 
       - name: Update README badge
         id: update
+        env:
+          TAG: ${{ github.event.inputs.tag != '' && github.event.inputs.tag || github.ref_name }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $tag = "${{ github.ref_name }}"
+          $tag = $env:TAG
+          if ([string]::IsNullOrWhiteSpace($tag)) { throw "Missing tag (TAG env not set)" }
 
           $remote = git config --get remote.origin.url
           if ($remote -match 'github\.com[:/](?<o>[^/]+)/(?<r>[^/.]+)') { $owner=$Matches.o; $repo=$Matches.r } else { throw "remote parse failed" }
@@ -71,7 +79,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
-          head="docs/readme-badge-${{ github.ref_name }}"
-          gh pr create --title "docs(readme): update release badge (${{ github.ref_name }})" --body "- Auto-updated Release badge." --base main --head "$head" || true
+          head="docs/readme-badge-${{ env.TAG }}"
+          gh pr create --title "docs(readme): update release badge (${{ env.TAG }})" --body "- Auto-updated Release badge." --base main --head "$head" || true
           pr=$(gh pr view "$head" --json number -q .number)
           gh pr merge "$pr" --auto --squash --delete-branch
