@@ -1,0 +1,24 @@
+{
+  "summary": { "name": "kobong-orchestrator", "stars": 312, "forks": 47, "watchers": 28, "openPRs": 9, "openIssues": 23, "successRate": 0.86, "leadTimeH": 14, "mttrH": 3.2, "releases": 24, "runsToday": 31 },
+  "trendBuilds": [22,26,25,29,31,28,35,34,38,36,40,44],
+  "trendPRs":    [6,5,7,8,9,7,8,10,9,11,10,9],
+  "trendIssues": [24,23,25,22,21,23,20,19,22,23,21,20],
+  "runs": [
+    { "id":"r112", "wf":"CI",     "branch":"main",       "status":"success", "durMin":7,  "startedAt":"09:41" },
+    { "id":"r113", "wf":"E2E",    "branch":"develop",    "status":"running", "durMin":22, "startedAt":"09:36" },
+    { "id":"r114", "wf":"Release","branch":"main",       "status":"queued",  "durMin":0,  "startedAt":"09:33" },
+    { "id":"r115", "wf":"Lint",   "branch":"feature/ui", "status":"failed",  "durMin":2,  "startedAt":"09:30" }
+  ],
+  "prs": [
+    { "id":482, "title":"feat: add GH ops dashboard", "author":"alice", "branch":"feature/ops-ui", "ageH":5,  "checks":"pending" },
+    { "id":479, "title":"fix(ci): windows path bug",  "author":"bob",   "branch":"fix/win-path",   "ageH":11, "checks":"pass"    },
+    { "id":471, "title":"refactor: service layer",    "author":"kim",   "branch":"refactor/svc",   "ageH":28, "checks":"fail"    },
+    { "id":468, "title":"docs: api usage",            "author":"lee",   "branch":"docs/api",       "ageH":33, "checks":"pass"    }
+  ],
+  "issues": [
+    { "id":901, "title":"Job flakiness on Node 20", "labels":["ci","flaky"], "ageD":2, "severity":"med"  },
+    { "id":887, "title":"UI: overflow in table",    "labels":["ui"],        "ageD":5, "severity":"low"  },
+    { "id":860, "title":"Security: npm audit high", "labels":["security"],  "ageD":1, "severity":"high" },
+    { "id":842, "title":"Perf: slow build on win",  "labels":["perf","win"],"ageD":7, "severity":"med"  }
+  ]
+}
