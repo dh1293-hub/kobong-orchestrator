@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GitHub Monitoring Web GUI</title>
+  <style>
+    :root{ --bg:#111418; --panel:#161a20; --ink:#e6e9ee; --muted:#a5adba; --accent:#5ac8fa; --ok:#2ecc71; --warn:#f1c40f; --bad:#e74c3c; }
+    html,body,#app{ height:100%; margin:0; }
+    body{ background:var(--bg); color:var(--ink); font-family:system-ui,Segoe UI,Roboto,Pretendard,sans-serif; }
+    .wrap{ display:grid; grid-template-rows:auto 1fr; height:100%;}
+    header{ display:flex; align-items:center; gap:12px; padding:14px 18px; background:linear-gradient(180deg,#111418,#0d1117); border-bottom:1px solid #202734;}
+    header h1{ font-size:18px; font-weight:700; margin:0; letter-spacing:.3px; }
+    header .pill{ padding:4px 10px; border-radius:999px; background:#1e2633; color:var(--muted); font-size:12px; }
+    main{ display:grid; grid-template-columns: 360px 1fr; gap:14px; padding:14px; }
+    .card{ background:var(--panel); border:1px solid #202734; border-radius:16px; padding:14px; min-height:120px; }
+    .kpis{ display:grid; grid-template-columns: repeat(2, minmax(140px,1fr)); gap:10px; }
+    .kpi{ background:#12171e; border:1px solid #212833; border-radius:12px; padding:12px; }
+    .kpi .v{ font-size:22px; font-weight:800; }
+    .ts{ height:220px; background:#12171e; border:1px dashed #283141; border-radius:12px; display:flex; align-items:center; justify-content:center; color:var(--muted); }
+    .list{ display:flex; flex-direction:column; gap:10px; }
+    .item{ padding:10px; border-radius:12px; border:1px solid #212833; background:#12171e; }
+    a{ color:var(--accent); text-decoration:none; }
+    .muted{ color:var(--muted); }
+  </style>
+</head>
+<body>
+  <div id="app" class="wrap">
+    <header>
+      <h1>GitHub 상태 모니터링</h1>
+      <span class="pill">Dark Gray</span>
+      <span class="pill">Backend: <code>http://127.0.0.1:8787</code></span>
+    </header>
+    <main>
+      <div class="card">
+        <div id="kpis" class="kpis"></div>
+        <div id="ts" class="ts">Timeseries preview</div>
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 8px 0;">Open PRs</h3>
+        <div id="prs" class="list"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- React / ReactDOM / Babel (dev only) -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+
+  <!-- 확정 JSX 컴포넌트 (동일 폴더에 Web-GUI-Github-v0.1.jsx 배치) -->
+  <script type="text/babel" src="./Web-GUI-Github-v0.1.jsx"></script>
+  <!-- AUTO-BIND-WEBGUI -->
+  <script type="text/babel">
+    window.__tryMountWebGui = function() {
+      const root = document.getElementById('app');
+      const mount = (Comp) => ReactDOM.createRoot(root).render(React.createElement(Comp, {}));
+      if (window.WebGuiGithub) { mount(window.WebGuiGithub); return; }
+      for (const k of Object.keys(window)) {
+        if (/^[A-Z]\w+$/.test(k) && typeof window[k] === 'function') { try{ mount(window[k]); return; }catch{} }
+      }
+      console.warn('No component found — fallback renderer if present.');
+      if (typeof window.renderFallback === 'function') window.renderFallback();
+    };
+    window.addEventListener('load', ()=> setTimeout(()=>window.__tryMountWebGui(), 50));
+  </script>
+
+  <!-- 마운트 스크립트: 컴포넌트에서 default export 없으면 아래 Fallback 렌더러로 표시 -->
+  <script type="text/babel">
+    const fetchUrl = "http://127.0.0.1:8787/api/github/summary";
+
+    // Fallback 간이 렌더러(혹시 JSX에 export가 없을 경우)
+    async function renderFallback() {
+      const res = await fetch(fetchUrl);
+      const data = await res.json();
+
+      // KPIs
+      const k = data.kpi || {};
+      const kpis = [
+        ["Open PRs", k.pr_open], ["CI pass rate", (k.ci_pass_rate*100||0).toFixed(0)+"%"],
+        ["Releases(7d)", k.release_7d], ["Rate limit", k.rate_limit_remaining]
+      ];
+      document.getElementById("kpis").innerHTML = kpis.map(([t,v])=>(
+        `<div class="kpi"><div class="t muted">${t}</div><div class="v">${v ?? '-'}</div></div>`
+      )).join("");
+
+      // PR List
+      const prs = (data.prQueue||[]).map(p=>{
+        const label = (p.labels||[])[0] ? `<span class="pill" style="margin-left:6px">${p.labels[0]}</span>` : '';
+        return `<div class="item"><div><strong>#${p.id}</strong> ${p.title}${label}</div>
+          <div class="muted">${p.author} · ${p.head} → ${p.base}</div></div>`;
+      }).join("");
+      document.getElementById("prs").innerHTML = prs || `<div class="muted">No open PRs</div>`;
+    }
+
+    // JSX 컴포넌트가 window.WebGuiGithub 로 노출되어 있으면 그걸 사용
+    if (window.WebGuiGithub) {
+      const root = ReactDOM.createRoot(document.getElementById('app'));
+      root.render(React.createElement(window.WebGuiGithub, { fetchUrl, theme:"dark" }));
+    } else {
+      renderFallback();
+    }
+  </script>
+</body>
+</html>
+

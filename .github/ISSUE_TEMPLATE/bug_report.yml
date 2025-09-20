@@ -1,0 +1,9 @@
+# NO-SHELL
+name: Bug report
+description: 문제를 신고합니다
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: 무엇이 문제인가요?, placeholder: 재현/기대/실제/로그 }
+    validations: { required: true }

@@ -1,0 +1,11 @@
+@echo off
+setlocal
+REM === Auto-generated (kobong-orchestrator) ===
+set "REPO=D:\ChatGPT5_AI_Link\dosc\kobong-orchestrator"
+if not defined KOBONG_API_URL set "KOBONG_API_URL=http://127.0.0.1:8080"
+if not defined KOBONG_HMAC_SECRET (
+  set /p KOBONG_HMAC_SECRET=Enter KOBONG_HMAC_SECRET (shared secret): 
+)
+cd /d "%REPO%"
+start "KOBONG CLIENT" /D "%REPO%" pwsh.exe -NoLogo -NoExit
+exit /b

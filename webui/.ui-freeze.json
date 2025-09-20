@@ -1,0 +1,62 @@
+{
+  "version": "1",
+  "createdAt": "2025-09-20T19:56:38.6278531+09:00",
+  "webui": "D:\\ChatGPT5_AI_Link\\dosc\\kobong-orchestrator\\webui",
+  "files": [
+    {
+      "path": "src\\ui\\GithubOpsDashboard.tsx",
+      "size": 16427,
+      "mtime": "2025-09-20T10:48:04.4452348Z",
+      "sha256": "704431e06cd63fffc6c8a17d8e2f08ee9891da490978dc57a2586f42a5cb0c0b"
+    },
+    {
+      "path": "src\\ui\\atoms\\Icon.tsx",
+      "size": 4488,
+      "mtime": "2025-09-20T10:28:11.9425766Z",
+      "sha256": "5f16721237aa0b21e38ed38db53e47d0cd9c9e18c52503d11cbfe03da0f93be0"
+    },
+    {
+      "path": "src\\ui\\atoms\\Spark.tsx",
+      "size": 1608,
+      "mtime": "2025-09-20T10:20:18.6226683Z",
+      "sha256": "7a346a62984666061b74616ee085a012d56de14049d434d81adb1ab132039325"
+    },
+    {
+      "path": "src\\lib\\github.ts",
+      "size": 5575,
+      "mtime": "2025-09-20T10:48:04.4410530Z",
+      "sha256": "122982b25dfe4dddcd447bb5e9e85a1390f15b547d0e3c1855aaa0a8eb08d7cc"
+    },
+    {
+      "path": "src\\main.tsx",
+      "size": 254,
+      "mtime": "2025-09-20T10:20:18.6246682Z",
+      "sha256": "e9b15d406fc5f370472c35344c9e8ba5808476d8b8c26f7a57d42e5152719f99"
+    },
+    {
+      "path": "src\\index.css",
+      "size": 2534,
+      "mtime": "2025-09-20T10:20:18.6276648Z",
+      "sha256": "8557d4e4aa8dec9a42f486aeac29e27c46759ae51a561f5ff17cd7ac2d25cf47"
+    },
+    {
+      "path": "tailwind.config.ts",
+      "size": 367,
+      "mtime": "2025-09-20T10:20:18.6296706Z",
+      "sha256": "a31490c13e79512f6e7573e8f315e8b4302c1f7017316c45cb5b88cfe3e7bd70"
+    },
+    {
+      "path": "vite.config.ts",
+      "size": 737,
+      "mtime": "2025-09-20T10:20:18.6326686Z",
+      "sha256": "be62244c6c542afff1d3f5d27edb824f64de6f69c840eaf71c1afa2bed72ec93"
+    },
+    {
+      "path": "package.json",
+      "size": 1277,
+      "mtime": "2025-09-20T10:56:38.1318799Z",
+      "sha256": "fba0b79a83518dd4c0b5d773dbe35ec37f3d7c74f81f7022b90e5851b1059fe7"
+    }
+  ],
+  "notes": "Auto-generated. Use `npm run ui:freeze` after intentional UI changes."
+}

@@ -1,0 +1,366 @@
+{
+  "repo": "D:\\ChatGPT5_AI_Link\\dosc\\kobong-orchestrator",
+  "created": "2025-09-20T23:36:04.8428749+09:00",
+  "mode": "UNFREEZE",
+  "count": 58,
+  "targets": [
+    "webui\\index.html",
+    "webui\\tailwind.config.*",
+    "webui\\postcss.config.*",
+    "webui\\src\\main.*",
+    "webui\\src\\App.*",
+    "webui\\src\\ui\\**\\*.*",
+    "webui\\src\\pages\\**\\*.*",
+    "webui\\src\\components\\**\\*.*"
+  ],
+  "items": [
+    {
+      "path": "webui\\.archive\\20250920-211422\\index.html",
+      "size": 309,
+      "mtime": "2025-09-20T07:29:26.6855838Z",
+      "sha256": "19e6038eb0f5ed11827abb43a94de0a5a304bae44d021efc036db3c6fc025696"
+    },
+    {
+      "path": "webui\\backups\\freeze-20250920-203838\\tailwind.config.ts",
+      "size": 672,
+      "mtime": "2025-09-20T11:06:14.1078264Z",
+      "sha256": "f72cdb2884ee40e218cdbb5cb96aa9c39f3ef25249622e21c6f258c8b004d964"
+    },
+    {
+      "path": "webui\\dist\\index.html",
+      "size": 333,
+      "mtime": "2025-09-20T12:03:22.1758112Z",
+      "sha256": "4a51b183b96e3e6022e8431b44701fe3c534bf362908c895233e7469f30d5966"
+    },
+    {
+      "path": "webui\\index.html",
+      "size": 333,
+      "mtime": "2025-09-20T13:36:01.4502447Z",
+      "sha256": "933b74c5cb74e2892f5407d76c4d05daa2d616589813675372ec7fa4885095c4"
+    },
+    {
+      "path": "webui\\node_modules\\tailwindcss\\stubs\\postcss.config.cjs",
+      "size": 82,
+      "mtime": "2025-09-20T07:23:31.6904974Z",
+      "sha256": "251ecddd4672c9cf467547e3dc535de00ad2129df26e7e7ae728fa4e5ac45fc5"
+    },
+    {
+      "path": "webui\\node_modules\\tailwindcss\\stubs\\postcss.config.js",
+      "size": 80,
+      "mtime": "2025-09-20T07:23:31.9710657Z",
+      "sha256": "190c877db466995bf1482f4a16abd06e04a89ede3119341e2a86ff96e1737b27"
+    },
+    {
+      "path": "webui\\node_modules\\tailwindcss\\stubs\\tailwind.config.cjs",
+      "size": 72,
+      "mtime": "2025-09-20T07:23:31.7273372Z",
+      "sha256": "52d4880aa830639f5e5f0e92c4be572c5e2f76844fbb72e8a13d7d60110b6ef4"
+    },
+    {
+      "path": "webui\\node_modules\\tailwindcss\\stubs\\tailwind.config.js",
+      "size": 70,
+      "mtime": "2025-09-20T07:23:31.9921469Z",
+      "sha256": "32bfe40cf0120f2cc70e1b044345db158364fc8196b6de709c7d769e728881f1"
+    },
+    {
+      "path": "webui\\node_modules\\tailwindcss\\stubs\\tailwind.config.ts",
+      "size": 86,
+      "mtime": "2025-09-20T07:23:32.0141942Z",
+      "sha256": "70d5875419a9c132e8058f3cedd3175b8f7ce4c78842b0bd4148a530e1d0efae"
+    },
+    {
+      "path": "webui\\postcss.config.cjs",
+      "size": 67,
+      "mtime": "2025-09-20T07:23:32.2670423Z",
+      "sha256": "2d60af43470000f415d9548f3437b9dd9c64e147142b362efbfaebe20b0edddf"
+    },
+    {
+      "path": "webui\\postcss.config.cjs.bak-20250920-162332",
+      "size": 67,
+      "mtime": "2025-09-20T07:13:28.4914444Z",
+      "sha256": "2d60af43470000f415d9548f3437b9dd9c64e147142b362efbfaebe20b0edddf"
+    },
+    {
+      "path": "webui\\postcss.config.js.bak-20250920-161237",
+      "size": 67,
+      "mtime": "2025-09-20T04:49:37.9142064Z",
+      "sha256": "2d60af43470000f415d9548f3437b9dd9c64e147142b362efbfaebe20b0edddf"
+    },
+    {
+      "path": "webui\\postcss.config.js.bak-20250920-161328",
+      "size": 67,
+      "mtime": "2025-09-20T07:12:37.805131Z",
+      "sha256": "2d60af43470000f415d9548f3437b9dd9c64e147142b362efbfaebe20b0edddf"
+    },
+    {
+      "path": "webui\\src\\app.css",
+      "size": 2289,
+      "mtime": "2025-09-20T02:04:26.5058279Z",
+      "sha256": "bf58a9c45f5d92a267ed7fd20eef0a3a9bf274fbf11c4a1368edee58e716983f"
+    },
+    {
+      "path": "webui\\src\\App.tsx.bak-20250920-105443930",
+      "size": 3109,
+      "mtime": "2025-09-20T01:43:56.1465042Z",
+      "sha256": "10c106aef0d08739a126e1f4bd4e27fd64d3b07ffa1e2458439e4106e3814bc0"
+    },
+    {
+      "path": "webui\\src\\App.tsx.bak-20250920-110426489",
+      "size": 491,
+      "mtime": "2025-09-20T01:54:43.9317424Z",
+      "sha256": "72b7110acd5fc5a29678f4a7b3b95afd6fccfab0acc207965b7be4affc794b5e"
+    },
+    {
+      "path": "webui\\src\\App.tsx.bak-20250920-205616",
+      "size": 5556,
+      "mtime": "2025-09-20T02:04:26.4902731Z",
+      "sha256": "9b88ee2236cd7e942f4c401c7ad50733cb937f5f8e95af4e22663c1c0c219c0b"
+    },
+    {
+      "path": "webui\\src\\main.tsx",
+      "size": 284,
+      "mtime": "2025-09-20T13:36:01.4472507Z",
+      "sha256": "0fded084c7e9c2b76f8974d816ee0513fe7275a444849eb23cb4368d85a8cccf"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-113641077",
+      "size": 218,
+      "mtime": "2025-09-20T01:51:56.1659618Z",
+      "sha256": "395b5f9f69af19804f5811cf32b7ce611502d7cea88b57fce8418854f0787a0f"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-121454452",
+      "size": 523,
+      "mtime": "2025-09-20T02:36:41.0782795Z",
+      "sha256": "1a8770a746f59bbab77abe6cb018ac8917e9006cd4d768e52adbc3f279caf708"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-122501713",
+      "size": 503,
+      "mtime": "2025-09-20T03:14:54.4545814Z",
+      "sha256": "36a5958fea77e0e56dbe391ec84f9ed8bc7f227c628b062ec07df00ab517703a"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-131543",
+      "size": 521,
+      "mtime": "2025-09-20T03:25:01.7176689Z",
+      "sha256": "26a316afaad34484d62cdc37b3fdefee1bf324d00f2d89a33eb6ffdcc11f2d0a"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-135643",
+      "size": 908,
+      "mtime": "2025-09-20T04:49:37.9142064Z",
+      "sha256": "e4c4ce81fedd773319b0186a00deb818551aecd393027a7887e09c50886bb54c"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-135934",
+      "size": 448,
+      "mtime": "2025-09-20T04:56:43.2580564Z",
+      "sha256": "73adbc184e241995cd9b9cf927a1312d6c5f7c8b01e32e5a840425258a01dc5b"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-135935",
+      "size": 448,
+      "mtime": "2025-09-20T04:59:34.56683Z",
+      "sha256": "73adbc184e241995cd9b9cf927a1312d6c5f7c8b01e32e5a840425258a01dc5b"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-140256",
+      "size": 448,
+      "mtime": "2025-09-20T04:59:35.0694709Z",
+      "sha256": "73adbc184e241995cd9b9cf927a1312d6c5f7c8b01e32e5a840425258a01dc5b"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-162926",
+      "size": 448,
+      "mtime": "2025-09-20T05:02:56.1496736Z",
+      "sha256": "73adbc184e241995cd9b9cf927a1312d6c5f7c8b01e32e5a840425258a01dc5b"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-164714",
+      "size": 420,
+      "mtime": "2025-09-20T07:29:26.6888986Z",
+      "sha256": "62aef638c7d7a28d5d8cc2c166d628519f21af68fc445df84260549c1f221917"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-172024",
+      "size": 595,
+      "mtime": "2025-09-20T07:47:14.692545Z",
+      "sha256": "62023e2ac45aae605753b7e1782a4b4e916ad68e3181b7b82bf80784114357c4"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-173043",
+      "size": 617,
+      "mtime": "2025-09-20T08:20:24.241706Z",
+      "sha256": "796710503070de20fafc553f7c16d718856efd0555f25bb0367a20f0f1dd042d"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-181520",
+      "size": 747,
+      "mtime": "2025-09-20T08:30:43.5375582Z",
+      "sha256": "201d1818c71a1eee57852fdfcb7b9350134c389086e3c1247bea930f66e54ded"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-181752",
+      "size": 887,
+      "mtime": "2025-09-20T09:15:20.708427Z",
+      "sha256": "64b2540b4b4cf6f2f000612ac67ba59eb8ed0e12ab7fab34556065a4ba6e1c0a"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-184633",
+      "size": 1075,
+      "mtime": "2025-09-20T09:17:52.3530529Z",
+      "sha256": "4b6de4f4d7c9728a64ead0ab50a0fd8c19749fe5d02e3c3fb613fc8d73234a76"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-184703",
+      "size": 699,
+      "mtime": "2025-09-20T09:46:33.9887651Z",
+      "sha256": "43a3ea9feecc30eab6c2169fcca2c78f4e9bb054d2f3fb29e8592ce8db302eab"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-185117",
+      "size": 699,
+      "mtime": "2025-09-20T09:47:03.4758158Z",
+      "sha256": "43a3ea9feecc30eab6c2169fcca2c78f4e9bb054d2f3fb29e8592ce8db302eab"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-185134",
+      "size": 676,
+      "mtime": "2025-09-20T09:51:17.1492572Z",
+      "sha256": "181ec1c0e304d0e6f3ca69ef94e86daa9293142687a33157719101221b801d1a"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-185900",
+      "size": 676,
+      "mtime": "2025-09-20T09:51:34.0580198Z",
+      "sha256": "181ec1c0e304d0e6f3ca69ef94e86daa9293142687a33157719101221b801d1a"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-190101",
+      "size": 281,
+      "mtime": "2025-09-20T09:59:00.0326071Z",
+      "sha256": "dda30b0f2a5661033a459fc9afdd16a007be0e434ead4e74254526cbabdbe995"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-191131",
+      "size": 281,
+      "mtime": "2025-09-20T10:01:01.677167Z",
+      "sha256": "dda30b0f2a5661033a459fc9afdd16a007be0e434ead4e74254526cbabdbe995"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-192018",
+      "size": 289,
+      "mtime": "2025-09-20T10:11:31.4333886Z",
+      "sha256": "67863c2f635e215885f0b022d571ea933b54355ee4ed3cf564e9c8e6c2a23e56"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-200250",
+      "size": 254,
+      "mtime": "2025-09-20T10:20:18.6246682Z",
+      "sha256": "e9b15d406fc5f370472c35344c9e8ba5808476d8b8c26f7a57d42e5152719f99"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-200614",
+      "size": 254,
+      "mtime": "2025-09-20T11:02:50.7371064Z",
+      "sha256": "e9b15d406fc5f370472c35344c9e8ba5808476d8b8c26f7a57d42e5152719f99"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-203301",
+      "size": 271,
+      "mtime": "2025-09-20T11:06:14.1272836Z",
+      "sha256": "b4ba345f47c5b728455ac97599b9afc81561b486569bd448a38b4df19baf5d74"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-204658",
+      "size": 250,
+      "mtime": "2025-09-20T11:33:01.4869239Z",
+      "sha256": "0e8acc2f3ced13807aa542607e4937575b8f9ac40959fee248e95dd94f3e2e25"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-205616",
+      "size": 270,
+      "mtime": "2025-09-20T11:46:58.5088637Z",
+      "sha256": "057a187179a60d1eb5f84c80a5a14fc0ec34ac702933b2203693545ebabc418f"
+    },
+    {
+      "path": "webui\\src\\main.tsx.bak-20250920-223601",
+      "size": 358,
+      "mtime": "2025-09-20T12:29:18.8343497Z",
+      "sha256": "00f78074962344719544862d40abb820a2a08a9ffd00315df8d853e247a16e34"
+    },
+    {
+      "path": "webui\\src\\ops360\\main.tsx",
+      "size": 457,
+      "mtime": "2025-09-20T11:40:10.9836686Z",
+      "sha256": "8a4c956ff1b92499e21f113f6b684e306f1d927d4423da0544444e5287fa8308"
+    },
+    {
+      "path": "webui\\src\\ops360\\main.tsx.bak-20250920-204010",
+      "size": 248,
+      "mtime": "2025-09-20T11:36:54.028631Z",
+      "sha256": "3077ec2ec0fecbd3f5a45b5051d2db005052e0e007385b8cbf0b35f35a7cb398"
+    },
+    {
+      "path": "webui\\tailwind.config.cjs",
+      "size": 214,
+      "mtime": "2025-09-20T07:23:32.2826741Z",
+      "sha256": "b78083358ecf99ab7dcf3fe2a152118c3fbe25cd98f22189245a5dd9884efb6f"
+    },
+    {
+      "path": "webui\\tailwind.config.cjs.bak-20250920-162332",
+      "size": 215,
+      "mtime": "2025-09-20T07:13:28.4914444Z",
+      "sha256": "352bf6e0b053f461604e76115ec8cbc6186c729c40b21092347cd7daf36d7384"
+    },
+    {
+      "path": "webui\\tailwind.config.js.bak-20250920-161237",
+      "size": 202,
+      "mtime": "2025-09-20T04:49:37.9142064Z",
+      "sha256": "8e1be0b6a597a6d901942fb2c8992d8ba18cd2bdff6685d97e97790cf5b791a1"
+    },
+    {
+      "path": "webui\\tailwind.config.js.bak-20250920-161328",
+      "size": 215,
+      "mtime": "2025-09-20T07:12:37.7894771Z",
+      "sha256": "352bf6e0b053f461604e76115ec8cbc6186c729c40b21092347cd7daf36d7384"
+    },
+    {
+      "path": "webui\\tailwind.config.ts",
+      "size": 178,
+      "mtime": "2025-09-20T12:29:18.8413493Z",
+      "sha256": "3a0bbe7f90346afba27bbfbc97c1ca63481b3594b2da17fb36ef5df0ec66c32d"
+    },
+    {
+      "path": "webui\\tailwind.config.ts.bak-20250920-192018",
+      "size": 223,
+      "mtime": "2025-09-20T09:41:20.2304931Z",
+      "sha256": "702be5f0bb059a7e3ffba7d2c5a871a3385b53b37827c0c3125c7a6e4c9b3beb"
+    },
+    {
+      "path": "webui\\tailwind.config.ts.bak-20250920-200250",
+      "size": 367,
+      "mtime": "2025-09-20T10:20:18.6296706Z",
+      "sha256": "a31490c13e79512f6e7573e8f315e8b4302c1f7017316c45cb5b88cfe3e7bd70"
+    },
+    {
+      "path": "webui\\tailwind.config.ts.bak-20250920-200614",
+      "size": 367,
+      "mtime": "2025-09-20T11:02:50.7421966Z",
+      "sha256": "a31490c13e79512f6e7573e8f315e8b4302c1f7017316c45cb5b88cfe3e7bd70"
+    },
+    {
+      "path": "webui\\tailwind.config.ts.bak-20250920-204658",
+      "size": 672,
+      "mtime": "2025-09-20T11:06:14.1078264Z",
+      "sha256": "f72cdb2884ee40e218cdbb5cb96aa9c39f3ef25249622e21c6f258c8b004d964"
+    },
+    {
+      "path": "webui\\tailwind.config.ts.bak-20250920-212918",
+      "size": 712,
+      "mtime": "2025-09-20T11:46:58.5226758Z",
+      "sha256": "ee76175269911df0434c3b5c3032d2b33ef292e886089faacc58c8ed6fb52792"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+# NO-SHELL
+name: Feature request
+description: 새 기능을 제안합니다
+labels: [enhancement]
+body:
+  - type: textarea
+    id: why
+    attributes: { label: 왜 필요한가요?, placeholder: 배경/목표/KPI }
+    validations: { required: true }

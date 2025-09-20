@@ -1,26 +1,32 @@
 #requires -Version 7.0
-param()
 Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$ErrorActionPreference='Stop'
+$ProgressPreference='SilentlyContinue'
+$maxBytes = 5MB
+$nul = [char]0
+$raw = & git diff --cached --diff-filter=AM --name-only -z
+$files = @()
+if ($raw) { $files = ($raw -split [string]$nul) | Where-Object { $_ } }
 
-# 스테이지된 PS1 목록
-$files = git diff --cached --name-only --diff-filter=ACM | Where-Object { $_ -like '*.ps1' }
-if (-not $files) { exit 0 }
-
-$badHits = @()
-foreach ($f in $files) {
-  $txt = git show ":$f" 2>$null
-  if ($LASTEXITCODE -ne 0) { continue }
-  $m1 = [regex]::Matches($txt, '^[ \t]*=\s*Flush-Queue\b.*$', 'Multiline')
-  if ($m1.Count -gt 0) {
-    foreach ($m in $m1) { $badHits += @{ file=$f; line=$m.Value } }
-  }
-}
-if ($badHits.Count -gt 0) {
-  Write-Host "[BLOCK] Invalid 'Flush-Queue' assignment detected:`n" -ForegroundColor Red
-  foreach ($h in $badHits) { Write-Host ("  {0}`n    {1}" -f $h.file, $h.line.Trim()) }
-  Write-Host "`nFix to: `$null = Flush-Queue ..." -ForegroundColor Yellow
+# Block .venv
+$bad = $files | Where-Object { $_ -match '(?i)(^|[\\/])\.venv([\\/]|$)' }
+if ($bad) {
+  Write-Host "[BLOCK] Changes under .venv are not allowed:" -ForegroundColor Red
+  $bad | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
   exit 1
+}
+
+# Block large files > 5MB
+foreach ($f in $files) {
+  if (Test-Path -- $f) {
+    try {
+      $sz = (Get-Item -- $f).Length
+      if ($sz -gt $maxBytes) {
+        $mb = [math]::Round($sz/1MB,2)
+        Write-Host "[BLOCK] Large file (>5MB): $f (${mb} MB)" -ForegroundColor Red
+        exit 1
+      }
+    } catch { }
+  }
 }
 exit 0

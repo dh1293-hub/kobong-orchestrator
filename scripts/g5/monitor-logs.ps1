@@ -1,73 +1,61 @@
-# APPLY IN SHELL
-# Kobong-Orchestrator — Monitor Logs v1.3  (generated: 2025-09-15 00:53:23 +09:00)
 #requires -Version 7.0
-param([string]$Root,[int]$LookbackMinutes=1440,[int]$Top=5,[switch]$Json,[string]$OutDir)
 Set-StrictMode -Version Latest
-$ErrorActionPreference='Stop'
-$PSDefaultParameterValues['Out-File:Encoding']='utf8'
-$PSDefaultParameterValues['*:Encoding']='utf8'
+$ErrorActionPreference = "Stop"
 
-function Get-RepoRoot {
-  if ($Root -and (Test-Path $Root)) { return (Resolve-Path $Root).Path }
-  try { $r = git rev-parse --show-toplevel 2>$null; if ($r) { return $r } } catch {}
-  return (Get-Location).Path
+function Test-HasProp([object]$o, [string]$name){
+  return $null -ne $o -and $o.PSObject -and $o.PSObject.Properties.Match($name).Count -gt 0
 }
-$RepoRoot = Get-RepoRoot
-Set-Location $RepoRoot
-if (-not $OutDir) { $OutDir = Join-Path $RepoRoot 'out/status' }
-New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-
-function Read-Jsonl($p){
-  $res=@(); if (-not (Test-Path $p)) { return $res }
-  Get-Content -Path $p -Encoding utf8 | ForEach-Object {
-    if ([string]::IsNullOrWhiteSpace($_)) { return }
-    try { $res += ($_ | ConvertFrom-Json) } catch {}
-  }; return $res
-}
-
-$since      = (Get-Date).AddMinutes(-$LookbackMinutes)
-$applyPath  = Join-Path $RepoRoot 'logs/apply-log.jsonl'
-$apply      = @( Read-Jsonl $applyPath | Where-Object { $_.timestamp -and ([datetime]$_.timestamp) -ge $since } )
-
-$applyTotal = $apply.Count
-$ok         = @( $apply | Where-Object { $_.outcome -eq 'SUCCESS' } ).Count
-$fail       = @( $apply | Where-Object { $_.outcome -eq 'FAILURE' } ).Count
-$dry        = @( $apply | Where-Object { $_.outcome -eq 'DRYRUN'  } ).Count
-
-$outStats   = @( $apply | Group-Object outcome )        | Sort-Object Count -Descending
-$errStats   = @( $apply | Where-Object { $_.errorCode } | Group-Object errorCode ) | Sort-Object Count -Descending
-
-Clear-Host
-Write-Host ("KOBONG — LOG SUMMARY @ {0}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) -ForegroundColor Cyan
-Write-Host ("Scope: last {0} min" -f $LookbackMinutes) -ForegroundColor DarkGray
-Write-Host ""
-Write-Host "[APPLY-LOG]" -ForegroundColor Yellow
-Write-Host ("  · Total={0}  SUCCESS={1}  FAILURE={2}  DRYRUN={3}" -f $applyTotal,$ok,$fail,$dry)
-if ($outStats.Count -gt 0) {
-  Write-Host "  · Outcome Top:"
-  $outStats | Select-Object -First $Top | ForEach-Object { Write-Host ("     - {0}: {1}" -f $_.Name,$_.Count) }
-} else { Write-Host "  · Outcome Top: <none>" }
-if ($errStats.Count -gt 0) {
-  Write-Host "  · ErrorCode Top:"
-  $errStats | Select-Object -First $Top | ForEach-Object { Write-Host ("     - {0}: {1}" -f $_.Name,$_.Count) }
-} else { Write-Host "  · ErrorCode Top: <none>" }
-
-if ($Json) {
-  $ts  = Get-Date -Format 'yyyyMMdd-HHmmss'
-  $obj = @{
-    ts       = (Get-Date).ToString('o')
-    rangeMin = $since.ToString('o')
-    apply    = @{
-      total     = $applyTotal
-      outcomes  = @()
-      topErrors = @()
-    }
+function Read-JsonLines([string]$path){
+  if(-not (Test-Path $path)){ return @() }
+  $out=@()
+  Get-Content -Path $path -ErrorAction SilentlyContinue | ForEach-Object {
+    $line = $_.Trim()
+    if(-not $line){ return }
+    try{
+      $obj = $line | ConvertFrom-Json -ErrorAction Stop
+      if($obj){ $out += $obj }
+    }catch{ } # JSON 한 줄이 아닐 수 있음 → 무시
   }
-  foreach($g in $outStats){ $obj.apply.outcomes  += @{ name=$g.Name; count=$g.Count } }
-  foreach($g in ($errStats | Select-Object -First $Top)){ $obj.apply.topErrors += @{ code=$g.Name; count=$g.Count } }
-  $tmp = Join-Path $OutDir "log_summary.$ts.json.tmp"
-  $dst = Join-Path $OutDir "log_summary.$ts.json"
-  $obj | ConvertTo-Json -Depth 6 | Out-File -FilePath $tmp -Encoding utf8 -NoNewline
-  Move-Item -Force $tmp $dst
-  Write-Host ("[Saved] {0}" -f $dst)
+  return $out
 }
+
+$repo = 'D:\ChatGPT5_AI_Link\dosc\kobong-orchestrator'
+
+# 후보 로그들(존재하는 것만 사용) + 최신 *.log 몇 개
+$candidates = @(
+  Join-Path $repo '_gpt5.apply.log'),
+  Join-Path $repo 'apply.log',
+  Join-Path $repo 'scripts\g5\g5-apply.log'
+) | Where-Object { $_ -and (Test-Path $_) }
+
+if(-not $candidates){
+  $candidates = Get-ChildItem $repo -Recurse -Filter *.log -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTime -Descending | Select-Object -First 5 | ForEach-Object { $_.FullName }
+}
+
+$entries = @()
+foreach($f in $candidates){ $entries += Read-JsonLines $f }
+
+# outcome 있는 항목만 집계
+$withOutcome = $entries | Where-Object { Test-HasProp $_ 'outcome' }
+
+$successSet = @('APPLIED','SUCCESS','done')
+$failSet    = @('FAILED','ERROR')
+
+$stats = [pscustomobject]@{
+  Files       = $candidates
+  Total       = $withOutcome.Count
+  Success     = (@($withOutcome | Where-Object { $_.outcome -in $successSet })).Count
+  Failed      = (@($withOutcome | Where-Object { $_.outcome -in $failSet    })).Count
+  NotApplied  = (@($withOutcome | Where-Object { $_.outcome -eq 'NOT_APPLIED' })).Count
+}
+
+Write-Host "== APPLY LOG SUMMARY ==" -ForegroundColor Cyan
+$stats | Format-List
+
+Write-Host "`n== RECENT ENTRIES ==" -ForegroundColor Cyan
+$entries |
+  Sort-Object { if(Test-HasProp $_ 'timestamp'){[datetime]$_.timestamp}else{[datetime]'1970-01-01'} } -Descending |
+  Select-Object -First 30 |
+  Select-Object timestamp, level, module, action, outcome, message |
+  Format-Table -AutoSize

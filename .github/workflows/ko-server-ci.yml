@@ -1,0 +1,55 @@
+# NO-SHELL
+name: KO Server CI
+on:
+  push:
+    branches: [ "**" ]
+    paths:
+      - "server/**"
+      - "scripts/server/**"
+      - ".github/workflows/ko-server-ci.yml"
+  pull_request:
+    paths:
+      - "server/**"
+      - "scripts/server/**"
+      - ".github/workflows/ko-server-ci.yml"
+
+concurrency:
+  group: ko-server-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('server/requirements.txt','server/requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      - name: Create venv & install
+        run: |
+          python -m venv server/.venv
+          server/.venv/bin/python -m pip install --upgrade pip
+          server/.venv/bin/python -m pip install -r server/requirements.txt -r server/requirements-dev.txt
+      - name: Run tests (pytest → junit)
+        run: |
+          mkdir -p artifacts
+          server/.venv/bin/python -m pytest -q --junitxml=artifacts/junit.xml
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ko-server-test-artifacts
+          path: artifacts/
+      - name: Summary
+        if: always()
+        run: |
+          echo "## KO Server CI" >> $GITHUB_STEP_SUMMARY
+          echo "Artifacts: junit.xml" >> $GITHUB_STEP_SUMMARY

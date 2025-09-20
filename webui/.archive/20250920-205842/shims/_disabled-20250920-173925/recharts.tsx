@@ -1,0 +1,23 @@
+import * as React from "react";
+type AnyProps = Record<string, any>;
+const createStub = (name: string) => (props: AnyProps) => {
+  const { children, width, height, ...rest } = props || {};
+  const isChart = /Chart$/.test(name);
+  const isContainer = name === "ResponsiveContainer";
+  const style = isContainer ? { width: width ?? "100%", height: height ?? 300 } : undefined;
+  const Comp: any = isChart ? "svg" : isContainer ? "div" : "g";
+  return React.createElement(Comp, { "data-recharts": name, style, ...rest }, children);
+};export const LineChart = createStub('LineChart');
+export const Line = createStub('Line');
+export const BarChart = createStub('BarChart');
+export const Bar = createStub('Bar');
+export const XAxis = createStub('XAxis');
+export const YAxis = createStub('YAxis');
+export const CartesianGrid = createStub('CartesianGrid');
+export const Tooltip = createStub('Tooltip');
+export const ResponsiveContainer = createStub('ResponsiveContainer');
+export const Legend = createStub('Legend');
+export const Area = createStub('Area');
+export const AreaChart = createStub('AreaChart');
+const _ns: any = new Proxy({}, { get: (_t, k: PropertyKey) => createStub(String(k)) });
+export default _ns;

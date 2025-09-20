@@ -1,0 +1,39 @@
+name: Secure Ping Tests
+on:
+  push:
+    branches: [ main, develop, "**/feature/**", "**/ops/**" ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python -m pip install -U pip wheel
+          if [ -f server/requirements.txt ]; then
+            pip install -r server/requirements.txt
+          elif [ -f server/pyproject.toml ]; then
+            pip install . || pip install ".[all]" || true
+          else
+            pip install "fastapi>=0.104" "starlette>=0.36" "httpx>=0.24" "anyio>=3" "pytest>=7" "uvicorn>=0.23" "redis>=5"
+          fi
+      - name: Run secure ping tests
+        shell: bash
+        run: |
+          python -m pytest -q server/tests/test_secure_ping.py --junitxml=pytest-secure.xml
+      - name: Upload junit
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: secure-ping-junit
+          path: pytest-secure.xml
+          if-no-files-found: warn

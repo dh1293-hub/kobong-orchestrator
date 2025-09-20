@@ -1,0 +1,31 @@
+declare module "lucide-react" {
+  import * as React from "react";  export const AlertCircle: React.ComponentType<any>;
+  export const ArrowDown: React.ComponentType<any>;
+  export const ArrowRight: React.ComponentType<any>;
+  export const ArrowUp: React.ComponentType<any>;
+  export const Bot: React.ComponentType<any>;
+  export const Calendar: React.ComponentType<any>;
+  export const CheckCircle2: React.ComponentType<any>;
+  export const CircleDot: React.ComponentType<any>;
+  export const Clock3: React.ComponentType<any>;
+  export const CloudLightning: React.ComponentType<any>;
+  export const GitBranch: React.ComponentType<any>;
+  export const GitCommit: React.ComponentType<any>;
+  export const GitGraph: React.ComponentType<any>;
+  export const GitPullRequest: React.ComponentType<any>;
+  export const GitPullRequestClosed: React.ComponentType<any>;
+  export const Info: React.ComponentType<any>;
+  export const Layers: React.ComponentType<any>;
+  export const LifeBuoy: React.ComponentType<any>;
+  export const Link: React.ComponentType<any>;
+  export const ListFilter: React.ComponentType<any>;
+  export const Loader2: React.ComponentType<any>;
+  export const Lock: React.ComponentType<any>;
+  export const Settings: React.ComponentType<any>;
+  export const TimerReset: React.ComponentType<any>;
+  export const TrendingDown: React.ComponentType<any>;
+  export const TrendingUp: React.ComponentType<any>;
+  export const UploadCloud: React.ComponentType<any>;
+  export const Users: React.ComponentType<any>;  const _default: Record<string, React.ComponentType<any>>;
+  export default _default;
+}

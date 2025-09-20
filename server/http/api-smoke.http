@@ -1,0 +1,27 @@
+### KO Server API smoke (VS Code REST Client)
+@base = http://127.0.0.1:8000
+
+GET {{base}}/healthz
+
+###
+GET {{base}}/api/v1/ping
+
+###
+POST {{base}}/api/v1/echo
+Content-Type: application/json
+
+{
+  "text": "hello",
+  "meta": { "a": 1 }
+}
+
+###
+POST {{base}}/api/v1/sum
+Content-Type: application/json
+
+{
+  "numbers": [1, 2, 3.5]
+}
+
+###
+GET {{base}}/api/v1/version

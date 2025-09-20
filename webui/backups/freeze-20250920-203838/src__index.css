@@ -1,0 +1,86 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Theme tokens: dark gray + neon accents */
+@layer base {
+  :root {
+    --bg: 222 10% 10%;
+    --bg-elev: 222 10% 14%;
+    --panel: 222 10% 18%;
+    --muted: 222 8% 70%;
+    --fg: 0 0% 98%;
+    --accent: 142 72% 45%;    /* emerald-ish */
+    --accent-2: 260 90% 60%;  /* violet-ish */
+    --warn: 35 95% 55%;
+    --err: 0 85% 60%;
+    --ok: 142 70% 45%;
+    --ring: 220 14% 28%;
+    --radius: 16px;
+  }
+  html, body, #root { height: 100%; }
+  body {
+    @apply antialiased;
+    background: radial-gradient(1200px 800px at 80% -10%, hsl(260 90% 10% / 0.35), transparent 60%),
+                radial-gradient(1400px 900px at -10% 120%, hsl(160 90% 8% / 0.35), transparent 60%),
+                hsl(var(--bg));
+    color: hsl(var(--fg));
+  }
+}
+
+/* Cards / Panels */
+@layer components {
+  .card {
+    @apply rounded-2xl border shadow-xl transition;
+    border-color: hsl(var(--ring) / 0.6);
+    background: linear-gradient(180deg, hsl(var(--bg-elev)), hsl(var(--panel)));
+  }
+  .card:hover { box-shadow: 0 10px 40px hsl(220 30% 10% / 0.45); }
+  .card-header { @apply px-5 pt-4 pb-2 flex items-center justify-between; }
+  .card-title { @apply text-sm font-semibold tracking-wide text-zinc-300; }
+  .card-body { @apply px-5 pb-5; }
+
+  .badge { @apply text-xs px-2 py-0.5 rounded-full border; border-color: hsl(var(--ring) / 0.7); }
+  .pill  { @apply text-[11px] px-2 py-0.5 rounded-full; }
+  .pill-ok { background: hsl(var(--ok) / 0.18); color: hsl(var(--ok)); }
+  .pill-warn { background: hsl(var(--warn) / 0.18); color: hsl(var(--warn)); }
+  .pill-err { background: hsl(var(--err) / 0.18); color: hsl(var(--err)); }
+  .pill-muted { @apply bg-zinc-800 text-zinc-300; }
+
+  .k-select { @apply bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm outline-none; }
+  .k-input  { @apply bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm outline-none w-full; }
+}
+
+/* Responsive auto grid with no dead zones */
+.auto-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 1rem;
+  align-content: start;
+}
+.spark {
+  stroke: currentColor; fill: none; stroke-width: 2;
+}
+
+@layer base {
+  :root {
+    --background: 222 30% 8%;
+    --foreground: 210 25% 96%;
+    --card: 222 26% 10%;
+    --card-foreground: 210 20% 96%;
+    --muted: 222 15% 16%;
+    --muted-foreground: 215 12% 72%;
+    --primary: 150 60% 45%;
+    --primary-foreground: 150 25% 12%;
+    --accent: 260 70% 55%;
+    --accent-foreground: 260 20% 12%;
+    --border: 220 14% 22%;
+    --ring: 150 65% 40%;
+  }
+  body { background-color: hsl(var(--background)); color: hsl(var(--foreground)); }
+}
+@layer utilities {
+  .glass { @apply bg-white/5 backdrop-blur-sm border border-white/10; }
+  .glow { box-shadow: 0 0 0.5rem rgba(0,0,0,.25), 0 0 1.2rem rgba(0,255,170,.25); }
+  .grid-auto-fill { grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); }
+}

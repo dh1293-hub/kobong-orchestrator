@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "kobong ko-v1 message",
+  "type": "object",
+  "required": ["protocol_version", "message_id", "payload"],
+  "properties": {
+    "protocol_version": {"type": "string", "enum": ["ko-v1"]},
+    "message_id": {"type": "string"},
+    "idempotency_key": {"type": "string"},
+    "priority": {"type": "integer", "minimum": 0, "maximum": 10},
+    "payload": {"type": "object"}
+  },
+  "additionalProperties": true
+}

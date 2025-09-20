@@ -1,27 +1,47 @@
+# NO-SHELL
 name: Weekly Auto-Release Smoke
+
 on:
+  workflow_dispatch:
+    inputs:
+      release_mode:
+        description: "none(태그만) | draft(드래프트 릴리스 생성)"
+        required: false
+        default: "none"
   schedule:
-    - cron: "0 0 * * 0"
-  workflow_dispatch: {}
+    # 목요일 09:00 KST = 목요일 00:00 UTC
+    - cron: "0 0 * * THU"
+
 permissions:
   contents: write
 
+concurrency:
+  group: weekly-auto-release-smoke
+  cancel-in-progress: false
+
 jobs:
   smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      SMOKE_BASE_PREFIX: "v0.0."
+      RELEASE_MODE: "${{ github.event.inputs.release_mode || 'none' }}"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          fetch-tags: false
 
       - name: Push v0.0.X smoke tag
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
         run: |
           set -euo pipefail
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name  "github-actions[bot]"
-          git fetch --tags
-          base="v0.0."; i=0
+          git fetch --tags --quiet
+          base="${SMOKE_BASE_PREFIX}"; i=0
           while git tag -l | grep -qx "${base}${i}"; do i=$((i+1)); done
           tag="${base}${i}"
           sha="$(git rev-parse HEAD)"
@@ -29,10 +49,22 @@ jobs:
           git push origin "$tag"
           echo "TAG=$tag" >> "$GITHUB_ENV"
 
-      - name: Wait for release, then clean up
+      - name: (optional) Create draft release
+        if: env.RELEASE_MODE == 'draft'
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            --title "$TAG (smoke draft)" \
+            --notes "Automated smoke draft release for tag $TAG" \
+            --draft
+
+      - name: Wait for release, then clean up
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           tag="${TAG}"
@@ -44,5 +76,6 @@ jobs:
           if [ "$ok" -ne 1 ]; then
             echo "No release found for $tag; proceeding to cleanup."
           fi
+          # 릴리스가 있으면 먼저 릴리스 삭제(드래프트 등), 이후 태그 삭제
           gh release delete "$tag" -y >/dev/null 2>&1 || true
           git push origin ":refs/tags/$tag" || true
