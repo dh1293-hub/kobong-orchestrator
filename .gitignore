@@ -8,4 +8,5 @@ logs/
 *.log.jsonl
 
 .githooks/*.bak
-.gpt5.lock
+.gpt5.lock/webui/.env.local
+/webui/.env.local
