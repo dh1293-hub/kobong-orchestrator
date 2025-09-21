@@ -1,3 +1,5 @@
 * text=auto eol=lf
 *.ps1 text eol=lf
 *.cmd text eol=crlf
+webui/* text eol=lf
+webui/* text eol=lf
