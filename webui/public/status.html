@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>Kobong — Status</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 2rem; }
+      h1 { margin: 0 0 1rem; }
+      .grid { display: grid; gap: .75rem; max-width: 720px; }
+      .card { border: 1px solid #ddd; border-radius: 12px; padding: 1rem; }
+      .label { opacity: .7; }
+      a.btn { display:inline-block; padding:.5rem .75rem; border:1px solid #ccc; border-radius:10px; text-decoration:none }
+    </style>
+  </head>
+  <body>
+    <h1>🩺 KO Status</h1>
+    <div class="grid">
+      <div class="card"><span class="label">Server health:</span> <strong id="h">checking…</strong></div>
+      <div class="card"><span class="label">Back:</span> <a href="/" class="btn">Home</a></div>
+    </div>
+    <script>
+      (async () => {
+        try {
+          const r = await fetch('http://127.0.0.1:8080/health', {cache:'no-store'});
+          document.getElementById('h').textContent = r.ok ? 'OK' : 'DOWN';
+        } catch (e) {
+          document.getElementById('h').textContent = 'UNKNOWN';
+        }
+      })();
+    </script></body>
+</html>

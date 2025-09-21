@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>Kobong Favorites — 북마크 허브</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font:16px/1.5 system-ui,Segoe UI,Roboto,Apple SD Gothic Neo,Malgun Gothic,sans-serif;background:#0b0f14;color:#e6edf3;margin:0;padding:24px}
+    h1{font-size:24px;margin:0 0 8px}
+    p.hint{opacity:.8;margin:0 0 16px}
+    .grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+    .card{background:#111827;border:1px solid #233044;border-radius:16px;padding:16px}
+    .name{font-weight:700;margin:0 0 6px}
+    .url{font-family:ui-monospace,Consolas,Menlo,monospace;font-size:12px;opacity:.85;word-break:break-all;margin-bottom:10px}
+    .row{display:flex;gap:8px}
+    button,a.btn{appearance:none;border:1px solid #334155;background:#0ea5e9;color:white;border-radius:10px;padding:8px 10px;text-decoration:none;font-weight:600;cursor:pointer}
+    button.secondary{background:#1f2937;border-color:#334155}
+    .small{font-size:12px;opacity:.8;margin-top:16px}
+  </style>
+</head>
+<body>
+  <h1>⭐ Kobong 즐겨찾기 허브</h1>
+  <p class="hint">팁: <b>Ctrl + D</b> (Mac은 <b>⌘ + D</b>) 누르면 이 페이지를 바로 북마크에 저장돼요.</p>
+
+  <div id="list" class="grid"></div>
+
+  <p class="small">북마크가 안 먹을 땐, 각 카드의 <b>열기</b>로 들어간 뒤 <b>Ctrl/⌘ + D</b>를 눌러 저장하세요.</p>
+
+<script>
+const links = [
+  { name: "GitHub 모니터", url: "http://localhost:5173/github-monitor.html" },
+  { name: "Backend 헬스체크", url: "http://127.0.0.1:8080/health" }
+  // 필요하면 여기 배열에 더 추가해도 됩니다.
+];
+
+const $list = document.getElementById('list');
+for (const item of links){
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.innerHTML = `
+    <div class="name">${item.name}</div>
+    <div class="url">${item.url}</div>
+    <div class="row">
+      <a class="btn" href="${item.url}" target="_blank" rel="noopener">열기</a>
+      <button class="secondary" data-copy="${item.url}">링크 복사</button>
+    </div>
+  `;
+  $list.appendChild(card);
+}
+$list.addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button[data-copy]');
+  if(!btn) return;
+  const u = btn.getAttribute('data-copy');
+  try{ await navigator.clipboard.writeText(u); btn.textContent = "복사됨!"; setTimeout(()=>btn.textContent="링크 복사",1200); }
+  catch{ alert("클립보드 접근이 차단되었습니다. 수동으로 복사해 주세요: " + u); }
+});
+</script></body></html>

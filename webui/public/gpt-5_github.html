@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>KoBong · GitHub Monitoring</title>
+  <style>
+    :root { --card: #ffffff; --muted:#6b7280; --bg:#f3f4f6; --fg:#111827; }
+    @media (prefers-color-scheme: dark){
+      :root { --card:#111827; --muted:#9ca3af; --bg:#0b0f14; --fg:#e5e7eb; }
+    }
+    * { box-sizing: border-box }
+    body { margin:0; background:var(--bg); color:var(--fg); font: 15px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans KR",Arial }
+    header { padding:20px 24px; display:flex; align-items:center; gap:12px }
+    header h1 { margin:0; font-size:18px; font-weight:800 }
+    main { padding:16px 24px; display:grid; gap:16px; max-width:1100px; margin:0 auto }
+    .card { background:var(--card); border-radius:16px; padding:16px; box-shadow: 0 6px 20px rgba(0,0,0,.08) }
+    .row { display:flex; gap:12px; flex-wrap:wrap }
+    .row > * { flex:1 1 220px }
+    label { font-size:12px; color:var(--muted) }
+    input,button,select { width:100%; padding:10px 12px; border-radius:10px; border:1px solid #e5e7eb; background:#fff }
+    @media (prefers-color-scheme: dark){ input,button,select { background:#0f172a; border-color:#1f2937; color:#e5e7eb } }
+    button { cursor:pointer; font-weight:700 }
+    pre { white-space:pre-wrap; word-break:break-word; margin:0 }
+    .status { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap:12px }
+    .stat { padding:12px; border-radius:12px; background:rgba(0,0,0,.03) }
+    @media (prefers-color-scheme: dark){ .stat{ background:rgba(255,255,255,.05) } }
+
+    /* GPT-5 브랜드 배지 */
+    #kobong-brand-badge { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%);
+      z-index: 9999; padding: 6px 10px; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.15);
+      backdrop-filter: blur(6px); font-weight:700; background: rgba(255,255,255,.75) }
+    #kobong-brand-badge a { text-decoration: none; color: inherit }
+    @media (prefers-color-scheme: dark) {
+      #kobong-brand-badge { background: rgba(25,25,28,.6); color: #e5e7eb; }
+      #kobong-brand-badge a { color: #e5e7eb; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>GitHub 모니터링</h1>
+    <small id="envTip" style="color:var(--muted)"></small>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="row">
+        <div><label>Owner</label><input id="owner" placeholder="ex) dh1293-hub" /></div>
+        <div><label>Repo</label><input id="repo" placeholder="ex) kobong-orchestrator" /></div>
+        <div><label>From</label><input id="from" type="datetime-local" /></div>
+        <div><label>To</label><input id="to" type="datetime-local" /></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div><button id="btnLoad">요약 불러오기</button></div>
+        <div><button id="btnStream">이벤트 스트림 연결</button></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3 style="margin:0 0 8px 0">상태 요약</h3>
+      <div class="status" id="status">
+        <div class="stat" id="stat-commits"><strong>커밋</strong><div class="v">-</div></div>
+        <div class="stat" id="stat-issues"><strong>이슈</strong><div class="v">-</div></div>
+        <div class="stat" id="stat-prs"><strong>PR</strong><div class="v">-</div></div>
+        <div class="stat" id="stat-runs"><strong>워크플로</strong><div class="v">-</div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3 style="margin:0 0 8px 0">원시 응답</h3>
+      <pre id="raw">아직 데이터가 없습니다.</pre>
+    </section>
+  </main>
+
+  <!-- KoBong 브랜드 배지 -->
+  <div id="kobong-brand-badge" aria-label="KoBong Orchestrator">
+    <a href="#">KoBong Orchestrator</a>
+  </div>
+
+  <script>
+  (function(){
+    const $ = (q) => document.querySelector(q);
+    const q = new URLSearchParams(location.search);
+    const owner = q.get('owner') || 'dh1293-hub';
+    const repo  = q.get('repo') || 'kobong-orchestrator';
+    const now = new Date();
+    const isoLocal = (d)=> new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+
+    $('#owner').value = owner;
+    $('#repo').value  = repo;
+    $('#to').value    = isoLocal(now);
+    $('#from').value  = isoLocal(new Date(now.getTime()-24*3600*1000));
+
+    const endpoint = (path)=> path.startsWith('/')? path : ('/'+path);
+    const apiSummary = '/api/github/summary';       // 있으면 사용
+    const sseEvents  = '/events/github';            // 있으면 사용
+
+    $('#envTip').textContent = 'endpoint: ' + apiSummary + ' / ' + sseEvents;
+
+    function setStat(id, v){ const el=$('#'+id+' .v'); if(el) el.textContent = v; }
+
+    async function loadSummary(){
+      const params = new URLSearchParams({
+        owner: $('#owner').value.trim(),
+        repo:  $('#repo').value.trim(),
+        from:  $('#from').value,
+        to:    $('#to').value
+      });
+      let url = endpoint(apiSummary) + '?' + params.toString();
+      try{
+        const r = await fetch(url, { headers: { 'accept':'application/json' }});
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        const data = await r.json();
+        setStat('stat-commits', data.commits?.total ?? '-');
+        setStat('stat-issues',  data.issues?.total  ?? '-');
+        setStat('stat-prs',     data.pull_requests?.total ?? '-');
+        setStat('stat-runs',    data.workflow_runs?.total ?? '-');
+        $('#raw').textContent = JSON.stringify(data, null, 2);
+      }catch(err){
+        $('#raw').textContent = '요약 API 미가용 또는 오류: '+err.message+'\nURL: '+url;
+      }
+    }
+
+    function openStream(){
+      try{
+        const url = endpoint(sseEvents);
+        const es = new EventSource(url);
+        es.onmessage = (ev)=> {
+          try{
+            const j = JSON.parse(ev.data);
+            if(j.type==='metric'){
+              setStat('stat-runs', j.workflow_runs ?? '-');
+            }
+            const prev = $('#raw').textContent;
+            $('#raw').textContent = (prev + '\\n' + ev.data).slice(-20000);
+          }catch{}
+        };
+        es.onerror = ()=>{ es.close(); };
+      }catch(err){
+        $('#raw').textContent = 'SSE 미가용 또는 오류: '+err.message;
+      }
+    }
+
+    $('#btnLoad').addEventListener('click', loadSummary);
+    $('#btnStream').addEventListener('click', openStream);
+  })();
+  </script>
+</body>
+</html>

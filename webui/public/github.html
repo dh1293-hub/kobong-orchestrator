@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>KoBong · GitHub Monitor</title>
+  <style>
+    html,body,#root{height:100%;margin:0}
+    .brand-badge{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);
+      padding:8px 12px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.15);
+      background:#fff;font:600 12px/1.1 ui-sans-serif,system-ui}
+  </style>
+</head>
+<body>
+  <div id="root" role="main" aria-label="GitHub 모니터링"></div>
+  <script type="module">
+    const url = new URLSearchParams(location.search).get('src') || '/?ui=legacy';
+    const f = document.createElement('iframe');
+    f.src = url; f.style.width='100%'; f.style.height='100%'; f.style.border='0';
+    document.getElementById('root').appendChild(f);
+  </script>
+  <div class="brand-badge">KoBong Orchestrator</div>
+</body>
+</html>
