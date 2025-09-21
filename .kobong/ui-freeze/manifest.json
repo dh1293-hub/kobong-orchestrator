@@ -1,7 +1,7 @@
 {
   "repo": "D:\\ChatGPT5_AI_Link\\dosc\\kobong-orchestrator",
   "created": "2025-09-20T23:36:04.8428749+09:00",
-  "mode": "UNFREEZE",
+  "mode": "APPLY",
   "count": 58,
   "targets": [
     "webui\\index.html",

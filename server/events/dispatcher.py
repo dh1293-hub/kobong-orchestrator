@@ -28,6 +28,7 @@ def _on_user_signed_in(data: dict) -> None:
     # TODO: add business logic
 
 @on("PAYMENT_SUCCEEDED")
+
 def _on_payment_ok(data: dict) -> None:
     hooks.emit("event.payment_succeeded", 1, {})
     # TODO: add business logic
