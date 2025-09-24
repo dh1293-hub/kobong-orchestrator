@@ -1,0 +1,36 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KoBong — Status (Core Minimal)</title>
+<style>
+  :root{--bg:#0b1020;--fg:#d8e3ff;--muted:#9fb0d1;--card:#121a34;--ok:#2ecc71;--bad:#ff6b6b;--warn:#f1c40f}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Apple SD Gothic Neo,Malgun Gothic,sans-serif}
+  .wrap{max-width:1100px;margin:24px auto;padding:0 16px}
+  h1{font-size:22px;margin:0 0 16px}
+  .meta{font-size:12px;color:var(--muted);margin:4px 0 16px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+  .card{background:var(--card);border-radius:16px;padding:14px 16px;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+  .card h2{margin:0 0 8px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .row{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px solid rgba(255,255,255,.06)}
+  .row:first-of-type{border-top:none}
+  .pill{padding:2px 8px;border-radius:999px;font-size:12px}
+  .ok{background:color-mix(in oklab, var(--ok) 25%, transparent);color:var(--ok)}
+  .bad{background:color-mix(in oklab, var(--bad) 25%, transparent);color:var(--bad)}
+  .warn{background:color-mix(in oklab, var(--warn) 25%, transparent);color:var(--warn)}
+  a{color:#7abaff;text-decoration:none}
+  footer{margin:18px 0 0;font-size:12px;color:var(--muted)}
+</style>
+<body>
+<div class="wrap">
+  <h1>KoBong — Core Status</h1>
+  <div class="meta">
+    Data: <code>/data/gh-monitor.json</code> · <span id="updated">loading…</span> ·
+    <a href="/data/gh-monitor.json" target="_blank" rel="noopener">raw</a>
+  </div>
+  <div class="grid">
+    <div class="card" id="httpCard"><h2>HTTP Checks</h2><div class="rows"></div></div>
+    <div class="card" id="tcpCard"><h2>TCP Ports</h2><div class="rows"></div></div>
+    <div class="card" id="taskCard"><h2>Task</h2><div class="rows"></div></div>
+  </div>
+  <footer>Auto-refresh every 10s · Minimal static view</footer>
+</div>
+<script src="/js/status.js" defer></script>
+</body></html>
