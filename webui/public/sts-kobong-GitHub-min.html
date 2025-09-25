@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ko"><head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>KoBong GitHub Monitor</title>
@@ -48,16 +48,49 @@ html.kb-hc #kb-topline .chip{border-color:#fff}
 .kb-theme-toggle:hover{opacity:1}
 </style>
 <!-- kobong brand style -->
-<style id="kobong-brand-style">
-#brand-badge{
-  position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
-  height:72px; width:auto; opacity:1; z-index:9999; pointer-events:none;
-  filter: drop-shadow(0 6px 18px rgba(0,0,0,.35)) brightness(1.08) contrast(1.06) saturate(1.05);
+
+<!-- kobong brand v2 -->
+
+<!-- kobong brand v3 -->
+<style id="kobong-brand-v3">
+#brand-wrap{
+  position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+  display:flex; align-items:center; justify-content:center;
+  padding:0; border:none; background:transparent; z-index:9999; pointer-events:none;
 }
-@media (min-width:1200px){ #brand-badge{ height:80px } }
-html[data-theme="light"] #brand-badge{ filter: drop-shadow(0 4px 12px rgba(0,0,0,.25)) }
+#brand-wrap>#brand-badge{
+  height:192px !important; width:auto;
+  filter: drop-shadow(0 14px 30px rgba(0,0,0,.55)) brightness(1.22) contrast(1.18) saturate(1.12);
+}
+#brand-wrap::after{
+  content:''; position:absolute; left:50%; transform:translateX(-50%);
+  bottom:-16px; width:min(56vmin,520px); height:84px; border-radius:999px;
+  background:transparent; border:2px solid rgba(255,255,255,.65);
+  box-shadow: 0 0 0 6px rgba(255,255,255,.12) inset, 0 14px 36px rgba(0,0,0,.5);
+}
+html[data-theme="light"] #brand-wrap::after{
+  border-color: rgba(0,0,0,.45);
+  box-shadow: 0 0 0 6px rgba(0,0,0,.08) inset, 0 12px 28px rgba(0,0,0,.35);
+}
+@media (max-width:720px){
+  #brand-wrap>#brand-badge{ height:150px !important; }
+  #brand-wrap::after{ width:min(70vmin,440px); height:70px; bottom:-12px }
+}
+html.kb-hc #brand-wrap::after{ border-color:#fff }
 </style>
-</head><body>
+  <style id="kb-list-style">
+    .kb-grid{display:grid;gap:12px;grid-template-columns:repeat(12,minmax(0,1fr))}
+    .kb-span-12{grid-column:span 12}.kb-span-6{grid-column:span 6}
+    @media (max-width:1024px){.kb-span-6{grid-column:span 12}}
+  </style>
+`n<style id="kb-base-style">
+@layer components {
+  .kb-brand img { height:36px; aspect-ratio:auto; }
+  .kb-brand .title { font-size:18px; font-weight:600; }
+}
+</style>`n</head><body>
+<div id="kb-brandbar" class="kb-brand" style="display:flex;align-items:center;gap:.75rem;padding:.5rem 0;"><img src="/logo.svg" alt="KO"/><span class="title">Kobong Monitor</span></div>
+
 <button id="kb-theme-toggle" class="kb-theme-toggle" type="button" aria-label="Toggle theme">Theme</button>
 <div id="kb-topline" class="kb-topline" data-kb="topline">
   <div class="chip" data-key="build_errors"><span class="k">Build Errors</span><span class="v">–</span></div>
@@ -67,7 +100,10 @@ html[data-theme="light"] #brand-badge{ filter: drop-shadow(0 4px 12px rgba(0,0,0
 </div>
 <div id="app"></div>
 <script src="js/sts-gh-min.js" defer></script>
-<img id="brand-badge" src="./brand.png" alt="brand" />
+<div id="brand-wrap" aria-hidden="true">
+  <img id="brand-badge" src="./brand.png" alt="brand"/>
+</div>
 <script defer src="./js/kb-topline.js"></script>
 <script defer src="./js/kb-theme.js"></script>
+<div class="kb-grid kb-mt-12" id="kb-panels"></div>
 </body></html>

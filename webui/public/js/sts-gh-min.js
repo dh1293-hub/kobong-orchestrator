@@ -1,3 +1,4 @@
+﻿;(function(){try{if(location.protocol==="file:"){var s=localStorage.getItem("KOBONG_API_BASE");if(!s){localStorage.setItem("KOBONG_API_BASE","http://127.0.0.1:8080");}}}catch(e){}})();
 /* kobong-step3-sse-wrapper v1 */
 (function(){
   if (window.KB && window.KB.sseConnect) return;
@@ -57,3 +58,4 @@
   });
 })();
 (()=>{try{console.log("[sts-gh-min] ready");const e=t=>{const n=document.getElementById("kobong-status");n&&(n.textContent=t)};e("js loaded @ "+(new Date).toLocaleTimeString());const o=window.__KOBONG_EVENTS_URL||"/events";try{const t=new EventSource(o);t.onopen=(()=>e("stream: open")),t.onmessage=(()=>e("msg @ "+(new Date).toLocaleTimeString())),t.onerror=(()=>{e("stream: error (check server/CORS)");try{t.close()}catch{}})}catch{}}catch(e){console.error("[sts-gh-min] init error",e)}})();
+try{ window.__kobong_api_base_promise__ && window.__kobong_api_base_promise__.then(function(u){ window.API_BASE=u; console.log('[API] base',u); }); }catch(e){}

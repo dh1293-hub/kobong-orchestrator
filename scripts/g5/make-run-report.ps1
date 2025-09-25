@@ -34,7 +34,7 @@ try {
     try {
       $c = Get-NetTCPConnection -State Listen -LocalPort $p -ErrorAction Stop
       foreach($row in $c){
-        $pid=$row.OwningProcess
+        \$TargetPid=$row.OwningProcess
         $pn=(Get-Process -Id $pid -ErrorAction SilentlyContinue).ProcessName
         [pscustomobject]@{ port=$p; state='Listening'; pid=$pid; proc=$pn }
       }

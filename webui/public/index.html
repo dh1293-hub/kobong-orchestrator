@@ -1,12 +1,35 @@
 <!doctype html><html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>KoBong Dashboard</title><link rel="stylesheet" href="css/app.css"/><!-- kobong brand style -->
-<style id="kobong-brand-style">
-#brand-badge{
-  position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
-  height:72px; width:auto; opacity:1; z-index:9999; pointer-events:none;
-  filter: drop-shadow(0 6px 18px rgba(0,0,0,.35)) brightness(1.08) contrast(1.06) saturate(1.05);
+
+<!-- kobong brand v2 -->
+
+<!-- kobong brand v3 -->
+<style id="kobong-brand-v3">
+#brand-wrap{
+  position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+  display:flex; align-items:center; justify-content:center;
+  padding:0; border:none; background:transparent; z-index:9999; pointer-events:none;
 }
-@media (min-width:1200px){ #brand-badge{ height:80px } }
-html[data-theme="light"] #brand-badge{ filter: drop-shadow(0 4px 12px rgba(0,0,0,.25)) }
+#brand-wrap>#brand-badge{
+  height:192px !important; width:auto;
+  filter: drop-shadow(0 14px 30px rgba(0,0,0,.55)) brightness(1.22) contrast(1.18) saturate(1.12);
+}
+#brand-wrap::after{
+  content:''; position:absolute; left:50%; transform:translateX(-50%);
+  bottom:-16px; width:min(56vmin,520px); height:84px; border-radius:999px;
+  background:transparent; border:2px solid rgba(255,255,255,.65);
+  box-shadow: 0 0 0 6px rgba(255,255,255,.12) inset, 0 14px 36px rgba(0,0,0,.5);
+}
+html[data-theme="light"] #brand-wrap::after{
+  border-color: rgba(0,0,0,.45);
+  box-shadow: 0 0 0 6px rgba(0,0,0,.08) inset, 0 12px 28px rgba(0,0,0,.35);
+}
+@media (max-width:720px){
+  #brand-wrap>#brand-badge{ height:150px !important; }
+  #brand-wrap::after{ width:min(70vmin,440px); height:70px; bottom:-12px }
+}
+html.kb-hc #brand-wrap::after{ border-color:#fff }
 </style>
-</head><body><header class="kb-header"><div class="kb-brand"><span class="kb-title">KoBong Orchestrator — GitHub Monitor</span><span class="kb-pill">v0.2 step-3</span><div class="kb-status"><span id="chip-stream"  class="kb-chip muted">STREAM: idle</span><span id="chip-metrics" class="kb-chip muted">METRICS: idle</span></div></div><div class="kb-controls"><input id="owner" placeholder="owner(org)"/><input id="repo" placeholder="repo"/><button id="btn-apply">적용</button></div></header><main class="kb-main"><section class="kb-grid"><article class="kb-card"><div class="kb-card-h">요약</div><div class="kb-sum"><div class="kb-kpi"><div class="v"><span id="sum-pr">0</span></div><div class="k">열린 PR</div></div><div class="kb-kpi"><div class="v"><span id="sum-issue">0</span></div><div class="k">열린 이슈</div></div><div class="kb-kpi"><div class="v"><span id="sum-failed">0</span></div><div class="k">실패 워크플로우</div></div><div class="kb-kpi"><div class="v"><span id="sum-alert">0</span></div><div class="k">경고</div></div></div></article><article class="kb-card"><div class="kb-card-h">이벤트 스트림</div><ul class="kb-events" id="events"></ul></article><article class="kb-card"><div class="kb-card-h">선택 리포지토리</div><div id="repo-info" class="kb-repo">대상 미지정</div></article></section></main><div id="kobong-mini-status" class="kb-badge"><b>KoBong</b><br/><span id="kobong-status-inline">wired (inline)…</span></div><script>window.__KOBONG_EVENTS_URL=window.__KOBONG_EVENTS_URL||"/events";</script><script type="module" src="js/app.mjs"></script><img id="brand-badge" src="./brand.png" alt="brand" />
+</head><body><header class="kb-header"><div class="kb-brand"><span class="kb-title">KoBong Orchestrator — GitHub Monitor</span><span class="kb-pill">v0.2 step-3</span><div class="kb-status"><span id="chip-stream"  class="kb-chip muted">STREAM: idle</span><span id="chip-metrics" class="kb-chip muted">METRICS: idle</span></div></div><div class="kb-controls"><input id="owner" placeholder="owner(org)"/><input id="repo" placeholder="repo"/><button id="btn-apply">적용</button></div></header><main class="kb-main"><section class="kb-grid"><article class="kb-card"><div class="kb-card-h">요약</div><div class="kb-sum"><div class="kb-kpi"><div class="v"><span id="sum-pr">0</span></div><div class="k">열린 PR</div></div><div class="kb-kpi"><div class="v"><span id="sum-issue">0</span></div><div class="k">열린 이슈</div></div><div class="kb-kpi"><div class="v"><span id="sum-failed">0</span></div><div class="k">실패 워크플로우</div></div><div class="kb-kpi"><div class="v"><span id="sum-alert">0</span></div><div class="k">경고</div></div></div></article><article class="kb-card"><div class="kb-card-h">이벤트 스트림</div><ul class="kb-events" id="events"></ul></article><article class="kb-card"><div class="kb-card-h">선택 리포지토리</div><div id="repo-info" class="kb-repo">대상 미지정</div></article></section></main><div id="kobong-mini-status" class="kb-badge"><b>KoBong</b><br/><span id="kobong-status-inline">wired (inline)…</span></div><script>window.__KOBONG_EVENTS_URL=window.__KOBONG_EVENTS_URL||"/events";</script><script type="module" src="js/app.mjs"></script><div id="brand-wrap" aria-hidden="true">
+  <img id="brand-badge" src="./brand.png" alt="brand"/>
+</div>
 </body></html>

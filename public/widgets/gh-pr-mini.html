@@ -1,0 +1,14 @@
+<!doctype html><meta charset="utf-8"><title>PR Mini List</title>
+<style>:root{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto}body{margin:0;background:#0b0f19;color:#e6e8f0}.wrap{padding:12px}.row{display:flex;gap:8px;align-items:center;padding:8px 10px;border-radius:12px;background:#12172a;margin:6px 0}.dot{width:10px;height:10px;border-radius:50%}.s-open{background:#f5c518}.s-merged{background:#22c55e}.s-closed{background:#ef4444}.s-unknown{background:#64748b}a{color:#93c5fd;text-decoration:none}.title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.meta{opacity:.8;font-size:12px}header{font-weight:700;letter-spacing:.3px;margin:8px 0 6px}</style>
+<div class="wrap"><header>Recent PRs</header><div id="list"></div><div id="meta" class="meta"></div></div>
+<script>
+async function load(){
+  const el=document.getElementById('list'), meta=document.getElementById('meta');
+  try{
+    const r = await fetch('/data/gh-monitor.json?ts='+Date.now(),{cache:'no-store'}); const j = await r.json();
+    el.innerHTML=''; (j.recent||[]).forEach(p=>{const s=(p.state||'unknown').toLowerCase(); const dot=`<div class="dot s-${s}"></div>`; const t=`<a href="${p.url}" target="_blank" class="title">#${p.number} · ${p.title}</a>`; const info=`<span class="meta">${p.head} → ${p.base}</span>`; el.insertAdjacentHTML('beforeend', `<div class="row">${dot}${t}${info}</div>`);});
+    meta.textContent = `repo: ${j.repo} · updated: ${j.timestamp}`;
+  }catch(e){ meta.textContent='load failed: '+e.message }
+}
+load(); setInterval(load, 10000);
+</script>
