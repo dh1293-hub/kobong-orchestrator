@@ -1,64 +1,24 @@
 name: ak-commands
-
 on:
   issue_comment:
     types: [created]
-
 permissions:
   contents: write
   pull-requests: write
   checks: write
   statuses: write
   issues: write
-  actions: write   # for gh run rerun
-
-# PR 단위 동시 실행 방지
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.issue.number || github.event.comment.id }}
-  cancel-in-progress: true
-
 jobs:
   run-ak:
-    # PR 코멘트 && '/ak' 시작 && 신뢰 작성자
-    if: ${{ github.event.issue.pull_request
-           && startsWith(github.event.comment.body, '/ak')
-           && contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) }}
+    # PR 코멘트이면서 '/ak'로 시작할 때만 실행
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/ak') }}
     runs-on: ubuntu-latest
-    env:
-      # GH CLI는 GH_TOKEN 또는 GITHUB_TOKEN를 인식합니다.
-      # GH_TOKEN 시크릿이 없으면 기본 GITHUB_TOKEN을 사용하도록 OR(||) 처리
-      GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Run dispatcher
-        id: ak
+      - name: Run KO via PS7 (stub)
         shell: pwsh
         run: |
-          $out = pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
             -RawComment "${{ github.event.comment.body }}" `
             -Sha "${{ github.sha }}" `
             -Pr  "${{ github.event.issue.number }}"
-          $out | Tee-Object -FilePath ak.log
-          "akmsg<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          Get-Content ak.log | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
-      - name: Build summary
-        shell: pwsh
-        run: |
-          "### ak-commands result`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          Get-Content ak.log | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-
-      - name: Reply with result
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const body = '```\n' + `${{ steps.ak.outputs.akmsg }}`.slice(0, 60000) + '\n```';
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body
-            });
