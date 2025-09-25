@@ -1,0 +1,12 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>KoBong Dashboard</title><link rel="stylesheet" href="css/app.css"/><!-- kobong brand style -->
+<style id="kobong-brand-style">
+#brand-badge{
+  position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
+  height:72px; width:auto; opacity:1; z-index:9999; pointer-events:none;
+  filter: drop-shadow(0 6px 18px rgba(0,0,0,.35)) brightness(1.08) contrast(1.06) saturate(1.05);
+}
+@media (min-width:1200px){ #brand-badge{ height:80px } }
+html[data-theme="light"] #brand-badge{ filter: drop-shadow(0 4px 12px rgba(0,0,0,.25)) }
+</style>
+</head><body><header class="kb-header"><div class="kb-brand"><span class="kb-title">KoBong Orchestrator — GitHub Monitor</span><span class="kb-pill">v0.2 step-3</span><div class="kb-status"><span id="chip-stream"  class="kb-chip muted">STREAM: idle</span><span id="chip-metrics" class="kb-chip muted">METRICS: idle</span></div></div><div class="kb-controls"><input id="owner" placeholder="owner(org)"/><input id="repo" placeholder="repo"/><button id="btn-apply">적용</button></div></header><main class="kb-main"><section class="kb-grid"><article class="kb-card"><div class="kb-card-h">요약</div><div class="kb-sum"><div class="kb-kpi"><div class="v"><span id="sum-pr">0</span></div><div class="k">열린 PR</div></div><div class="kb-kpi"><div class="v"><span id="sum-issue">0</span></div><div class="k">열린 이슈</div></div><div class="kb-kpi"><div class="v"><span id="sum-failed">0</span></div><div class="k">실패 워크플로우</div></div><div class="kb-kpi"><div class="v"><span id="sum-alert">0</span></div><div class="k">경고</div></div></div></article><article class="kb-card"><div class="kb-card-h">이벤트 스트림</div><ul class="kb-events" id="events"></ul></article><article class="kb-card"><div class="kb-card-h">선택 리포지토리</div><div id="repo-info" class="kb-repo">대상 미지정</div></article></section></main><div id="kobong-mini-status" class="kb-badge"><b>KoBong</b><br/><span id="kobong-status-inline">wired (inline)…</span></div><script>window.__KOBONG_EVENTS_URL=window.__KOBONG_EVENTS_URL||"/events";</script><script type="module" src="js/app.mjs"></script><img id="brand-badge" src="./brand.png" alt="brand" />
+</body></html>

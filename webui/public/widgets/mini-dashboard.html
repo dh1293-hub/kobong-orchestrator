@@ -1,0 +1,114 @@
+<!doctype html><meta charset="utf-8" />
+<title>KoBong — Mini Dashboard</title>
+<style>
+:root{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto}
+body{margin:0;background:#0b0f19;color:#e6e8f0}
+header{display:flex;align-items:center;gap:8px;padding:14px 18px;font-weight:700;letter-spacing:.3px}
+.badge{display:inline-flex;align-items:center;gap:8px;padding:2px 8px;border-radius:999px;background:#12172a;font-size:12px}
+.dot{width:8px;height:8px;border-radius:50%}
+.dot.ok{background:#22c55e}.dot.warn{background:#f59e0b}.dot.err{background:#ef4444}.dot.off{background:#64748b}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px}
+.card{background:#12172a;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.25);overflow:hidden}
+.card h3{margin:0;padding:10px 12px;border-bottom:1px solid #1e2438;font-size:14px;opacity:.9;display:flex;justify-content:space-between;align-items:center}
+iframe{width:100%;height:120px;border:0}
+.pad{padding:10px 12px}
+.kv{display:flex;gap:10px;flex-wrap:wrap}
+.kv .chip{background:#0b1224;border:1px solid #1e2438;border-radius:10px;padding:6px 8px;font-size:12px}
+pre{margin:0;padding:10px 12px;background:#0b1224;border-top:1px solid #1e2438;max-height:180px;overflow:auto}
+.small{opacity:.8;font-size:12px}
+</style>
+<header>
+  KoBong Orchestrator — Mini Dashboard
+  <span id="apiBadge" class="badge"><span class="dot off"></span><span>API</span></span>
+  <span id="sseBadge" class="badge"><span class="dot off"></span><span>SSE</span></span>
+  <span id="jsonBadge" class="badge"><span class="dot off"></span><span>JSON</span></span>
+</header>
+<div class="grid">
+  <div class="card">
+    <h3>PR Badge</h3>
+    <iframe src="/widgets/gh-pr-badge.html" title="PR Badge"></iframe>
+  </div>
+  <div class="card">
+    <h3>Recent PRs</h3>
+    <iframe src="/widgets/gh-pr-mini.html" title="PR Mini"></iframe>
+  </div>
+  <div class="card">
+    <h3>Metrics <span id="mStat" class="small">-</span></h3>
+    <div class="pad">
+      <div class="kv" id="mChips"></div>
+    </div>
+    <pre id="mRaw">loading…</pre>
+  </div>
+  <div class="card">
+    <h3>Events (SSE) <span id="eStat" class="small">-</span></h3>
+    <div class="pad">
+      <div class="kv" id="eChips"></div>
+    </div>
+    <pre id="eRaw">connecting…</pre>
+  </div>
+</div>
+<script>
+const API_PORT = 5174;
+const API_BASE = `http://127.0.0.1:${API_PORT}`;
+const $ = (id)=>document.getElementById(id);
+const pretty = (o)=>{ try{return JSON.stringify(o,null,2)}catch{return String(o)} };
+const setBadge=(id,cls,txt)=>{ const b=$(id); if(!b) return; const dot=b.querySelector('.dot'); b.lastChild.textContent=' '+txt; dot.className='dot '+cls; };
+
+async function hasApi(){
+  try{ const r=await fetch(API_BASE+'/health',{cache:'no-store'}); return r.ok }catch{return false}
+}
+
+function chips(container, map){
+  const el=$(container); if(!el) return;
+  el.innerHTML='';
+  Object.entries(map).forEach(([k,v])=>{
+    const d=document.createElement('div');
+    d.className='chip';
+    d.textContent=`${k}: ${v}`;
+    el.appendChild(d);
+  });
+}
+
+async function loadMetrics(useApi){
+  const stat=$('mStat'), raw=$('mRaw');
+  try{
+    if(useApi){
+      const r=await fetch(API_BASE+'/metrics',{cache:'no-store'}); const j=await r.json();
+      chips('mChips', {repo:j.repo, base:j.base, open:j.totals?.open??'-', merged_24h:j.totals?.merged_24h??'-'});
+      raw.textContent=pretty(j); stat.textContent='(from API)';
+      setBadge('jsonBadge','ok','JSON');
+    }else{
+      // 폴백: 정적 텍스트/JSON
+      const r=await fetch('/metrics?ts='+Date.now(),{cache:'no-store'});
+      const t=await r.text(); raw.textContent=t; stat.textContent='(static)';
+      try{ const j=JSON.parse(t); chips('mChips', {repo:j.repo, base:j.base, open:j.totals?.open??'-', merged_24h:j.totals?.merged_24h??'-'}); setBadge('jsonBadge','ok','JSON') }catch{ setBadge('jsonBadge','warn','TEXT') }
+    }
+  }catch(e){
+    raw.textContent='ERR '+e.message; stat.textContent='(error)'; setBadge('jsonBadge','err','ERROR');
+  }
+}
+
+async function init(){
+  const api = await hasApi();
+  setBadge('apiBadge', api?'ok':'off', api?'ON':'OFF');
+  await loadMetrics(api);
+  setInterval(()=>loadMetrics(api), 10000);
+
+  // SSE
+  const eRaw=$('eRaw'); const eStat=$('eStat');
+  if(api && typeof EventSource!=='undefined'){
+    try{
+      const es=new EventSource(API_BASE+'/events');
+      es.onopen = ()=>{ eStat.textContent='(connected)'; setBadge('sseBadge','ok','LIVE'); };
+      es.onerror=()=>{ eStat.textContent='(retrying...)'; setBadge('sseBadge','warn','RETRY'); };
+      es.addEventListener('update', ev=>{ try{ const j=JSON.parse(ev.data); eRaw.textContent=pretty(j); chips('eChips', {repo:j.repo, base:j.base}); }catch{ eRaw.textContent=ev.data } });
+      es.addEventListener('ping',  ()=>{ /* heartbeat */ });
+    }catch(e){ eStat.textContent='(SSE err)'; eRaw.textContent='SSE ERR '+e.message; setBadge('sseBadge','err','ERROR'); }
+  }else{
+    // 폴백: 정적 /events(텍스트)
+    try{ const t = await (await fetch('/events?ts='+Date.now(),{cache:'no-store'})).text(); eRaw.textContent=t; eStat.textContent='(static)'; setBadge('sseBadge','off','OFF'); }
+    catch(e){ eRaw.textContent='ERR '+e.message; eStat.textContent='(error)'; setBadge('sseBadge','err','ERROR'); }
+  }
+}
+init();
+</script>
