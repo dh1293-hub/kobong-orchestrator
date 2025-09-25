@@ -11,6 +11,11 @@ permissions:
   statuses: write
   issues: write
 
+# PR 단위 동시 실행 방지 (중복 코멘트시 이전 실행 취소)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number || github.event.comment.id }}
+  cancel-in-progress: true
+
 jobs:
   run-ak:
     # PR 코멘트 && '/ak' 시작 && 작성자 권한(OWNER/MEMBER/COLLABORATOR) 필터
@@ -29,17 +34,25 @@ jobs:
             -RawComment "${{ github.event.comment.body }}" `
             -Sha "${{ github.sha }}" `
             -Pr  "${{ github.event.issue.number }}"
+          $out | Tee-Object -FilePath ak.log
           "akmsg<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          $out | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Get-Content ak.log | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Build summary
+        shell: pwsh
+        run: |
+          "### ak-commands result`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          Get-Content ak.log | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
       - name: Reply with result
         uses: actions/github-script@v7
         with:
           script: |
+            const body = '```\n' + `${{ steps.ak.outputs.akmsg }}`.slice(0, 60000) + '\n```';
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: '```\n' + `${{ steps.ak.outputs.akmsg }}` + '\n```'
-            })
+              body
+            });
