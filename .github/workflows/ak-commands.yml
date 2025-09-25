@@ -2,8 +2,6 @@ name: ak-commands
 on:
   issue_comment:
     types: [created]
-  pull_request_review_comment:
-    types: [created]
 permissions:
   contents: write
   pull-requests: write
@@ -12,7 +10,8 @@ permissions:
   issues: write
 jobs:
   run-ak:
-    if: contains(github.event.comment.body, ''/ak '')
+    # PR에 달린 코멘트이면서 '/ak'로 시작할 때만
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/ak') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,4 +21,4 @@ jobs:
           pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
             -RawComment "${{ github.event.comment.body }}" `
             -Sha "${{ github.sha }}" `
-            -Pr "${{ github.event.issue.number || github.event.pull_request.number }}"
+            -Pr  "${{ github.event.issue.number }}"
