@@ -10,31 +10,16 @@ permissions:
   checks: write
   statuses: write
   issues: write
-concurrency:
-  group: ak-${{ github.event.pull_request.number || github.event.issue.number }}
-  cancel-in-progress: true
 jobs:
   run-ak:
-    if: contains(github.event.comment.body, '/ak ')
+    if: contains(github.event.comment.body, ''/ak '')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Parse command and args
-        id: parse
-        shell: bash
-        run: |
-          BODY="${{ github.event.comment.body }}"
-          # command (첫 단어)
-          cmd=$(echo "$BODY" | sed -n 's/.*\/ak[[:space:]]\+\([a-z0-9-]\+\).*/\1/p')
-          # rest args (명령 뒤 전체)
-          rest=$(echo "$BODY" | sed -n 's/.*\/ak[[:space:]]\+[a-z0-9-]\+\s*\(.*\)$/\1/p')
-          echo "cmd=$cmd"  >> $GITHUB_OUTPUT
-          echo "arg=$rest" >> $GITHUB_OUTPUT
-      - name: Dispatch (PS7)
+      - name: Run KO via PS7 (stub)
         shell: pwsh
         run: |
-          pwsh -NoLogo -NoProfile -File AUTO-Kobong/scripts/g5/ak-dispatch.ps1 `
-            -Command "${{ steps.parse.outputs.cmd }}" `
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
+            -RawComment "${{ github.event.comment.body }}" `
             -Sha "${{ github.sha }}" `
-            -Pr "${{ github.event.issue.number || github.event.pull_request.number }}" `
-            -Arg "${{ steps.parse.outputs.arg }}"
+            -Pr "${{ github.event.issue.number || github.event.pull_request.number }}"
