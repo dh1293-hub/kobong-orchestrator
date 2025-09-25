@@ -1,24 +1,44 @@
 name: ak-commands
+
 on:
   issue_comment:
     types: [created]
+
 permissions:
   contents: write
   pull-requests: write
   checks: write
   statuses: write
   issues: write
+
 jobs:
   run-ak:
-    # PR 코멘트이면서 '/ak'로 시작할 때만 실행
-    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/ak') }}
+    if: ${{ github.event.issue.pull_request
+           && startsWith(github.event.comment.body, '/ak')
+           && contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run KO via PS7 (stub)
+
+      - name: Run dispatcher
+        id: ak
         shell: pwsh
         run: |
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
+          $out = pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
             -RawComment "${{ github.event.comment.body }}" `
             -Sha "${{ github.sha }}" `
             -Pr  "${{ github.event.issue.number }}"
+          "akmsg<<EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $out | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "EOF" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Reply with result
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '```\n' + `${{ steps.ak.outputs.akmsg }}` + '\n```'
+            })
