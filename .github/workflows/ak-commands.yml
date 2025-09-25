@@ -13,6 +13,7 @@ permissions:
 
 jobs:
   run-ak:
+    # PR 코멘트 && '/ak' 시작 && 작성자 권한(OWNER/MEMBER/COLLABORATOR) 필터
     if: ${{ github.event.issue.pull_request
            && startsWith(github.event.comment.body, '/ak')
            && contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) }}
