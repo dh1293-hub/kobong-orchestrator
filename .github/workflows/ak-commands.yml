@@ -24,6 +24,11 @@ jobs:
            && startsWith(github.event.comment.body, '/ak')
            && contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) }}
     runs-on: ubuntu-latest
+    env:
+      # GH CLI는 GH_TOKEN 또는 GITHUB_TOKEN를 인식합니다.
+      # GH_TOKEN 시크릿이 없으면 기본 GITHUB_TOKEN을 사용하도록 OR(||) 처리
+      GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+
     steps:
       - uses: actions/checkout@v4
 
