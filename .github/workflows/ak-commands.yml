@@ -1,0 +1,24 @@
+name: ak-commands
+on:
+  issue_comment:
+    types: [created]
+permissions:
+  contents: write
+  pull-requests: write
+  checks: write
+  statuses: write
+  issues: write
+jobs:
+  run-ak:
+    # PR 코멘트이면서 '/ak'로 시작할 때만 실행
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/ak') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run KO via PS7 (stub)
+        shell: pwsh
+        run: |
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
+            -RawComment "${{ github.event.comment.body }}" `
+            -Sha "${{ github.sha }}" `
+            -Pr  "${{ github.event.issue.number }}"

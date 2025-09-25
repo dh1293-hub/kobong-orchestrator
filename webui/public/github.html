@@ -1,0 +1,89 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><title>GitHub Monitor</title><style>#kobong-mini-status{position:fixed;right:12px;bottom:12px;padding:10px 12px;border-radius:12px;background:#0b1020;color:#fff;font:12px/1.4 ui-sans-serif,system-ui;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:99999}</style><!-- kobong ui-step2 -->
+<style id="kobong-step2">
+:root{--card-border:rgba(255,255,255,.22)}
+.kb-card,.card,.status-card{border:1.5px solid var(--card-border);border-radius:14px}
+.sse-error-badge,#sse-error{display:none!important}
+#brand-badge{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);opacity:.9;max-height:48px;pointer-events:none;z-index:9999}
+</style>
+<!-- kobong ui-step4 -->
+<style id="kobong-step4">
+#kb-topline{position:sticky;top:8px;z-index:999;display:flex;gap:8px;justify-content:center;margin:6px auto 10px;padding:6px 10px;background:rgba(10,14,30,.5);backdrop-filter:saturate(140%) blur(8px);border:1px solid rgba(255,255,255,.18);border-radius:12px;max-width:920px}
+#kb-topline .chip{display:flex;align-items:center;gap:6px;font:500 12px/1.2 Segoe UI,Arial;color:#dfe8ff;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);padding:6px 10px;border-radius:999px}
+#kb-topline .chip .k{opacity:.7;letter-spacing:.3px}
+#kb-topline .chip .v{font-weight:700}
+#kb-topline .chip.ok{border-color:rgba(52,211,153,.6)}
+#kb-topline .chip.warn{border-color:rgba(251,191,36,.7)}
+#kb-topline .chip.bad{border-color:rgba(239,68,68,.7)}
+@media (max-width:720px){#kb-topline{flex-wrap:wrap}}
+</style>
+<!-- kobong ui-step5 -->
+<style id="kobong-step5-theme">
+:root{
+  --bg:#0b1020; --fg:#dfe8ff; --card:#0f1733;
+  --muted:rgba(255,255,255,.65);
+  --card-border:rgba(255,255,255,.22);
+  --chip-bg:rgba(255,255,255,.06); --chip-border:rgba(255,255,255,.18)
+}
+html[data-theme="light"]{
+  --bg:#f8fafc; --fg:#0b1020; --card:#ffffff;
+  --muted:rgba(0,0,0,.60);
+  --card-border:rgba(0,0,0,.14);
+  --chip-bg:rgba(0,0,0,.04); --chip-border:rgba(0,0,0,.16)
+}
+html,body{background:var(--bg);color:var(--fg)}
+.kb-card,.card,.status-card{background:var(--card);border-color:var(--card-border)}
+#kb-topline .chip{background:var(--chip-bg);border-color:var(--chip-border)}
+html.kb-hc{filter:contrast(1.12) saturate(1.08)}
+html.kb-hc #kb-topline .chip{border-color:#fff}
+.kb-theme-toggle{
+  position:fixed; top:12px; right:12px; z-index:9999;
+  padding:8px 10px; border-radius:999px; font:600 12px/1 Segoe UI,Arial;
+  background:var(--chip-bg); color:var(--fg); border:1px solid var(--chip-border);
+  opacity:.9
+}
+.kb-theme-toggle:hover{opacity:1}
+</style>
+<!-- kobong brand style -->
+
+<!-- kobong brand v2 -->
+
+<!-- kobong brand v3 -->
+<style id="kobong-brand-v3">
+#brand-wrap{
+  position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+  display:flex; align-items:center; justify-content:center;
+  padding:0; border:none; background:transparent; z-index:9999; pointer-events:none;
+}
+#brand-wrap>#brand-badge{
+  height:192px !important; width:auto;
+  filter: drop-shadow(0 14px 30px rgba(0,0,0,.55)) brightness(1.22) contrast(1.18) saturate(1.12);
+}
+#brand-wrap::after{
+  content:''; position:absolute; left:50%; transform:translateX(-50%);
+  bottom:-16px; width:min(56vmin,520px); height:84px; border-radius:999px;
+  background:transparent; border:2px solid rgba(255,255,255,.65);
+  box-shadow: 0 0 0 6px rgba(255,255,255,.12) inset, 0 14px 36px rgba(0,0,0,.5);
+}
+html[data-theme="light"] #brand-wrap::after{
+  border-color: rgba(0,0,0,.45);
+  box-shadow: 0 0 0 6px rgba(0,0,0,.08) inset, 0 12px 28px rgba(0,0,0,.35);
+}
+@media (max-width:720px){
+  #brand-wrap>#brand-badge{ height:150px !important; }
+  #brand-wrap::after{ width:min(70vmin,440px); height:70px; bottom:-12px }
+}
+html.kb-hc #brand-wrap::after{ border-color:#fff }
+</style>
+</head><body>
+<button id="kb-theme-toggle" class="kb-theme-toggle" type="button" aria-label="Toggle theme">Theme</button>
+<div id="kb-topline" class="kb-topline" data-kb="topline">
+  <div class="chip" data-key="build_errors"><span class="k">Build Errors</span><span class="v">–</span></div>
+  <div class="chip" data-key="open_prs"><span class="k">Open PRs</span><span class="v">–</span></div>
+  <div class="chip" data-key="open_issues"><span class="k">Open Issues</span><span class="v">–</span></div>
+  <div class="chip" data-key="latency_ms"><span class="k">Latency</span><span class="v">–</span></div>
+</div><div id="app"></div><script>(()=>{try{const r=document.getElementById("app")||document.body;let b=document.getElementById("kobong-mini-status");if(!b){b=document.createElement("div");b.id="kobong-mini-status";b.innerHTML="<b>KoBong GitHub Monitor</b><br/><span id=""kobong-status"">booting…</span>";r.appendChild(b)}const set=t=>{const s=document.getElementById("kobong-status");if(s)s.textContent=t};set("wired (inline) @ "+new Date().toLocaleString())}catch(e){console.error(e)}})();</script><script>window.__KOBONG_EVENTS_URL="http://127.0.0.1:8088/events";</script><script src="js/sts-gh-min.js" defer></script><div id="brand-wrap" aria-hidden="true">
+  <img id="brand-badge" src="./brand.png" alt="brand"/>
+</div>
+<script defer src="./js/kb-topline.js"></script>
+<script defer src="./js/kb-theme.js"></script>
+</body></html>

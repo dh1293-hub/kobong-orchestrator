@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "targets": [
+    "Rollbackfile.json",
+    ".kobong/patches.pending.txt",
+    "scripts/g5/apply-patches.ps1",
+    "scripts/g5/make-run-report.ps1",
+    "scripts/g5/good-save.ps1",
+    "scripts/g5/good-list.ps1",
+    "scripts/g5/good-restore.ps1",
+    ".kobong/fix_loop_runbook_초보_복붙_전용_v_1.md",
+    ".kobong/GitHub-연동-모니터-UI상세.md",
+    ".kobong/GitHub-연동-모니터링-기능_계획서.md",
+    ".kobong/GitHub-연동-모니터링-시스템.md",
+    ".kobong/GPT-5-kobong-orchestrator-모니터링-UI상세.md",
+    ".kobong/GPT-5-kobong-orchestrator-모니터링-기능_계획서.md",
+    ".kobong/GPT-5-kobong-orchestrator-모니터링-시스템.md",
+    ".kobong/kobong_logger_cli_minimal_standard_v1.2.md",
+    ".kobong/kobong-orchestrator_계획서.md",
+    ".kobong/PowerShell7_Guidelines_Kobong_v1.1.md",
+    ".kobong/에러-지침.md",
+    ".kobong/ROLLBACK_POLICY.md",
+    ".kobong/AUTO-kobong 개발 계획서.md"
+  ],
+  "retention": {
+    "bak": 30,
+    "goodSlots": 10,
+    "redo": 3,
+    "undo": 3
+  },
+  "exclude": [
+    "**/node_modules.rollbacks.git/**"
+  ],
+  "forbidden": [
+    ".kobong/GitHub-연동-모니터-UI상세.md",
+    ".kobong/GitHub-연동-모니터링-기능_계획서.md",
+    ".kobong/GitHub-연동-모니터링-시스템.md",
+    ".kobong/GPT-5-kobong-orchestrator-모니터링-UI상세.md",
+    ".kobong/GPT-5-kobong-orchestrator-모니터링-기능_계획서.md",
+    ".kobong/GPT-5-kobong-orchestrator-모니터링-시스템.md",
+    ".kobong/kobong_logger_cli_minimal_standard_v1.2.md",
+    ".kobong/kobong-orchestrator_계획서.md",
+    ".kobong/PowerShell7_Guidelines_Kobong_v1.1.md",
+    ".kobong/에러-지침.md",
+    ".kobong/fix_loop_runbook_초보_복붙_전용_v_1.md",
+    ".kobong/ROLLBACK_POLICY.md",
+    ".kobong/AUTO-kobong 개발 계획서.md"
+  ]
+}

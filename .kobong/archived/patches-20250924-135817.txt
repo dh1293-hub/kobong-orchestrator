@@ -1,0 +1,134 @@
+# PATCH START
+TARGET: scripts\apply_ui_patch.ps1
+MODE: insert-before
+FIND <<'EOF'
+^\s*\[System\.IO\.File\]::WriteAllText\(\$tmp,\s*\$js,\s*\$utf8\)\s*$
+EOF
+REPLACE <<'EOF'
+# --- ensure valid tmp path (same-volume, atomic friendly) ---
+# if $tmp is invalid or not rooted, rebuild it from the final destination path variables.
+$utf8 = if ($utf8 -is [System.Text.Encoding]) { $utf8 } else { New-Object System.Text.UTF8Encoding($false) }  # UTF-8 (no BOM)
+$dest = $Out ?? $Html ?? $JsOut ?? $JsPath ?? $Target ?? (throw "No destination path variable set for temp write")
+$dir  = Split-Path -Parent $dest
+if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+$tmp  = if ($tmp -and [IO.Path]::IsPathRooted($tmp) -and $tmp -notmatch '[:*?\"<>|]') { $tmp } else { Join-Path $dir ('.' + (Split-Path -Leaf $dest) + '.tmp') }
+# --- end: ensure tmp ---
+EOF
+# PATCH END
+# PATCH START
+TARGET: scripts\g5\unlock-gpt5-lock.ps1
+MODE: regex-replace
+FIND <<'EOF'
+\(\$active\.Count\s*-gt\s*0\s*-and\s*-not\s*\$Force\)
+EOF
+REPLACE <<'EOF'
+((@($active).Count) -gt 0 -and -not $Force)
+EOF
+# PATCH END
+# PATCH START
+TARGET: scripts\g5\apply-pending-patches.ps1
+MODE: replace
+FIND <<'EOF'
+inputHash=$global:patchHash; outcome=$outcome;
+EOF
+REPLACE <<'EOF'
+inputHash=((Get-Variable -Name patchHash -Scope Global -ValueOnly -ErrorAction SilentlyContinue) ?? ""); outcome=$outcome;
+EOF
+# PATCH END
+# PATCH START
+TARGET: scripts\g5\apply-pending-patches.ps1
+MODE: insert-after
+FIND <<'EOF'
+\$mode\s*=\s*\[regex\]::Match\(\$body,\s*'MODE:\s*\(\?<v>.+\)'\)\.Groups\['v'\]\.Value\.Trim\(\)\.ToLowerInvariant\(\)
+EOF
+REPLACE <<'EOF'
+if ($mode -eq 'regex-replace') { $mode = 'replace' }
+EOF
+# PATCH END
+
+# PATCH START
+TARGET: scripts\g5\run-auto-patch-and-verify.ps1
+MODE: replace
+FIND <<'EOF'
+\A[\s\S]*\z
+EOF
+REPLACE <<'EOF'
+# APPLY IN SHELL
+#requires -Version 7.0
+param([string]$Root)
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+$PSDefaultParameterValues['Out-File:Encoding']='utf8'
+$PSDefaultParameterValues['*:Encoding']='utf8'
+
+function Get-RepoRoot {
+  try { $p=(git rev-parse --show-toplevel 2>$null); if($p){return (Resolve-Path $p).Path} } catch {}
+  if ($Root) { return (Resolve-Path $Root).Path }
+  return (Get-Location).Path
+}
+$RepoRoot = Get-RepoRoot
+
+# ── Runner 전용 락(패처와 분리) ────────────────────────────────────────────────
+$RunnerLock = Join-Path $RepoRoot '.gpt5.runner.lock'
+if (Test-Path $RunnerLock) { Write-Error 'CONFLICT: .gpt5.runner.lock exists.'; exit 11 }
+"runner-locked $(Get-Date -Format o)" | Out-File $RunnerLock -Encoding utf8 -NoNewline
+
+$sw=[Diagnostics.Stopwatch]::StartNew()
+$trace=[guid]::NewGuid().ToString()
+$logPath = Join-Path $RepoRoot 'logs\apply-log.jsonl'
+New-Item -ItemType Directory -Force -Path (Split-Path $logPath) | Out-Null
+function LogRec([string]$level,[string]$action,[string]$outcome,[string]$msg,[string]$err='') {
+  $rec=@{timestamp=(Get-Date).ToString('o');level=$level;traceId=$trace;module='runner';action=$action;inputHash='';outcome=$outcome;durationMs=$sw.ElapsedMilliseconds;errorCode=$err;message=$msg}|ConvertTo-Json -Compress
+  Add-Content -Path $logPath -Value $rec
+}
+
+try {
+  # ── 1) 패치 적용(별도 pwsh 프로세스, 타임아웃/출력 캡처) ─────────────────────
+  $patcher = Join-Path $RepoRoot 'scripts\g5\apply-pending-patches.ps1'
+  if (!(Test-Path $patcher)) { throw "Missing: $patcher" }
+
+  $PWSH = (Get-Command pwsh).Source
+  $outLog = Join-Path $RepoRoot 'logs\patcher.stdout.log'
+  $errLog = Join-Path $RepoRoot 'logs\patcher.stderr.log'
+  $prev = $env:CONFIRM_APPLY; $env:CONFIRM_APPLY='true'
+  $arg  = @('-NoLogo','-NoProfile','-ExecutionPolicy','Bypass','-File', $patcher, '-ConfirmApply','-Root', $RepoRoot)
+  $proc = Start-Process -FilePath $PWSH -ArgumentList $arg -PassThru -WindowStyle Hidden -RedirectStandardOutput $outLog -RedirectStandardError $errLog
+  $ok   = $proc.WaitForExit(180000) # 180s
+  $env:CONFIRM_APPLY = $prev
+  if (-not $ok) { try { Stop-Process -Id $proc.Id -Force } catch {}; throw "TIMEOUT: patcher exceeded 180s (see logs/patcher.*.log)" }
+  if ($proc.ExitCode -ne 0) { throw ("PATCHER_EXIT_"+$proc.ExitCode+" (see logs/patcher.*.log)") }
+
+  # ── 2) 가드 삽입 검증 ────────────────────────────────────────────────────────
+  $core = Join-Path $RepoRoot 'scripts\apply_ui_patch.ps1'
+  if (Test-Path $core) {
+    $c = Get-Content -LiteralPath $core -Raw -Encoding UTF8
+    if ($c -notmatch 'ensure valid tmp path .* atomic friendly') {
+      throw "VERIFY FAIL: guard snippet not found in apply_ui_patch.ps1"
+    }
+  }
+
+  # ── 3) 모듈 스모크(원자쓰기) ────────────────────────────────────────────────
+  $mod = Join-Path $RepoRoot 'scripts\lib\kobong-fileio.psm1'
+  if (!(Test-Path $mod)) { throw "Missing module: $mod" }
+  Import-Module $mod -Force
+  $smoke = Join-Path $RepoRoot 'webui\public\_atomic-smoke.txt'
+  $txt   = "[atomic-ok] $(Get-Date -Format o)"
+  Write-AtomicUtf8 -Path $smoke -Content $txt -Module 'runner' -Action 'smoke'
+  if (!(Test-Path $smoke)) { throw "Smoke write failed: $smoke" }
+  Remove-Item -LiteralPath $smoke -Force -ErrorAction SilentlyContinue
+
+  # ── 4) 로그 꼬리 출력 ────────────────────────────────────────────────────────
+  $tail = (Get-Content -LiteralPath $logPath -Tail 20 -ErrorAction SilentlyContinue) -join "`n"
+  LogRec 'INFO' 'run' 'SUCCESS' ("patched & verified. tail:`n"+$tail)
+  Write-Host "`n[OK] patches applied and verified."
+}
+catch {
+  LogRec 'ERROR' 'run' 'FAILURE' $_.Exception.Message 'LOGIC'
+  Write-Error $_.Exception.Message
+  exit 13
+}
+finally {
+  Remove-Item -Force $RunnerLock -ErrorAction SilentlyContinue
+}
+EOF
+# PATCH END
