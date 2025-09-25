@@ -10,15 +10,16 @@ permissions:
   checks: write
   statuses: write
   issues: write
+  actions: write   # for gh run rerun
 
-# PR 단위 동시 실행 방지 (중복 코멘트시 이전 실행 취소)
+# PR 단위 동시 실행 방지
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.issue.number || github.event.comment.id }}
   cancel-in-progress: true
 
 jobs:
   run-ak:
-    # PR 코멘트 && '/ak' 시작 && 작성자 권한(OWNER/MEMBER/COLLABORATOR) 필터
+    # PR 코멘트 && '/ak' 시작 && 신뢰 작성자
     if: ${{ github.event.issue.pull_request
            && startsWith(github.event.comment.body, '/ak')
            && contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) }}
