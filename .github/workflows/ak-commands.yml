@@ -10,7 +10,7 @@ permissions:
   issues: write
 jobs:
   run-ak:
-    # PR에 달린 코멘트이면서 '/ak'로 시작할 때만
+    # PR 코멘트이면서 '/ak'로 시작할 때만 실행
     if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/ak') }}
     runs-on: ubuntu-latest
     steps:
