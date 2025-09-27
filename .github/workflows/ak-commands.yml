@@ -1,17 +1,22 @@
-      # 8) 실제 디스패치(PS7) — 인자 전달 (+ 종료코드 정규화)
+      # 8) 실제 디스패치(PS7) — 인자 전달 (+ 종료코드 강제 정규화)
       - name: Run KO via PS7
         shell: pwsh
         run: |
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
-            -Command "${{ steps.parse.outputs.cmd }}" `
-            -RawArgs "${{ steps.parse.outputs.args }}" `
-            -Sha "${{ github.sha }}" `
-            -Pr "${{ github.event.issue.number || github.event.pull_request.number }}"
-          $code = $LASTEXITCODE
+          $env:POWERSHELL_TELEMETRY_OPTOUT = '1'
+          $args = @(
+            '-NoLogo','-NoProfile','-File','scripts/g5/ak-dispatch.ps1',
+            '-Command','${{ steps.parse.outputs.cmd }}',
+            '-RawArgs','${{ steps.parse.outputs.args }}',
+            '-Sha','${{ github.sha }}',
+            '-Pr','${{ github.event.issue.number || github.event.pull_request.number }}'
+          )
+          $p = Start-Process -FilePath pwsh -ArgumentList $args -NoNewWindow -PassThru -Wait
+          $code = $p.ExitCode
           if ($null -eq $code) { $code = 0 }
           if ($code -lt 10) {
             Write-Host "[note] normalize exit code $code → 0 (non-fatal)"
-            exit 0
+            [Environment]::Exit(0)
           } else {
-            exit $code
+            [Environment]::Exit($code)
           }
+
