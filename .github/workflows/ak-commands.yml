@@ -18,16 +18,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1) 명령 파싱
-      - name: Parse command
+      # 1) 명령/인자 파싱
+      - name: Parse command & args
         id: parse
         shell: bash
         run: |
           body="${{ github.event.comment.body }}"
+          # /ak <cmd>
           cmd=$(echo "$body" | sed -nE 's@.*\/ak[[:space:]]+([a-z0-9\-]+).*@\1@p')
-          echo "cmd=$cmd" >> $GITHUB_OUTPUT
+          # /ak <cmd> <args...>  (나머지를 args로)
+          args=$(echo "$body" | sed -nE 's@.*\/ak[[:space:]]+[a-z0-9\-]+[[:space:]]*(.*)@\1@p')
+          echo "cmd=$cmd"   >> $GITHUB_OUTPUT
+          echo "args=$args" >> $GITHUB_OUTPUT
 
-      # 2) 권한 게이트 (OWNER/MEMBER/COLLABORATOR만 허용)
+      # 2) 권한 게이트(OWNER/MEMBER/COLLABORATOR 허용)
       - name: Check author permission
         id: auth
         shell: bash
@@ -66,7 +70,7 @@ jobs:
               owner, repo, comment_id: cid, content: 'rocket'
             });
 
-      # 5) help면 링크형 도움말 바로 댓글 후 종료
+      # 5) help면 링크형 도움말 댓글 후 조기 종료
       - name: Reply with help (links)
         if: steps.parse.outputs.cmd == 'help'
         uses: actions/github-script@v7
@@ -79,7 +83,7 @@ jobs:
               "- `/ak test` — 테스트 체크런 실행",
               "- `/ak scan --all` — 전체 스캔 보고서",
               "- `/ak fixloop preview` → `/ak fixloop apply` — 패치 미리보기/적용",
-              "- `/ak rewrite` — 코드 제안(서제스트)",
+              "- `/ak rewrite [options]` — 코드 제안(서제스트)",
               "",
               "> 로그/종료코드·롤백 규칙은 프로젝트 표준(PS7·KLC·URS)을 따릅니다."
             ];
@@ -88,12 +92,13 @@ jobs:
         if: steps.parse.outputs.cmd == 'help'
         run: echo "help replied" && exit 0
 
-      # 6) 실제 디스패치(PS7)
+      # 6) 실제 디스패치(PS7) — 인자 전달
       - name: Run KO via PS7
         shell: pwsh
         run: |
           pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
             -Command "${{ steps.parse.outputs.cmd }}" `
+            -RawArgs "${{ steps.parse.outputs.args }}" `
             -Sha "${{ github.sha }}" `
             -Pr "${{ github.event.issue.number || github.event.pull_request.number }}"
 
@@ -105,13 +110,14 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           CHECKS_URL: ${{ github.server_url }}/${{ github.repository }}/pull/${{ github.event.issue.number || github.event.pull_request.number }}/checks
           CMD: ${{ steps.parse.outputs.cmd }}
+          ARGS: ${{ steps.parse.outputs.args }}
           STATUS: ${{ job.status }}
         with:
           script: |
             const {owner, repo} = context.repo;
             const pr = context.payload.issue?.number || context.payload.pull_request?.number;
             const body = [
-              `**/ak ${process.env.CMD}** finished: **${process.env.STATUS.toUpperCase()}**`,
+              `**/ak ${process.env.CMD} ${process.env.ARGS || ''}** finished: **${process.env.STATUS.toUpperCase()}**`,
               `- Actions Run: ${process.env.RUN_URL}`,
               `- PR Checks: ${process.env.CHECKS_URL}`
             ].join("\n");
