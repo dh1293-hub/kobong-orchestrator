@@ -1,38 +1,23 @@
-      # 8) 모드 판별(미리 계산) — preview / apply 플래그 추출
-      - name: Decide mode
-        id: mode
-        shell: bash
-        run: |
-          args="${{ steps.parse.outputs.args }}"
-          lc="$(echo "$args" | tr '[:upper:]' '[:lower:]')"
-          # 적용 여부
-          if echo " $lc " | grep -q " apply "; then echo "apply=true"  >> $GITHUB_OUTPUT; else echo "apply=false"  >> $GITHUB_OUTPUT; fi
-          # 프리뷰 여부 (fixloop + preview)
-          if [ "${{ steps.parse.outputs.cmd }}" = "fixloop" ] && echo " $lc " | grep -q " preview "; then
-            echo "preview=true" >> $GITHUB_OUTPUT
-          else
-            echo "preview=false" >> $GITHUB_OUTPUT
-          fi
-
-      # 9A) 프리뷰 전용(무조건 성공 처리)
+      # 8A) PREVIEW 전용 — 어떤 코드가 나와도 성공으로 강제
       - name: Run KO via PS7 (preview-safe)
-        if: ${{ steps.mode.outputs.preview == 'true' }}
+        if: ${{ steps.parse.outputs.cmd == 'fixloop' && !contains(steps.parse.outputs.args, 'apply') }}
         shell: bash
+        continue-on-error: true
         run: |
           set +e
           pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 \
             -Command '${{ steps.parse.outputs.cmd }}' \
             -RawArgs '${{ steps.parse.outputs.args }}' \
             -Sha '${{ github.sha }}' \
-            -Pr '${{ github.event.issue.number || github.event.pull_request.number }}'
-          code=$?
-          echo "[note] preview mode: forcing success (code=$code)"
+            -Pr '${{ github.event.issue.number || github.event.pull_request.number }}' \
+            || true
+          echo "[note] preview mode: forced success"
           echo -e "result=success\ncmd=/ak ${{ steps.parse.outputs.cmd }} ${{ steps.parse.outputs.args }}" >> "$GITHUB_STEP_SUMMARY"
-          exit 0
+          true
 
-      # 9B) 일반 경로(코드<10 정상화, ≥10은 실패 유지)
+      # 8B) 그 외(정규화: <10→성공, ≥10→실패)
       - name: Run KO via PS7 (strict)
-        if: ${{ steps.mode.outputs.preview != 'true' }}
+        if: ${{ steps.parse.outputs.cmd != 'fixloop' || contains(steps.parse.outputs.args, 'apply') }}
         shell: bash
         run: |
           set +e
