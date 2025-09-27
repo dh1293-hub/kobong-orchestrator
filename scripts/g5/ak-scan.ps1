@@ -19,7 +19,7 @@ function TryStep([string]$title,[scriptblock]$code){
     Write-Host "`n### $title"
     & $code
   } catch {
-    Write-Host "[WARN] $title: $($_.Exception.Message)"
+    Write-Host "[WARN] $($title): $($_.Exception.Message)"
   }
 }
 
