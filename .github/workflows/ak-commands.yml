@@ -1,6 +1,22 @@
-      # 8A) PREVIEW 전용(항상 성공 처리)
+      # 8) 모드 판별(미리 계산) — preview / apply 플래그 추출
+      - name: Decide mode
+        id: mode
+        shell: bash
+        run: |
+          args="${{ steps.parse.outputs.args }}"
+          lc="$(echo "$args" | tr '[:upper:]' '[:lower:]')"
+          # 적용 여부
+          if echo " $lc " | grep -q " apply "; then echo "apply=true"  >> $GITHUB_OUTPUT; else echo "apply=false"  >> $GITHUB_OUTPUT; fi
+          # 프리뷰 여부 (fixloop + preview)
+          if [ "${{ steps.parse.outputs.cmd }}" = "fixloop" ] && echo " $lc " | grep -q " preview "; then
+            echo "preview=true" >> $GITHUB_OUTPUT
+          else
+            echo "preview=false" >> $GITHUB_OUTPUT
+          fi
+
+      # 9A) 프리뷰 전용(무조건 성공 처리)
       - name: Run KO via PS7 (preview-safe)
-        if: ${{ steps.parse.outputs.cmd == 'fixloop' && !contains(steps.parse.outputs.args, 'apply') }}
+        if: ${{ steps.mode.outputs.preview == 'true' }}
         shell: bash
         run: |
           set +e
@@ -14,9 +30,9 @@
           echo -e "result=success\ncmd=/ak ${{ steps.parse.outputs.cmd }} ${{ steps.parse.outputs.args }}" >> "$GITHUB_STEP_SUMMARY"
           exit 0
 
-      # 8B) 그 외(정규화 후 실패/성공 판정)
+      # 9B) 일반 경로(코드<10 정상화, ≥10은 실패 유지)
       - name: Run KO via PS7 (strict)
-        if: ${{ steps.parse.outputs.cmd != 'fixloop' || contains(steps.parse.outputs.args, 'apply') }}
+        if: ${{ steps.mode.outputs.preview != 'true' }}
         shell: bash
         run: |
           set +e
