@@ -1,64 +1,57 @@
 name: ak-commands
+
 on:
   issue_comment:
     types: [created]
+  pull_request_review_comment:
+    types: [created]
+
 permissions:
   contents: read
-  pull-requests: write
   issues: write
+  pull-requests: write
+
 jobs:
-  ak:
-    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/ak') }}
+  run-ak:
+    if: ${{ contains(github.event.comment.body, '/ak ') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Echo context
-        shell: bash
+      - name: Parse command
+        id: parse
         run: |
-          echo "::group::Context"
-          echo "actor=${{ github.actor }}"
-          echo "repo=${{ github.repository }}"
-          echo "event=${{ github.event_name }}"
-          echo "pr=${{ github.event.issue.number }}"
-          echo "comment=${{ github.event.comment.body }}"
-          echo "::endgroup::"
-
-      - name: Parse + Run (self-contained)
-        id: run
-        shell: bash
-        run: |
-          set -euo pipefail
           body="${{ github.event.comment.body }}"
-          cmd=$(awk '{print $2}' <<<"$body")
-          case "$cmd" in
-            scan|test|help) ;;
-            *) cmd=scan ;;
-          esac
-          echo "cmd=$cmd" >> "$GITHUB_OUTPUT"
-          echo "::notice::ak $cmd start"
-          # TODO: 여기에 실제 동작 연결
-          echo "ak-$cmd ok"
+          # /ak <cmd> 만 추출 (소문자/숫자/하이픈)
+          cmd=$(echo "$body" | sed -nE 's@.*\/ak[[:space:]]+([a-z0-9\-]+).*@\1@p')
+          echo "cmd=$cmd" >> $GITHUB_OUTPUT
 
-      - name: Comment back (with links)
-        if: ${{ always() }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
+      - name: Reply with help (links)
+        if: steps.parse.outputs.cmd == 'help'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = context.payload.issue?.number || context.payload.pull_request?.number;
+            const lines = [
+              "### AK 명령 도움말",
+              "- `/ak test` — 테스트 체크런 실행",
+              "- `/ak scan --all` — 전체 스캔 보고서",
+              "- `/ak fixloop preview` → `/ak fixloop apply` — 패치 미리보기/적용",
+              "- `/ak rewrite` — 코드 제안(서제스트)",
+              "",
+              "> 로그/종료코드·롤백 규칙은 프로젝트 표준(PS7·KLC·URS)을 따릅니다."
+            ];
+            await github.rest.issues.createComment({ owner, repo, issue_number: pr, body: lines.join("\n") });
+
+      - name: Short-circuit when help
+        if: steps.parse.outputs.cmd == 'help'
+        run: echo "help replied" && exit 0
+
+      - name: Run KO via PS7
+        shell: pwsh
         run: |
-          num=${{ github.event.issue.number }}
-          concl=${{ job.status }}
-          cmd=${{ steps.run.outputs.cmd }}
-          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          kb_url="${{ github.server_url }}/${{ github.repository }}/blob/main/.kobong/reports/ERROR-KB.md"
-          icon="❌"
-          if [[ "$concl" == "success" ]]; then icon="✅"; fi
-          msg="$icon ak-commands: **/ak $cmd** → $concl  •  [Run]($run_url)  •  [ERROR-KB]($kb_url)"
-          echo "result=$concl" >> "$GITHUB_STEP_SUMMARY"
-          echo "cmd=/ak $cmd" >> "$GITHUB_STEP_SUMMARY"
-          echo "run=$run_url" >> "$GITHUB_STEP_SUMMARY"
-          echo "kb=$kb_url" >> "$GITHUB_STEP_SUMMARY"
-          curl -s -H "Authorization: token $GH_TOKEN" \
-               -H "Accept: application/vnd.github+json" \
-               -d "{\"body\":\"$msg\"}" \
-               "https://api.github.com/repos/${{ github.repository }}/issues/$num/comments" >/dev/null
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
+            -Command "${{ steps.parse.outputs.cmd }}" `
+            -Sha "${{ github.sha }}" `
+            -Pr "${{ github.event.issue.number || github.event.pull_request.number }}"
