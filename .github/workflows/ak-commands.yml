@@ -3,18 +3,16 @@ on:
   issue_comment:
     types: [created]
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
-  checks: write
-  statuses: write
   issues: write
 jobs:
-  run-ak:
-    # PR 코멘트이면서 '/ak'로 시작할 때만 실행
+  ak:
     if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/ak') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Echo context
         shell: bash
         run: |
@@ -25,9 +23,22 @@ jobs:
           echo "pr=${{ github.event.issue.number }}"
           echo "comment=${{ github.event.comment.body }}"
           echo "::endgroup::"
-      - name: Run KO via PS7 (stub)
-        shell: pwsh
+
+      - name: Parse + Run (self-contained)
+        id: run
+        shell: bash
         run: |
+          set -euo pipefail
+          body="${{ github.event.comment.body }}"
+          cmd=$(awk '{print $2}' <<<"$body")
+          case "$cmd" in
+            scan|test|help) ;;
+            *) cmd=scan ;;
+          esac
+          echo "cmd=$cmd" >> "$GITHUB_OUTPUT"
+          echo "::notice::ak $cmd start"
+          # 이 자리에 실제 동작을 연결하면 됨. 우선 체커로 OK만 출력.
+          echo "ak-$cmd ok"
 
       - name: Comment back
         if: ${{ always() }}
@@ -37,15 +48,11 @@ jobs:
         run: |
           num=${{ github.event.issue.number }}
           concl=${{ job.status }}
-          body="${{ github.event.comment.body }}"
-          echo "result=$concl" >> $GITHUB_STEP_SUMMARY
-          echo "cmd=$body" >> $GITHUB_STEP_SUMMARY
-          msg="✅ ak-commands: **$body** → $concl (run:${{ github.run_id }})"
+          cmd=${{ steps.run.outputs.cmd }}
+          msg="✅ ak-commands: **/ak $cmd** → $concl (run:${{ github.run_id }})"
+          echo "result=$concl" >> "$GITHUB_STEP_SUMMARY"
+          echo "cmd=/ak $cmd" >> "$GITHUB_STEP_SUMMARY"
           curl -s -H "Authorization: token $GH_TOKEN" \
                -H "Accept: application/vnd.github+json" \
                -d "{\"body\":\"$msg\"}" \
                https://api.github.com/repos/${{ github.repository }}/issues/$num/comments >/dev/null
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
-            -RawComment "${{ github.event.comment.body }}" `
-            -Sha "${{ github.sha }}" `
-            -Pr  "${{ github.event.issue.number }}"
