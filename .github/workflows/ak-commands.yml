@@ -1,6 +1,10 @@
       # 8) 실제 디스패치 — bash가 종료코드 직접 정규화
+      #    - fixloop preview 처럼 비치명(코드<10)인 경우: 성공 처리
+      #    - 코드>=10 또는 apply 류: 실패 유지
       - name: Run KO via PS7
         shell: bash
+        # preview(적용 아님) 일 때만 스텝 실패를 무시해 잡을 초록으로 유지
+        continue-on-error: ${{ steps.parse.outputs.cmd == 'fixloop' && !contains(steps.parse.outputs.args, 'apply') }}
         run: |
           set +e
           pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 \
@@ -12,7 +16,9 @@
           if [ -z "$code" ]; then code=0; fi
           if [ "$code" -lt 10 ]; then
             echo "[note] normalize exit code $code → 0 (non-fatal)"
+            echo -e "result=success\ncmd=/ak ${{ steps.parse.outputs.cmd }} ${{ steps.parse.outputs.args }}" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           else
+            echo "[fatal] exit code $code (>=10): failing this job"
             exit "$code"
           fi
