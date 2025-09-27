@@ -37,10 +37,10 @@ jobs:
           esac
           echo "cmd=$cmd" >> "$GITHUB_OUTPUT"
           echo "::notice::ak $cmd start"
-          # 이 자리에 실제 동작을 연결하면 됨. 우선 체커로 OK만 출력.
+          # TODO: 여기에 실제 동작 연결
           echo "ak-$cmd ok"
 
-      - name: Comment back
+      - name: Comment back (with links)
         if: ${{ always() }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -49,10 +49,16 @@ jobs:
           num=${{ github.event.issue.number }}
           concl=${{ job.status }}
           cmd=${{ steps.run.outputs.cmd }}
-          msg="✅ ak-commands: **/ak $cmd** → $concl (run:${{ github.run_id }})"
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          kb_url="${{ github.server_url }}/${{ github.repository }}/blob/main/.kobong/reports/ERROR-KB.md"
+          icon="❌"
+          if [[ "$concl" == "success" ]]; then icon="✅"; fi
+          msg="$icon ak-commands: **/ak $cmd** → $concl  •  [Run]($run_url)  •  [ERROR-KB]($kb_url)"
           echo "result=$concl" >> "$GITHUB_STEP_SUMMARY"
           echo "cmd=/ak $cmd" >> "$GITHUB_STEP_SUMMARY"
+          echo "run=$run_url" >> "$GITHUB_STEP_SUMMARY"
+          echo "kb=$kb_url" >> "$GITHUB_STEP_SUMMARY"
           curl -s -H "Authorization: token $GH_TOKEN" \
                -H "Accept: application/vnd.github+json" \
                -d "{\"body\":\"$msg\"}" \
-               https://api.github.com/repos/${{ github.repository }}/issues/$num/comments >/dev/null
+               "https://api.github.com/repos/${{ github.repository }}/issues/$num/comments" >/dev/null
