@@ -24,9 +24,7 @@ jobs:
         shell: bash
         run: |
           body="${{ github.event.comment.body }}"
-          # /ak <cmd>
           cmd=$(echo "$body" | sed -nE 's@.*\/ak[[:space:]]+([a-z0-9\-]+).*@\1@p')
-          # /ak <cmd> <args...>  (나머지를 args로)
           args=$(echo "$body" | sed -nE 's@.*\/ak[[:space:]]+[a-z0-9\-]+[[:space:]]*(.*)@\1@p')
           echo "cmd=$cmd"   >> $GITHUB_OUTPUT
           echo "args=$args" >> $GITHUB_OUTPUT
@@ -59,7 +57,31 @@ jobs:
         if: steps.auth.outputs.ok != 'true'
         run: exit 0
 
-      # 4) 호출 댓글 ACK(리액션)
+      # 4) 라벨 게이트: ak:enabled 필요(help 제외)
+      - name: Check label gate
+        id: gate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const cmd = '${{ steps.parse.outputs.cmd }}';
+            if (cmd === 'help') { core.setOutput('enabled','true'); return; }
+            const {owner, repo} = context.repo;
+            const pr = context.payload.issue?.number || context.payload.pull_request?.number;
+            const {data} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
+            const ok = data.some(l => l.name.toLowerCase() === 'ak:enabled');
+            if (!ok) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: pr,
+                body: "🔒 실행 차단: 라벨 **`ak:enabled`** 가 필요합니다. 라벨 추가 후 다시 시도하세요. (`/ak help`는 라벨 없이 사용 가능)"
+              });
+            }
+            core.setOutput('enabled', ok ? 'true' : 'false');
+
+      - name: Short-circuit when label not present
+        if: steps.gate.outputs.enabled != 'true'
+        run: exit 0
+
+      # 5) 호출 댓글 ACK(리액션)
       - name: React to invoking comment
         uses: actions/github-script@v7
         with:
@@ -70,7 +92,38 @@ jobs:
               owner, repo, comment_id: cid, content: 'rocket'
             });
 
-      # 5) help면 링크형 도움말 댓글 후 조기 종료
+      # 6) 야간 가드(KST 00–07) : apply 류 차단(라벨로 해제)
+      - name: Guard quiet hours (KST)
+        id: night
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const cmd  = '${{ steps.parse.outputs.cmd }}';
+            const args = '${{ steps.parse.outputs.args }}';
+            const {owner, repo} = context.repo;
+            const pr = context.payload.issue?.number || context.payload.pull_request?.number;
+            // PR 라벨 가져와 night-override 유무 체크
+            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
+            const override = labels.some(l => l.name.toLowerCase() === 'ak:night-override');
+            // UTC → KST(+9)
+            const hourKST = (new Date().getUTCHours() + 9) % 24;
+            const risky = /(fixloop|rewrite)/.test(cmd) && /\bapply\b/.test(args);
+            let blocked = false;
+            if (!override && risky && (hourKST >= 0 && hourKST < 7)) {
+              blocked = true;
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: pr,
+                body: "🌙 **야간 가드**: KST 00:00–07:00에는 `apply` 작업이 차단됩니다. " +
+                      "`preview`로 점검하거나 라벨 **`ak:night-override`** 추가 후 재시도하세요."
+              });
+            }
+            core.setOutput('blocked', blocked ? 'true' : 'false');
+
+      - name: Short-circuit when quiet hours
+        if: steps.night.outputs.blocked == 'true'
+        run: exit 0
+
+      # 7) help면 링크형 도움말 댓글 후 조기 종료
       - name: Reply with help (links)
         if: steps.parse.outputs.cmd == 'help'
         uses: actions/github-script@v7
@@ -92,7 +145,7 @@ jobs:
         if: steps.parse.outputs.cmd == 'help'
         run: echo "help replied" && exit 0
 
-      # 6) 실제 디스패치(PS7) — 인자 전달
+      # 8) 실제 디스패치(PS7) — 인자 전달
       - name: Run KO via PS7
         shell: pwsh
         run: |
@@ -102,7 +155,7 @@ jobs:
             -Sha "${{ github.sha }}" `
             -Pr "${{ github.event.issue.number || github.event.pull_request.number }}"
 
-      # 7) 실행 요약 댓글(항상)
+      # 9) 실행 요약 댓글(항상) + KB 링크
       - name: Comment summary with links
         if: always()
         uses: actions/github-script@v7
@@ -112,6 +165,7 @@ jobs:
           CMD: ${{ steps.parse.outputs.cmd }}
           ARGS: ${{ steps.parse.outputs.args }}
           STATUS: ${{ job.status }}
+          KB_URL: ${{ github.server_url }}/${{ github.repository }}/blob/main/.kobong/reports/ERROR-KB.md
         with:
           script: |
             const {owner, repo} = context.repo;
@@ -119,6 +173,7 @@ jobs:
             const body = [
               `**/ak ${process.env.CMD} ${process.env.ARGS || ''}** finished: **${process.env.STATUS.toUpperCase()}**`,
               `- Actions Run: ${process.env.RUN_URL}`,
-              `- PR Checks: ${process.env.CHECKS_URL}`
+              `- PR Checks  : ${process.env.CHECKS_URL}`,
+              `- Error KB   : ${process.env.KB_URL}`
             ].join("\n");
             await github.rest.issues.createComment({ owner, repo, issue_number: pr, body });
