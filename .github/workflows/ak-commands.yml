@@ -55,7 +55,25 @@ jobs:
         if: steps.auth.outputs.ok != 'true'
         run: exit 0
 
-      # 3) 라벨 게이트: help 제외하고 ak:enabled 필요
+      # 3) OWNER이면 필수 라벨 자동 준비/부착
+      - name: Ensure required labels for OWNER
+        if: ${{ github.event.comment.author_association == 'OWNER' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = context.payload.issue?.number || context.payload.pull_request?.number;
+            const need = ["ak:enabled","ak:night-override"];
+            for (const name of need) {
+              try { await github.rest.issues.getLabel({owner, repo, name}); }
+              catch { await github.rest.issues.createLabel({owner, repo, name, color: name==='ak:enabled'?'0ea5e9':'f59e0b'}); }
+            }
+            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
+            if (!labels.some(l => l.name.toLowerCase()==='ak:enabled')) {
+              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels:['ak:enabled']});
+            }
+
+      # 4) 라벨 게이트: help 제외하고 ak:enabled 필요
       - name: Check label gate
         id: gate
         uses: actions/github-script@v7
@@ -74,11 +92,12 @@ jobs:
               });
             }
             core.setOutput('enabled', ok ? 'true' : 'false');
+
       - name: Short-circuit when label not present
         if: steps.gate.outputs.enabled != 'true'
         run: exit 0
 
-      # 4) 호출 댓글 ACK(🚀)
+      # 5) 호출 댓글 ACK(🚀)
       - name: React to invoking comment
         uses: actions/github-script@v7
         with:
@@ -87,34 +106,18 @@ jobs:
             const cid = context.payload.comment.id;
             await github.rest.reactions.createForIssueComment({ owner, repo, comment_id: cid, content: 'rocket' });
 
-      # 5) 야간 가드(KST 00–07 apply 차단; night-override로 해제)
-      - name: Guard quiet hours (KST)
+      # 6) DEV 모드: 야간 가드 완전 비활성화(24h 허용)
+      - name: Guard quiet hours (DEV: disabled)
         id: night
         uses: actions/github-script@v7
         with:
           script: |
-            const cmd  = '${{ steps.parse.outputs.cmd }}';
-            const args = '${{ steps.parse.outputs.args }}';
-            const {owner, repo} = context.repo;
-            const pr = context.payload.issue?.number || context.payload.pull_request?.number;
-            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
-            const override = labels.some(l => l.name.toLowerCase() === 'ak:night-override');
-            const hourKST = (new Date().getUTCHours() + 9) % 24;
-            const risky = /(fixloop|rewrite)/.test(cmd) && /\bapply\b/.test(args);
-            if (!override && risky && (hourKST >= 0 && hourKST < 7)) {
-              await github.rest.issues.createComment({
-                owner, repo, issue_number: pr,
-                body: "🌙 **야간 가드**: KST 00:00–07:00에는 `apply` 작업이 차단됩니다. `preview`로 점검하거나 `ak:night-override` 라벨 추가 후 재시도하세요."
-              });
-              core.setOutput('blocked','true');
-            } else {
-              core.setOutput('blocked','false');
-            }
+            core.setOutput('blocked','false')
       - name: Short-circuit when quiet hours
-        if: steps.night.outputs.blocked == 'true'
+        if: ${{ false }}
         run: exit 0
 
-      # 6) help 즉시 답변
+      # 7) /ak help 즉시 응답
       - name: Reply with help (links)
         if: steps.parse.outputs.cmd == 'help'
         uses: actions/github-script@v7
@@ -128,6 +131,7 @@ jobs:
               "- `/ak scan --all` — 전체 스캔 보고서",
               "- `/ak fixloop preview` → `/ak fixloop apply` — 미리보기/적용",
               "- `/ak rewrite [options]` — 코드 제안",
+              "- `/ak version` — 워크플로/버전 확인",
               "",
               "> 로그/종료코드·롤백 규칙은 프로젝트 표준(PS7·KLC·URS)을 따릅니다."
             ];
@@ -136,7 +140,23 @@ jobs:
         if: steps.parse.outputs.cmd == 'help'
         run: echo "help replied" && exit 0
 
-      # 7A) PREVIEW 전용 — 댓글 본문 기준, 어떤 코드여도 무조건 초록
+      # 8) apply는 OWNER만
+      - name: Guard apply — OWNER only
+        if: ${{ (steps.parse.outputs.cmd == 'fixloop' || steps.parse.outputs.cmd == 'rewrite') && contains(steps.parse.outputs.args, 'apply') && github.event.comment.author_association != 'OWNER' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = context.payload.issue?.number || context.payload.pull_request?.number;
+            await github.rest.issues.createComment({
+              owner, repo, issue_number: pr,
+              body: "⛔ `apply` 는 **OWNER 전용**입니다. 미리보기는 `/ak fixloop preview` 를 사용하세요."
+            });
+      - name: Short-circuit when not owner for apply
+        if: ${{ (steps.parse.outputs.cmd == 'fixloop' || steps.parse.outputs.cmd == 'rewrite') && contains(steps.parse.outputs.args, 'apply') && github.event.comment.author_association != 'OWNER' }}
+        run: exit 0
+
+      # 9A) PREVIEW 전용 — 댓글 본문 기준, 어떤 코드여도 무조건 초록
       - name: Run KO via PS7 (preview-safe by body)
         if: ${{ contains(github.event.comment.body, '/ak fixloop') && contains(github.event.comment.body, 'preview') && !contains(github.event.comment.body, 'apply') }}
         shell: bash
@@ -153,7 +173,7 @@ jobs:
           echo -e "result=success\ncmd=/ak ${{ steps.parse.outputs.cmd }} ${{ steps.parse.outputs.args }}" >> "$GITHUB_STEP_SUMMARY"
           true
 
-      # 7B) 그 외 전부 — <10 → 0 정상화, ≥10은 실패
+      # 9B) 그 외 전부 — <10 → 0 정상화, ≥10은 실패
       - name: Run KO via PS7 (strict)
         if: ${{ !( contains(github.event.comment.body, '/ak fixloop') && contains(github.event.comment.body, 'preview') && !contains(github.event.comment.body, 'apply') ) }}
         shell: bash
@@ -173,7 +193,7 @@ jobs:
             exit "$code"
           fi
 
-      # 8) 실행 요약 댓글
+      # 10) 실행 요약 댓글
       - name: Comment summary with links
         if: always()
         uses: actions/github-script@v7
