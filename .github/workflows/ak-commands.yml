@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: ak-${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.issue.number }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -91,3 +91,4 @@ jobs:
           path: logs/ak7.jsonl
           if-no-files-found: warn
           retention-days: 5
+
