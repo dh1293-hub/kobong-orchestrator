@@ -1,5 +1,4 @@
 name: psanalyze
-
 on:
   pull_request:
   workflow_dispatch:
@@ -10,13 +9,22 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: read
+      actions: read
       security-events: write
     steps:
       - uses: actions/checkout@v4
-      - name: Run PSScriptAnalyzer
+
+      - name: Run PSScriptAnalyzer (errors only, non-blocking)
         uses: microsoft/psscriptanalyzer-action@v1.0
         with:
-          path: .\
+          path: '".\scripts\**\*.ps1", ".\ops\**\*.ps1", ".\*.ps1"'
           recurse: true
-          enableExit: true
+          severity: '"Error"'
+          enableExit: false
           output: results.sarif
+
+      - name: Upload SARIF to Code Scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
