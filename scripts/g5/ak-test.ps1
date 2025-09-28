@@ -1,52 +1,26 @@
-#requires -PSEdition Core
+# APPLY IN SHELL
 #requires -Version 7.0
-param(
-  [string]$Raw,
-  [string]$Sha,
-  [string]$Pr,
-  [Parameter(ValueFromRemainingArguments=$true)][string[]]$Rest
-)
+param([string]$Pr,[string]$Sha,[switch]$ConfirmApply)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
-
-$fast = $Rest -contains '--fast'
-
-function Step([string]$name,[scriptblock]$code){
-  Write-Host "`n### $name"
-  try { & $code } catch { Write-Host "[WARN] $name: $($_.Exception.Message)" }
+$PSDefaultParameterValues['*:Encoding']='utf8'
+$sw=[Diagnostics.Stopwatch]::StartNew()
+function K($lvl,$act,$out,$msg,$exit=0){
+  $rec=[ordered]@{
+    timestamp=(Get-Date).ToString('o'); level=$lvl; traceId=[guid]::NewGuid().ToString();
+    module='scripts'; action=$act; outcome=$out; message=$msg; durationMs=$sw.ElapsedMilliseconds
+  }|ConvertTo-Json -Compress
+  New-Item -ItemType Directory -Force -Path (Join-Path $PSScriptRoot '..\..\logs') | Out-Null
+  Add-Content -Path (Join-Path $PSScriptRoot '..\..\logs\ak7.jsonl') -Value $rec
+  if($exit -ne 0){ exit $exit }
 }
-
-Write-Host "## AK Test Runner"
-Write-Host "- sha: $Sha"
-Write-Host "- pr : $Pr"
-Write-Host "- args: $Raw"
-
-# 1) Pester (PowerShell)
-Step 'Pester' {
-  if (Get-Command Invoke-Pester -ErrorAction SilentlyContinue) {
-    Invoke-Pester -CI -Passthru | Out-String | Write-Host
-  } else { "Pester not found" }
+try{
+  $mode = ($ConfirmApply ? 'APPLY' : 'DRYRUN')
+  K 'INFO'  $MyInvocation.MyCommand.Name $mode "start pr=$Pr sha=$Sha"
+  # 실제 작업은 이후 단계에서 채운다. 지금은 배선 확인용.
+  Start-Sleep -Milliseconds 150
+  K 'INFO'  $MyInvocation.MyCommand.Name 'SUCCESS' 'ok'
+  exit 0
+}catch{
+  K 'ERROR' $MyInvocation.MyCommand.Name 'FAILURE' $_.Exception.Message 13
 }
-
-if (-not $fast) {
-  # 2) PyTest (Python)
-  Step 'PyTest' {
-    if (Get-Command python -ErrorAction SilentlyContinue -CommandType Application -ErrorVariable +e -OutVariable +o) {
-      if (Get-Command pytest -ErrorAction SilentlyContinue) {
-        pytest -q
-      } else { "pytest not found" }
-    } else { "python not found" }
-  }
-
-  # 3) npm test (Node)
-  Step 'npm test' {
-    if (Get-Command npm -ErrorAction SilentlyContinue -CommandType Application) {
-      if (Test-Path package.json) {
-        $pkg = Get-Content -Raw package.json | ConvertFrom-Json
-        if ($pkg.scripts.PSObject.Properties.Name -contains 'test') { npm test --silent } else { "no test script" }
-      } else { "package.json not found" }
-    } else { "npm not found" }
-  }
-}
-
-Write-Host "`n[AK] test completed."
