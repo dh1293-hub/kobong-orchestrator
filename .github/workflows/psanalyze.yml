@@ -3,28 +3,67 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   analyze:
-    name: analyze
     runs-on: windows-latest
-    permissions:
-      contents: read
-      actions: read
-      security-events: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Run PSScriptAnalyzer (errors only, non-blocking)
-        uses: microsoft/psscriptanalyzer-action@v1.0
-        with:
-          path: '".\scripts\**\*.ps1", ".\ops\**\*.ps1", ".\*.ps1"'
-          recurse: true
-          severity: '"Error"'
-          enableExit: false
-          output: results.sarif
+        id: pssa
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference='Continue'
+          try {
+            # 패키지
+            Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -AllowClobber | Out-Null
+          } catch {}
+          $files = Get-ChildItem -Path . -Recurse -Include *.ps1,*.psm1,*.psd1 | Select-Object -ExpandProperty FullName
+          if(-not $files){ Write-Host "No PowerShell files found."; }
+
+          $result = @()
+          if($files){ $result = Invoke-ScriptAnalyzer -Path $files -Recurse -Severity Error }
+          # 유효한 SARIF(2.1.0) 생성: 위반 있으면 채워 넣고, 없으면 빈 results 배열
+          $runs = @{
+            tool = @{ driver = @{ name='PSScriptAnalyzer'; informationUri='https://github.com/PowerShell/PSScriptAnalyzer' } }
+            results = @()
+          }
+          if($result){
+            $runs.results = @(
+              $result | ForEach-Object {
+                @{
+                  ruleId = $_.RuleName
+                  level  = 'error'
+                  message = @{ text = $_.Message }
+                  locations = @(@{
+                    physicalLocation = @{
+                      artifactLocation = @{ uri = ($_.ScriptPath ?? '').Replace('\','/') }
+                      region = @{ startLine = $_.Line; startColumn = $_.Column }
+                    }
+                  })
+                }
+              }
+            )
+          }
+          $sarif = @{
+            version='2.1.0'
+            '$schema'='https://json.schemastore.org/sarif-2.1.0.json'
+            runs=@($runs)
+          } | ConvertTo-Json -Depth 8 -Compress
+          Set-Content -Path results.sarif -Value $sarif -Encoding UTF8
+          Write-Host "[OK] results.sarif generated. Count=$($runs.results.Count)"
 
       - name: Upload SARIF to Code Scanning
-        if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: results.sarif
+
+      - name: Always succeed (non-blocking)
+        if: always()
+        shell: pwsh
+        run: echo "psanalyze is non-blocking by design."
