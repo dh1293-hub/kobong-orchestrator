@@ -1,0 +1,166 @@
+name: ak-auto
+
+on:
+  pull_request_target:
+    types: [labeled, opened, reopened, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to run on"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  auto:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # PR 번호 결정
+      - name: Resolve PR number
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = core.getInput('pr') || context.payload.pull_request?.number || context.payload.issue?.number;
+            if(!pr) core.setFailed('No PR number'); else core.setOutput('num', String(pr));
+
+      # 라벨 확인 (ak:auto 없어도 OWNER면 자동 부착)
+      - name: Ensure ak:auto label for OWNER
+        if: ${{ github.event.pull_request.number && github.event.comment.author_association == 'OWNER' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = Number(core.getInput('pr')) || context.payload.pull_request?.number;
+            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
+            if(!labels.some(l => l.name.toLowerCase()==='ak:auto')){
+              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: ['ak:auto']});
+            }
+
+      - name: Check ak:auto present
+        id: gate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = Number(core.getInput('pr')) || Number('${{ steps.pr.outputs.num }}');
+            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
+            const ok = labels.some(l => l.name.toLowerCase()==='ak:auto');
+            if(!ok){
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: pr,
+                body: "🔔 자동 실행 라벨 **`ak:auto`** 가 없어 대기합니다. 라벨 추가 후 자동으로 실행됩니다."
+              });
+            }
+            core.setOutput('enabled', ok ? 'true' : 'false');
+
+      - name: Short-circuit when ak:auto missing
+        if: steps.gate.outputs.enabled != 'true'
+        run: exit 0
+
+      # 안내 코멘트 + ACK
+      - name: Announce start
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = Number('${{ steps.pr.outputs.num }}');
+            const cid = await github.rest.issues.createComment({
+              owner, repo, issue_number: pr,
+              body: "🤖 **AUTO-Kobong**: Help → Test → Scan → Preview 순서로 전자동 실행합니다."
+            });
+            try { await github.rest.reactions.createForIssueComment({ owner, repo, comment_id: cid.data.id, content: 'rocket'}); } catch {}
+
+      # ===== 실행 시퀀스 (ps1 직접 호출) =====
+      # 모든 스텝은 <10 → 성공 정규화; preview는 무조건 성공
+      - name: /ak help
+        shell: bash
+        run: |
+          set +e
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'help' -Pr '${{ steps.pr.outputs.num }}'
+          exit 0
+
+      - name: /ak test
+        shell: bash
+        run: |
+          set +e
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'test' -Pr '${{ steps.pr.outputs.num }}'
+          code=$?; if [ -z "$code" ]; then code=0; fi
+          if [ "$code" -ge 10 ]; then exit "$code"; else exit 0; fi
+
+      - name: /ak scan --all
+        shell: bash
+        run: |
+          set +e
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'scan' -RawArgs '--all' -Pr '${{ steps.pr.outputs.num }}'
+          code=$?; if [ -z "$code" ]; then code=0; fi
+          if [ "$code" -ge 10 ]; then exit "$code"; else exit 0; fi
+
+      - name: /ak fixloop preview (always green)
+        shell: bash
+        continue-on-error: true
+        run: |
+          set +e
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'fixloop' -RawArgs 'preview' -Pr '${{ steps.pr.outputs.num }}' || true
+          exit 0
+
+      # ===== 조건부 apply =====
+      - name: Decide apply
+        id: apply
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = Number('${{ steps.pr.outputs.num }}');
+            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
+            const applyLabel = labels.some(l => l.name.toLowerCase()==='ak:auto-apply');
+            const hourKST = (new Date().getUTCHours()+9)%24;
+            const night = (hourKST>=0 && hourKST<7);
+            core.setOutput('do', (applyLabel && !night) ? 'true' : 'false');
+            core.setOutput('night', night ? 'true' : 'false');
+
+      - name: Night notice
+        if: steps.apply.outputs.night == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = Number('${{ steps.pr.outputs.num }}');
+            await github.rest.issues.createComment({ owner, repo, issue_number: pr,
+              body: "🌙 야간 가드: KST 00–07시에는 자동 적용을 건너뜁니다. 라벨 `ak:night-override` 사용 시 수동 허용." });
+
+      - name: /ak fixloop apply (OWNER only)
+        if: ${{ steps.apply.outputs.do == 'true' && github.actor == github.repository_owner }}
+        shell: bash
+        run: |
+          set +e
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'fixloop' -RawArgs 'apply' -Pr '${{ steps.pr.outputs.num }}'
+          code=$?; if [ -z "$code" ]; then code=0; fi
+          if [ "$code" -ge 10 ]; then exit "$code"; else exit 0; fi
+
+      # 요약 댓글
+      - name: Comment summary
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CHECKS_URL: ${{ github.server_url }}/${{ github.repository }}/pull/${{ steps.pr.outputs.num }}/checks
+          STATUS: ${{ job.status }}
+          KB_URL: ${{ github.server_url }}/${{ github.repository }}/blob/main/.kobong/reports/ERROR-KB.md
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = Number('${{ steps.pr.outputs.num }}');
+            const body = [
+              `**AUTO-Kobong** finished: **${process.env.STATUS.toUpperCase()}**`,
+              `- Actions Run: ${process.env.RUN_URL}`,
+              `- PR Checks  : ${process.env.CHECKS_URL}`,
+              `- Error KB   : ${process.env.KB_URL}`
+            ].join("\n");
+            await github.rest.issues.createComment({ owner, repo, issue_number: pr, body });
