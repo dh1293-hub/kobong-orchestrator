@@ -1,217 +1,35 @@
-name: ak-commands
-
 on:
   issue_comment:
     types: [created]
-  pull_request_review_comment:
-    types: [created]
 
 permissions:
-  contents: read
-  issues: write
+  contents: write
   pull-requests: write
+  checks: write
+  issues: write
 
 jobs:
   run-ak:
-    if: ${{ contains(github.event.comment.body, '/ak ') }}
+    if: ${{ github.event.issue.pull_request && contains(github.event.comment.body, '/ak ') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # PR 코멘트 이벤트에서도 PR 헤드 커밋을 체크아웃
+          ref: ${{ github.event.issue.pull_request.head.sha }}
 
-      # 1) 명령/인자 파싱
-      - name: Parse command & args
+      - name: Parse command
         id: parse
-        shell: bash
         run: |
-          body="${{ github.event.comment.body }}"
-          cmd=$(echo "$body" | sed -nE 's@.*\/ak[[:space:]]+([a-z0-9\-]+).*@\1@p')
-          args=$(echo "$body" | sed -nE 's@.*\/ak[[:space:]]+[a-z0-9\-]+[[:space:]]*(.*)@\1@p')
-          echo "cmd=$cmd"   >> $GITHUB_OUTPUT
-          echo "args=$args" >> $GITHUB_OUTPUT
+          body=$(printf "%s" '${{ github.event.comment.body }}')
+          # 표준 공백 클래스 사용
+          cmd=$(printf "%s" "$body" | sed -n 's!.*/ak[[:space:]]\+\([a-z0-9-]\+\).*!\1!p')
+          echo "cmd=$cmd" >> "$GITHUB_OUTPUT"
 
-      # 2) 권한 게이트(OWNER/MEMBER/COLLABORATOR)
-      - name: Check author permission
-        id: auth
-        shell: bash
+      - name: Dispatch
+        shell: pwsh
         run: |
-          assoc="${{ github.event.comment.author_association }}"
-          case "$assoc" in
-            OWNER|MEMBER|COLLABORATOR) echo "ok=true"  >> $GITHUB_OUTPUT ;;
-            *)                         echo "ok=false" >> $GITHUB_OUTPUT ;;
-          esac
-
-      - name: Reply unauthorized
-        if: steps.auth.outputs.ok != 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const pr = context.payload.issue?.number || context.payload.pull_request?.number;
-            await github.rest.issues.createComment({
-              owner, repo, issue_number: pr,
-              body: "⚠️ 이 명령은 **OWNER/MEMBER/COLLABORATOR**만 사용할 수 있습니다. `/ak help`로 사용법을 확인하세요."
-            });
-      - name: Short-circuit when unauthorized
-        if: steps.auth.outputs.ok != 'true'
-        run: exit 0
-
-      # 3) OWNER이면 필수 라벨 자동 준비/부착
-      - name: Ensure required labels for OWNER
-        if: ${{ github.event.comment.author_association == 'OWNER' }}
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const pr = context.payload.issue?.number || context.payload.pull_request?.number;
-            const need = ["ak:enabled","ak:night-override"];
-            for (const name of need) {
-              try { await github.rest.issues.getLabel({owner, repo, name}); }
-              catch { await github.rest.issues.createLabel({owner, repo, name, color: name==='ak:enabled'?'0ea5e9':'f59e0b'}); }
-            }
-            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
-            if (!labels.some(l => l.name.toLowerCase()==='ak:enabled')) {
-              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels:['ak:enabled']});
-            }
-
-      # 4) 라벨 게이트: help 제외하고 ak:enabled 필요
-      - name: Check label gate
-        id: gate
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const cmd = '${{ steps.parse.outputs.cmd }}';
-            if (cmd === 'help') { core.setOutput('enabled','true'); return; }
-            const {owner, repo} = context.repo;
-            const pr = context.payload.issue?.number || context.payload.pull_request?.number;
-            const {data} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
-            const ok = data.some(l => l.name.toLowerCase() === 'ak:enabled');
-            if (!ok) {
-              await github.rest.issues.createComment({
-                owner, repo, issue_number: pr,
-                body: "🔒 실행 차단: 라벨 **`ak:enabled`** 가 필요합니다. 라벨 추가 후 다시 시도하세요. (`/ak help`는 예외)"
-              });
-            }
-            core.setOutput('enabled', ok ? 'true' : 'false');
-
-      - name: Short-circuit when label not present
-        if: steps.gate.outputs.enabled != 'true'
-        run: exit 0
-
-      # 5) 호출 댓글 ACK(🚀)
-      - name: React to invoking comment
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const cid = context.payload.comment.id;
-            await github.rest.reactions.createForIssueComment({ owner, repo, comment_id: cid, content: 'rocket' });
-
-      # 6) DEV 모드: 야간 가드 완전 비활성화(24h 허용)
-      - name: Guard quiet hours (DEV: disabled)
-        id: night
-        uses: actions/github-script@v7
-        with:
-          script: |
-            core.setOutput('blocked','false')
-      - name: Short-circuit when quiet hours
-        if: ${{ false }}
-        run: exit 0
-
-      # 7) /ak help 즉시 응답
-      - name: Reply with help (links)
-        if: steps.parse.outputs.cmd == 'help'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const pr = context.payload.issue?.number || context.payload.pull_request?.number;
-            const lines = [
-              "### AK 명령 도움말",
-              "- `/ak test` — 테스트 체크런 실행",
-              "- `/ak scan --all` — 전체 스캔 보고서",
-              "- `/ak fixloop preview` → `/ak fixloop apply` — 미리보기/적용",
-              "- `/ak rewrite [options]` — 코드 제안",
-              "- `/ak version` — 워크플로/버전 확인",
-              "",
-              "> 로그/종료코드·롤백 규칙은 프로젝트 표준(PS7·KLC·URS)을 따릅니다."
-            ];
-            await github.rest.issues.createComment({ owner, repo, issue_number: pr, body: lines.join("\\n") });
-      - name: Short-circuit when help
-        if: steps.parse.outputs.cmd == 'help'
-        run: echo "help replied" && exit 0
-
-      # 8) apply는 OWNER만
-      - name: Guard apply — OWNER only
-        if: ${{ (steps.parse.outputs.cmd == 'fixloop' || steps.parse.outputs.cmd == 'rewrite') && contains(steps.parse.outputs.args, 'apply') && github.event.comment.author_association != 'OWNER' }}
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const pr = context.payload.issue?.number || context.payload.pull_request?.number;
-            await github.rest.issues.createComment({
-              owner, repo, issue_number: pr,
-              body: "⛔ `apply` 는 **OWNER 전용**입니다. 미리보기는 `/ak fixloop preview` 를 사용하세요."
-            });
-      - name: Short-circuit when not owner for apply
-        if: ${{ (steps.parse.outputs.cmd == 'fixloop' || steps.parse.outputs.cmd == 'rewrite') && contains(steps.parse.outputs.args, 'apply') && github.event.comment.author_association != 'OWNER' }}
-        run: exit 0
-
-      # 9A) PREVIEW 전용 — 댓글 본문 기준, 어떤 코드여도 무조건 초록
-      - name: Run KO via PS7 (preview-safe by body)
-        if: ${{ contains(github.event.comment.body, '/ak fixloop') && contains(github.event.comment.body, 'preview') && !contains(github.event.comment.body, 'apply') }}
-        shell: bash
-        continue-on-error: true
-        run: |
-          set +e
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 \
-            -Command '${{ steps.parse.outputs.cmd }}' \
-            -RawArgs '${{ steps.parse.outputs.args }}' \
-            -Sha '${{ github.sha }}' \
-            -Pr '${{ github.event.issue.number || github.event.pull_request.number }}' \
-            || true
-          echo "[note] preview mode: forced success"
-          echo -e "result=success\ncmd=/ak ${{ steps.parse.outputs.cmd }} ${{ steps.parse.outputs.args }}" >> "$GITHUB_STEP_SUMMARY"
-          true
-
-      # 9B) 그 외 전부 — <10 → 0 정상화, ≥10은 실패
-      - name: Run KO via PS7 (strict)
-        if: ${{ !( contains(github.event.comment.body, '/ak fixloop') && contains(github.event.comment.body, 'preview') && !contains(github.event.comment.body, 'apply') ) }}
-        shell: bash
-        run: |
-          set +e
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 \
-            -Command '${{ steps.parse.outputs.cmd }}' \
-            -RawArgs '${{ steps.parse.outputs.args }}' \
-            -Sha '${{ github.sha }}' \
-            -Pr '${{ github.event.issue.number || github.event.pull_request.number }}'
-          code=$?
-          if [ -z "$code" ]; then code=0; fi
-          if [ "$code" -lt 10 ]; then
-            echo "[note] normalize exit code $code → 0 (non-fatal)"
-            exit 0
-          else
-            exit "$code"
-          fi
-
-      # 10) 실행 요약 댓글
-      - name: Comment summary with links
-        if: always()
-        uses: actions/github-script@v7
-        env:
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          CHECKS_URL: ${{ github.server_url }}/${{ github.repository }}/pull/${{ github.event.issue.number || github.event.pull_request.number }}/checks
-          CMD: ${{ steps.parse.outputs.cmd }}
-          ARGS: ${{ steps.parse.outputs.args }}
-          STATUS: ${{ job.status }}
-          KB_URL: ${{ github.server_url }}/${{ github.repository }}/blob/main/.kobong/reports/ERROR-KB.md
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const pr = context.payload.issue?.number || context.payload.pull_request?.number;
-            const body = [
-              `**/ak ${process.env.CMD} ${process.env.ARGS || ''}** finished: **${process.env.STATUS.toUpperCase()}**`,
-              `- Actions Run: ${process.env.RUN_URL}`,
-              `- PR Checks  : ${process.env.CHECKS_URL}`,
-              `- Error KB   : ${process.env.KB_URL}`
-            ].join("\n");
-            await github.rest.issues.createComment({ owner, repo, issue_number: pr, body });
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
+            -Command "${{ steps.parse.outputs.cmd }}" `
+            -Sha "${{ github.event.issue.pull_request.head.sha }}" `
+            -Pr "${{ github.event.issue.number }}"
