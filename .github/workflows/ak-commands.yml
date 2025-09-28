@@ -1,12 +1,20 @@
+<<<<<<< HEAD
 name: ak-commands
 on:
   issue_comment: { types: [created] }
   pull_request_review_comment: { types: [created] }
+=======
+on:
+  issue_comment:
+    types: [created]
+
+>>>>>>> 9f72e0037d14a67d9f422114a8df345fee2025ea
 permissions:
   contents: write
   pull-requests: write
   checks: write
   issues: write
+<<<<<<< HEAD
 concurrency:
   group: ak-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: true
@@ -26,3 +34,31 @@ jobs:
             -Command "${{ steps.parse.outputs.cmd }}" `
             -Sha "${{ github.sha }}" `
             -Pr "${{ github.event.issue.number || github.event.pull_request.number }}"
+=======
+
+jobs:
+  run-ak:
+    if: ${{ github.event.issue.pull_request && contains(github.event.comment.body, '/ak ') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # PR 코멘트 이벤트에서도 PR 헤드 커밋을 체크아웃
+          ref: ${{ github.event.issue.pull_request.head.sha }}
+
+      - name: Parse command
+        id: parse
+        run: |
+          body=$(printf "%s" '${{ github.event.comment.body }}')
+          # 표준 공백 클래스 사용
+          cmd=$(printf "%s" "$body" | sed -n 's!.*/ak[[:space:]]\+\([a-z0-9-]\+\).*!\1!p')
+          echo "cmd=$cmd" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch
+        shell: pwsh
+        run: |
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
+            -Command "${{ steps.parse.outputs.cmd }}" `
+            -Sha "${{ github.event.issue.pull_request.head.sha }}" `
+            -Pr "${{ github.event.issue.number }}"
+>>>>>>> 9f72e0037d14a67d9f422114a8df345fee2025ea
