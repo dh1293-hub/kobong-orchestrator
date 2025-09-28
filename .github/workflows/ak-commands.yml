@@ -1,124 +1,28 @@
-name: AK Commands
-
+name: ak-commands
 on:
   issue_comment:
-    types: [created, edited]
-  workflow_dispatch:
-    inputs:
-      pr:
-        description: "Pull Request number"
-        required: true
-        type: string
-      command:
-        description: "ak command"
-        required: true
-        type: choice
-        options: [scan, test, rewrite, fixloop]
-        default: scan
-
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
 permissions:
   contents: write
   pull-requests: write
   checks: write
+  statuses: write
   issues: write
-
+concurrency:
+  group: ak-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: true
 jobs:
   run-ak:
+    if: contains(github.event.comment.body, '/ak ')
     runs-on: ubuntu-latest
-    concurrency:
-      group: ak-${{ github.event.issue.number || inputs.pr || github.run_id }}
-      cancel-in-progress: false
-
-    # (지침 1) gh 인증 호환
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
     steps:
-      - name: Resolve inputs
-        id: resolve
-        shell: bash
+      - uses: actions/checkout@v4
+      - name: Parse command
+        id: parse
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "pr=${{ inputs.pr }}"   >> "$GITHUB_OUTPUT"
-            echo "cmd=${{ inputs.command }}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          body=$(printf "%s" "${{ github.event.comment.body }}")
-          cmd=$(printf "%s" "$body" | sed -n 's!.*/ak[[:space:]]\+\([a-z0-9-]\+\).*!\1!p')
-          pr="${{ github.event.issue.number }}"
-
-          echo "pr=$pr"   >> "$GITHUB_OUTPUT"
-          echo "cmd=$cmd" >> "$GITHUB_OUTPUT"
-
-      - name: gh sanity (auth check)
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -e
-          gh --version
-          gh api repos/${{ github.repository }} >/dev/null
-          echo "gh OK"
-
-      # (지침 2) PR Head 체크아웃
-      - name: Checkout PR head
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-          ref: refs/pull/${{ steps.resolve.outputs.pr }}/head
-          fetch-depth: 1
-
-      - name: Capture SHA
-        id: sha
-        shell: bash
-        run: echo "value=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
-
-      # (지침 5) 스크립트 하이드레이션
-      - name: Hydrate scripts from main if missing
-        shell: bash
-        run: |
-          set -e
-          if [ ! -d scripts/g5 ] || [ ! -f scripts/g5/ak-dispatch.ps1 ]; then
-            echo "::notice::scripts/g5 missing; hydrating from origin/main"
-            git fetch --depth=1 origin main
-            git checkout origin/main -- scripts/g5/
-          fi
-          ls -la scripts/g5
-
-      # (지침 3) 로그 부트스트랩
-      - name: Bootstrap ak logs
-        shell: bash
-        run: |
-          mkdir -p logs
-          printf '{"timestamp":"%s","level":"INFO","action":"bootstrap","message":"init"}\n' "$(date -Iseconds)" >> logs/ak7.jsonl
-
-      # (지침 6) 안전한 디스패치
-      - name: Dispatch
+          echo "cmd=$(echo '${{ github.event.comment.body }}' | sed -n 's/.*\/ak\s\+\([a-z0-9\-]\+\).*/\1/p')" >> $GITHUB_OUTPUT
+      - name: Run KO via PS7
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
-            -Command "${{ steps.resolve.outputs.cmd }}" `
-            -Sha "${{ steps.sha.outputs.value }}" `
-            -Pr "${{ steps.resolve.outputs.pr }}"
-
-      # 디버그용: 실패해도 로그 보기
-      - name: List ak logs (debug)
-        if: always()
-        shell: bash
-        run: |
-          echo "::group::ls -la logs"; ls -la logs || true; echo "::endgroup::"
-          echo "::group::tail logs/ak7.jsonl"; tail -n +1 logs/ak7.jsonl || true; echo "::endgroup::"
-
-      # (지침 3) 항상 업로드
-      - name: Upload ak logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ak7-logs
-          path: logs/ak7.jsonl
-          retention-days: 5
+        run: pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command "${{ steps.parse.outputs.cmd }}" -Sha "${{ github.sha }}" -Pr "${{ github.event.issue.number || github.event.pull_request.number }}"
