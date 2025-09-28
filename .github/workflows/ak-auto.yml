@@ -30,26 +30,14 @@ jobs:
             const pr = core.getInput('pr') || context.payload.pull_request?.number || context.payload.issue?.number;
             if(!pr) core.setFailed('No PR number'); else core.setOutput('num', String(pr));
 
-      # 라벨 확인 (ak:auto 없어도 OWNER면 자동 부착)
-      - name: Ensure ak:auto label for OWNER
-        if: ${{ github.event.pull_request.number && github.event.comment.author_association == 'OWNER' }}
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const pr = Number(core.getInput('pr')) || context.payload.pull_request?.number;
-            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
-            if(!labels.some(l => l.name.toLowerCase()==='ak:auto')){
-              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: ['ak:auto']});
-            }
-
+      # ak:auto 라벨 확인(없으면 안내 후 종료)
       - name: Check ak:auto present
         id: gate
         uses: actions/github-script@v7
         with:
           script: |
             const {owner, repo} = context.repo;
-            const pr = Number(core.getInput('pr')) || Number('${{ steps.pr.outputs.num }}');
+            const pr = Number('${{ steps.pr.outputs.num }}');
             const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
             const ok = labels.some(l => l.name.toLowerCase()==='ak:auto');
             if(!ok){
@@ -64,21 +52,19 @@ jobs:
         if: steps.gate.outputs.enabled != 'true'
         run: exit 0
 
-      # 안내 코멘트 + ACK
+      # 안내 코멘트
       - name: Announce start
         uses: actions/github-script@v7
         with:
           script: |
             const {owner, repo} = context.repo;
             const pr = Number('${{ steps.pr.outputs.num }}');
-            const cid = await github.rest.issues.createComment({
+            await github.rest.issues.createComment({
               owner, repo, issue_number: pr,
-              body: "🤖 **AUTO-Kobong**: Help → Test → Scan → Preview 순서로 전자동 실행합니다."
+              body: "🤖 **AUTO-Kobong**: Help → Test → Scan → Preview 순서로 전자동 실행합니다. (DEV: 24h apply 허용, OWNER 전용)"
             });
-            try { await github.rest.reactions.createForIssueComment({ owner, repo, comment_id: cid.data.id, content: 'rocket'}); } catch {}
 
-      # ===== 실행 시퀀스 (ps1 직접 호출) =====
-      # 모든 스텝은 <10 → 성공 정규화; preview는 무조건 성공
+      # ===== 시퀀스 =====
       - name: /ak help
         shell: bash
         run: |
@@ -110,7 +96,7 @@ jobs:
           pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'fixloop' -RawArgs 'preview' -Pr '${{ steps.pr.outputs.num }}' || true
           exit 0
 
-      # ===== 조건부 apply =====
+      # ===== 조건부 apply (DEV: 24h 허용) =====
       - name: Decide apply
         id: apply
         uses: actions/github-script@v7
@@ -120,20 +106,13 @@ jobs:
             const pr = Number('${{ steps.pr.outputs.num }}');
             const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
             const applyLabel = labels.some(l => l.name.toLowerCase()==='ak:auto-apply');
-            const hourKST = (new Date().getUTCHours()+9)%24;
-            const night = (hourKST>=0 && hourKST<7);
-            core.setOutput('do', (applyLabel && !night) ? 'true' : 'false');
-            core.setOutput('night', night ? 'true' : 'false');
+            // DEV: 야간 제한 제거 → 라벨만 있으면 실행
+            core.setOutput('do', applyLabel ? 'true' : 'false');
+            core.setOutput('night','false')
 
       - name: Night notice
-        if: steps.apply.outputs.night == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const pr = Number('${{ steps.pr.outputs.num }}');
-            await github.rest.issues.createComment({ owner, repo, issue_number: pr,
-              body: "🌙 야간 가드: KST 00–07시에는 자동 적용을 건너뜁니다. 라벨 `ak:night-override` 사용 시 수동 허용." });
+        if: ${{ false }}
+        run: echo "DEV mode: night guard disabled"
 
       - name: /ak fixloop apply (OWNER only)
         if: ${{ steps.apply.outputs.do == 'true' && github.actor == github.repository_owner }}
