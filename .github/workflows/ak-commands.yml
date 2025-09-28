@@ -1,40 +1,17 @@
-<<<<<<< HEAD
 name: ak-commands
-on:
-  issue_comment: { types: [created] }
-  pull_request_review_comment: { types: [created] }
-=======
 on:
   issue_comment:
     types: [created]
 
->>>>>>> 9f72e0037d14a67d9f422114a8df345fee2025ea
 permissions:
   contents: write
   pull-requests: write
   checks: write
   issues: write
-<<<<<<< HEAD
+
 concurrency:
-  group: ak-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: ak-${{ github.event.issue.number }}
   cancel-in-progress: true
-jobs:
-  run-ak:
-    if: contains(github.event.comment.body, '/ak ')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Parse command
-        id: parse
-        run: echo "cmd=$(echo '${{ github.event.comment.body }}' | sed -n 's/.*\/ak\s\+\([a-z0-9\-]\+\).*/\1/p')" >> $GITHUB_OUTPUT
-      - name: Dispatch
-        shell: pwsh
-        run: |
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
-            -Command "${{ steps.parse.outputs.cmd }}" `
-            -Sha "${{ github.sha }}" `
-            -Pr "${{ github.event.issue.number || github.event.pull_request.number }}"
-=======
 
 jobs:
   run-ak:
@@ -43,14 +20,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # PR 코멘트 이벤트에서도 PR 헤드 커밋을 체크아웃
-          ref: ${{ github.event.issue.pull_request.head.sha }}
+          # 코멘트가 달린 PR의 헤드 커밋을 체크아웃 (정확한 SHA 보장)
+          ref: refs/pull/${{ github.event.issue.number }}/head
+          fetch-depth: 1
 
       - name: Parse command
         id: parse
         run: |
           body=$(printf "%s" '${{ github.event.comment.body }}')
-          # 표준 공백 클래스 사용
           cmd=$(printf "%s" "$body" | sed -n 's!.*/ak[[:space:]]\+\([a-z0-9-]\+\).*!\1!p')
           echo "cmd=$cmd" >> "$GITHUB_OUTPUT"
 
@@ -59,6 +36,28 @@ jobs:
         run: |
           pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
             -Command "${{ steps.parse.outputs.cmd }}" `
-            -Sha "${{ github.event.issue.pull_request.head.sha }}" `
+            -Sha "${{ github.sha }}" `
             -Pr "${{ github.event.issue.number }}"
->>>>>>> 9f72e0037d14a67d9f422114a8df345fee2025ea
+
+      - name: Reply with Run/Link
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const cmd = "${{ steps.parse.outputs.cmd }}";
+            const sha = "${{ github.sha }}".slice(0,7);
+            const url = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: `\`/ak ${cmd}\` accepted on **${sha}** → [run logs](${url})`
+            });
+
+      - name: Upload ak logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ak7-logs
+          path: logs/ak7.jsonl
+          if-no-files-found: warn
+          retention-days: 5
