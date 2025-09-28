@@ -1,5 +1,6 @@
 <<<<<<< HEAD
 name: ak-commands
+<<<<<<< HEAD
 on:
   issue_comment: { types: [created] }
   pull_request_review_comment: { types: [created] }
@@ -9,12 +10,20 @@ on:
     types: [created]
 
 >>>>>>> 9f72e0037d14a67d9f422114a8df345fee2025ea
+=======
+on:
+  issue_comment: { types: [created] }
+  pull_request_review_comment: { types: [created] }
+>>>>>>> 479c1d3a (ci(ak): add ak-commands.yml (missed))
 permissions:
   contents: write
   pull-requests: write
   checks: write
   issues: write
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 479c1d3a (ci(ak): add ak-commands.yml (missed))
 concurrency:
   group: ak-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: true
@@ -34,6 +43,7 @@ jobs:
             -Command "${{ steps.parse.outputs.cmd }}" `
             -Sha "${{ github.sha }}" `
             -Pr "${{ github.event.issue.number || github.event.pull_request.number }}"
+<<<<<<< HEAD
 =======
 
 jobs:
@@ -62,3 +72,5 @@ jobs:
             -Sha "${{ github.event.issue.pull_request.head.sha }}" `
             -Pr "${{ github.event.issue.number }}"
 >>>>>>> 9f72e0037d14a67d9f422114a8df345fee2025ea
+=======
+>>>>>>> 479c1d3a (ci(ak): add ak-commands.yml (missed))
