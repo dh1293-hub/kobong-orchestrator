@@ -9,14 +9,13 @@ permissions:
   checks: write
   issues: write
 
-concurrency:
-  group: ak-${{ github.event.issue.number }}
-  cancel-in-progress: true
-
 jobs:
   run-ak:
-    if: ${{ github.event.issue.pull_request && contains(github.event.comment.body, '/ak ') }}
+    if: ${{ github.event.issue.pull_request != null && startsWith(github.event.comment.body, '/ak ') }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: ak-${{ github.event.issue.number }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
         with:
