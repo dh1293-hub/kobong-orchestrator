@@ -20,7 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # 코멘트가 달린 PR의 헤드 커밋을 체크아웃 (정확한 SHA 보장)
           ref: refs/pull/${{ github.event.issue.number }}/head
           fetch-depth: 1
 
