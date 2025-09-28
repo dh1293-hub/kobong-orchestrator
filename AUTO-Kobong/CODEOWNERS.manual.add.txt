@@ -1,0 +1,5 @@
+# Append these lines to your CODEOWNERS file (recommended locations:
+#  /.github/CODEOWNERS  OR  /CODEOWNERS )
+# This forces OWNER review for any change under AUTO-Kobong/ (including the manual).
+
+/AUTO-Kobong/*   @dh1293-hub
