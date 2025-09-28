@@ -53,6 +53,70 @@ jobs:
         run: |
           mkdir -p logs
           printf '{"timestamp":"%s","level":"INFO","action":"bootstrap","message":"init"}\n' "$(date -Iseconds)" >> logs/ak7.jsonl
+      - name: Hydrate scripts from main
+        if: always()
+        run: |
+          if [ ! -d scripts/g5 ] || [ ! -f scripts/g5/ak-dispatch.ps1 ]; then
+            echo "::notice::scripts/g5 not found on PR head; hydrating from origin/main"
+            git fetch --depth=1 origin main
+            git checkout origin/main -- scripts/g5/
+            ls -la scripts/g5
+          fi
+          pwsh -NoLogo -NoProfile -Command "Get-ChildItem -Recurse scripts/g5/*.ps1 | % { git update-index --chmod=+x "name: ak-commands
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number
+        required: true
+      command:
+        description: ak command
+        required: true
+        type: choice
+        options: [scan, test, rewrite, fixloop]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: write
+  issues: write
+
+jobs:
+  run-ak:
+    # 댓글 트리거: PR에 달린 코멘트 + "/ak "로 시작
+    # 수동 트리거: 언제든 실행
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.issue.pull_request != null && startsWith(github.event.comment.body, '/ak ')) }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ak-${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.issue.number }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 댓글/수동 모두 공통: 대상 PR의 head를 정확히 체크아웃
+          ref: refs/pull/${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.issue.number }}/head
+          fetch-depth: 1
+
+      - name: Resolve inputs
+        id: cfg
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "pr=${{ inputs.pr }}"   >> "$GITHUB_OUTPUT"
+            echo "cmd=${{ inputs.command }}" >> "$GITHUB_OUTPUT"
+          else
+            body=$(printf "%s" '${{ github.event.comment.body }}')
+            cmd=$(printf "%s" "$body" | sed -n 's!.*/ak[[:space:]]\+\([a-z0-9-]\+\).*!\1!p')
+            echo "pr=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
+            echo "cmd=$cmd" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bootstrap ak logs
+        run: |
+          mkdir -p logs
+          printf '{"timestamp":"%s","level":"INFO","action":"bootstrap","message":"init"}\n' "$(date -Iseconds)" >> logs/ak7.jsonl
 
       - name: Dispatch
         shell: pwsh
@@ -91,4 +155,44 @@ jobs:
           path: logs/ak7.jsonl
           if-no-files-found: warn
           retention-days: 5
+
+"" }
+
+        shell: pwsh
+        run: |
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
+            -Command "${{ steps.cfg.outputs.cmd }}" `
+            -Sha "${{ github.sha }}" `
+            -Pr "${{ steps.cfg.outputs.pr }}"
+
+      - name: List ak logs (debug)
+        if: always()
+        run: |
+          echo "::group::ls -la logs"; ls -la logs || true; echo "::endgroup::"
+          echo "::group::tail logs/ak7.jsonl"; tail -n +1 logs/ak7.jsonl || true; echo "::endgroup::"
+
+      - name: Reply with Run/Link
+        if: ${{ github.event_name == 'issue_comment' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const cmd = "${{ steps.cfg.outputs.cmd }}";
+            const sha = "${{ github.sha }}".slice(0,7);
+            const url = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number("${{ steps.cfg.outputs.pr }}"),
+              body: `\`/ak ${cmd}\` accepted on **${sha}** → [run logs](${url})`
+            });
+
+      - name: Upload ak logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ak7-logs
+          path: logs/ak7.jsonl
+          if-no-files-found: warn
+          retention-days: 5
+
 
