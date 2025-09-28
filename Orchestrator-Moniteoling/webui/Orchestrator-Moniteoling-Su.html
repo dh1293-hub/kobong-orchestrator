@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>KO Monitor — 브라우저 콘솔</title>
+  <style>
+    :root{
+      --bg:#0B0F14; --card:#121820; --ink:#E6F0FF; --muted:#A4B1C3;
+      --focus:#65D1FF; --ok:#2ECC71; --warn:#F1C40F; --err:#E74C3C; --info:#3498DB;
+      --topbar:56px; --radius:8px; --tap:44px; --base:16px;
+    }
+    [data-theme="light"]{ --bg:#F7FAFF; --card:#FFFFFF; --ink:#0B1220; --muted:#475569; --focus:#0EA5E9 }
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui, Apple SD Gothic Neo, Segoe UI, Noto Sans KR, Roboto, Arial, sans-serif}
+    *{box-sizing:border-box}
+    :focus-visible{outline:3px solid var(--focus); box-shadow:0 0 0 8px color-mix(in oklab, var(--focus) 25%, transparent)}
+    .app{display:grid; grid-template-rows: var(--topbar) 1fr; height:100%}
+    .topbar{display:flex; align-items:center; gap:12px; padding:0 16px; border-bottom:1px solid rgba(255,255,255,.06); background:color-mix(in oklab,var(--bg) 90%, black)}
+    .brand{font-weight:800; letter-spacing:.3px}
+    .pill{display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:rgba(255,255,255,.06)}
+    .led{display:inline-block; width:12px; height:12px; border-radius:50%; box-shadow: inset 0 0 2px currentColor, 0 0 6px currentColor}
+    .led.ok{color:var(--ok)} .led.warn{color:var(--warn)} .led.err{color:var(--err)} .led.info{color:var(--info)}
+    .main{display:grid; grid-template-columns: 280px 1fr; min-height:0}
+    .sidebar{border-right:1px solid rgba(255,255,255,.06); padding:12px}
+    .nav a{display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; text-decoration:none; color:var(--ink); font-weight:600}
+    .nav a[aria-current="page"], .nav a:hover{background:rgba(255,255,255,.06)}
+    .content{padding:16px; min-width:0; overflow:auto}
+    .grid{display:grid; gap:12px}
+    .kpi{display:grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap:12px}
+    .card{background:var(--card); border-radius:var(--radius); padding:12px; border:1px solid rgba(255,255,255,.06)}
+    .kpi .card h3{margin:0 0 8px 0; font-size:.95rem; color:var(--muted)}
+    .kpi .value{font-size:1.6rem; font-weight:800}
+    .buttons{display:flex; flex-wrap:wrap; gap:12px}
+    .btn{min-height:var(--tap); min-width:12rem; padding:8px 14px; border-radius:12px; border:1px solid rgba(255,255,255,.12); background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.06)); color:var(--ink); font-weight:800; cursor:pointer}
+    .btn.primary{box-shadow:0 0 .6rem rgba(79,209,197,.35)}
+    .btn.danger{border-color:color-mix(in oklab, var(--err) 40%, transparent); box-shadow:0 0 .6rem color-mix(in oklab, var(--err) 35%, transparent)}
+    .btn:disabled{opacity:.55; cursor:not-allowed}
+    .hstack{display:flex; gap:10px; align-items:center}
+    .table{width:100%; border-collapse:separate; border-spacing:0 6px}
+    .th{font-size:.9rem; color:var(--muted); padding:6px 8px}
+    .tr{background:var(--card); border:1px solid rgba(255,255,255,.06); border-radius:8px}
+    .td{padding:10px 12px}
+    .split{display:grid; grid-template-columns: 42% 58%; gap:12px}
+    .terminal{font:14px/1.4 JetBrains Mono, SFMono-Regular, Consolas, Menlo, monospace; background:black; color:#E6F0FF; border-radius:8px; padding:8px; height:280px; overflow:auto}
+    .toast{position:fixed; right:16px; bottom:16px; background:#111A22; border:1px solid rgba(255,255,255,.12); color:#E6F0FF; padding:10px 12px; border-radius:10px; display:none}
+    @media (max-width: 1280px){ .split{grid-template-columns: 1fr} .kpi{grid-template-columns: repeat(2, 1fr)} .main{grid-template-columns: 1fr} .sidebar{position:sticky; top:0} }
+  </style>
+</head>
+<body data-theme="dark">
+<div class="app">
+  <div class="topbar">
+    <div class="brand">KO Monitor</div>
+    <span class="pill"><span class="led ok"></span> Ready</span>
+    <div style="margin-left:auto" class="hstack">
+      <button class="btn" id="btnRead">가독 모드</button>
+      <button class="btn" id="btnZoom">줌 100%</button>
+      <button class="btn" id="btnTheme">테마</button>
+      <button class="btn" id="btnHelp">?</button>
+    </div>
+  </div>
+  <div class="main">
+    <aside class="sidebar">
+      <nav class="nav grid">
+        <a href="#/overview" data-nav="overview" aria-current="page">개요</a>
+        <a href="#/timeline" data-nav="timeline">타임라인</a>
+        <a href="#/messages" data-nav="messages">메시지</a>
+        <a href="#/shells" data-nav="shells">Shells</a>
+        <a href="#/kb" data-nav="kb">Error‑KB</a>
+        <a href="#/settings" data-nav="settings">설정</a>
+      </nav>
+      <div style="height:12px"></div>
+      <button class="btn" id="btnOpenGH">GitHub 모니터 열기</button>
+    </aside>
+    <main class="content" id="appContent">
+
+      <!-- Overview -->
+      <section data-page="overview" class="grid">
+        <div class="kpi">
+          <div class="card"><h3>오늘 총 요청</h3><div class="value" id="kpiReq">0</div></div>
+          <div class="card"><h3>에러율</h3><div class="value" id="kpiErr">0%</div></div>
+          <div class="card"><h3>p95 지연</h3><div class="value" id="kpiP95">0 ms</div></div>
+          <div class="card"><h3>토큰(in/out)</h3><div class="value" id="kpiTok">0 / 0</div></div>
+        </div>
+
+        <div class="card">
+          <h3 style="margin:0 0 8px 0">한민수용 큰 버튼 세트</h3>
+          <div class="buttons">
+            <button class="btn primary" data-action="exec_next">다음 단계 실행</button>
+            <button class="btn" data-action="cancel">중단</button>
+            <button class="btn" data-action="fixloop_preview">FixLoop 미리보기</button>
+            <button class="btn" data-action="fixloop_apply">FixLoop 적용</button>
+            <button class="btn" data-action="mark_good">Mark Good</button>
+            <button class="btn" data-action="rollback_latest">Rollback good‑1</button>
+            <button class="btn" data-action="shell_open">셸 열기</button>
+            <button class="btn" data-action="open_github_monitor">GitHub 모니터 열기</button>
+          </div>
+        </div>
+
+        <div class="split">
+          <div class="card">
+            <h3 style="margin:0 0 8px 0">실패 CI 상위 (예시)</h3>
+            <table class="table">
+              <thead><tr><th class="th">워크플로우</th><th class="th">실패</th><th class="th">최근</th></tr></thead>
+              <tbody id="ciTop">
+                <tr class="tr"><td class="td">build-web</td><td class="td">3</td><td class="td">1h</td></tr>
+                <tr class="tr"><td class="td">e2e</td><td class="td">2</td><td class="td">3h</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="card">
+            <h3 style="margin:0 0 8px 0">보안 High+ (예시)</h3>
+            <table class="table">
+              <thead><tr><th class="th">레포</th><th class="th">규칙</th><th class="th">심각도</th><th class="th">상태</th></tr></thead>
+              <tbody>
+                <tr class="tr"><td class="td">core-api</td><td class="td">CWE‑79</td><td class="td"><span class="led err"></span> Critical</td><td class="td">open</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Timeline -->
+      <section data-page="timeline" hidden class="grid">
+        <div class="card"><h3 style="margin:0 0 8px 0">이벤트 스트림</h3>
+          <div id="timeline" style="font-family:JetBrains Mono, Consolas, monospace; white-space:pre; max-height:420px; overflow:auto;">(예시) 12:00:01 plan …</div>
+        </div>
+      </section>
+
+      <!-- Messages -->
+      <section data-page="messages" hidden class="grid">
+        <div class="card"><h3 style="margin:0 0 8px 0">요청/응답 인스펙터</h3>
+          <div>PII 마스킹 토글 · 토큰/지연 지표 표출(예시 자리)</div>
+        </div>
+      </section>
+
+      <!-- Shells -->
+      <section data-page="shells" hidden class="grid">
+        <div class="card"><div class="hstack"><h3 style="margin:0">Shell Dock</h3><span class="pill"><span class="led info"></span> readonly</span></div></div>
+        <div class="terminal" id="term">[readonly] KO Runner 연결 준비… (예시)</div>
+      </section>
+
+      <!-- Error‑KB -->
+      <section data-page="kb" hidden class="grid">
+        <div class="card"><h3 style="margin:0 0 8px 0">재발 오류 추천 카드</h3><div>(예시) fingerprint: XYZ — FixLoop 제안 표시</div></div>
+      </section>
+
+      <!-- Settings -->
+      <section data-page="settings" hidden class="grid">
+        <div class="card"><h3 style="margin:0 0 8px 0">설정</h3>
+          <div class="grid">
+            <label class="hstack">테마 <button class="btn" id="btnTheme2">토글</button></label>
+            <label class="hstack">행간/밀도 <button class="btn" id="btnDense">조밀/보통</button></label>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+  const pages = Array.from(document.querySelectorAll('[data-page]'));
+  function show(page){ pages.forEach(s=>{ s.hidden = s.dataset.page !== page }) }
+  function navTo(page){ document.querySelectorAll('[data-nav]').forEach(a=>a.setAttribute('aria-current', a.dataset.nav===page?'page':'false')); show(page); location.hash = '/'+page }
+  document.querySelectorAll('[data-nav]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); navTo(a.dataset.nav) })); 
+  window.addEventListener('hashchange', () => { const p=location.hash.replace('#/','')||'overview'; navTo(p) });
+  navTo((location.hash.replace('#/',''))||'overview');
+
+  const toast = (t)=>{const el=document.getElementById('toast'); el.textContent=t; el.style.display='block'; setTimeout(()=>el.style.display='none',1800)}
+  document.querySelectorAll('.buttons [data-action]').forEach(b=>b.addEventListener('click',()=>toast('요청: '+b.dataset.action)));
+
+  // Readability / Zoom / Theme
+  let base=16, dense=false;
+  document.getElementById('btnRead').onclick=()=>{ base = (base===16)?18:16; document.body.style.fontSize = base+'px'; toast('가독 모드 '+(base===18?'ON':'OFF')) }
+  document.getElementById('btnZoom').onclick=()=>{ const steps=[100,125,150,175,200]; let cur=parseInt(document.getElementById('btnZoom').innerText.replace(/\D/g,''))||100; let i=steps.indexOf(cur); i=(i+1)%steps.length; document.documentElement.style.fontSize=(steps[i]/100*16)+'px'; document.getElementById('btnZoom').innerText='줌 '+steps[i]+'%'; }
+  function toggleTheme(){ const cur=document.body.getAttribute('data-theme'); document.body.setAttribute('data-theme', cur==='light'?'dark':'light'); toast('테마: '+document.body.getAttribute('data-theme')) }
+  document.getElementById('btnTheme').onclick=toggleTheme; document.getElementById('btnTheme2').onclick=toggleTheme
+  document.getElementById('btnHelp').onclick=()=>toast('단축키: Ctrl+/, Ctrl+K, G G, Alt+N/X/S');
+  document.getElementById('btnDense').onclick=()=>{ dense=!dense; document.body.style.setProperty('--base', dense? '15px':'16px'); toast('밀도: '+(dense?'조밀':'보통')) }
+  document.getElementById('btnOpenGH').onclick=()=>{ window.open('https://gh-console.example', '_blank', 'noopener,noreferrer') }
+
+  // Keyboard: Ctrl+/, Ctrl+K, G G, Alt+N/X/S
+  let gg=0;
+  window.addEventListener('keydown', (e)=>{
+    if(e.ctrlKey && e.key==='/'){ e.preventDefault(); toast('검색 열기'); }
+    if(e.ctrlKey && (e.key==='k'||e.key==='K')){ e.preventDefault(); toast('커맨드 팔레트'); }
+    if(e.key==='g'||e.key==='G'){ gg++; setTimeout(()=>gg=0,420); if(gg===2){ navTo('overview'); gg=0; } }
+    if(e.altKey && (e.key==='n'||e.key==='N')){ toast('다음 단계 실행'); }
+    if(e.altKey && (e.key==='x'||e.key==='X')){ toast('중단'); }
+    if(e.altKey && (e.key==='s'||e.key==='S')){ navTo('shells'); }
+  });
+</script>
+<script id="g5-uiassist">
+(function(){
+  if (window.__g5UiAssist) return; window.__g5UiAssist = true;
+  const API="/g5/prefs";
+
+  // API same-origin 강제
+  (function(){const ORIGIN=location.origin;const of=window.fetch?.bind(window);
+    function force(u){try{const t=new URL(u,ORIGIN); if(t.pathname.startsWith('/api/')){ t.host=location.host; t.protocol=location.protocol; return t.href; }}catch{} return u;}
+    if(of){ window.fetch=(u,o)=>of(force(u),o); }
+    if(window.XMLHttpRequest){ const ox=XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open=function(m,u,...r){ return ox.call(this,m,force(u),...r); }; }
+  })();
+
+  // 유틸
+  const onReady=(fn)=> (document.readyState==='loading')?document.addEventListener('DOMContentLoaded',fn,{once:true}):fn();
+  const qs=(s,el=document)=>el.querySelector(s);
+  const ce=(t,p={})=>Object.assign(document.createElement(t),p);
+  const store={ get(k,d){ try{const v=localStorage.getItem(k); return v===null?d:JSON.parse(v) }catch{return d} },
+                set(k,v){ try{localStorage.setItem(k,JSON.stringify(v)); return true }catch{return false} } };
+  const cookie={ get(n){const m=document.cookie.match(new RegExp('(?:^|; )'+n+'=([^;]*)'));return m?decodeURIComponent(m[1]):null},
+                 set(n,v,d){const max=d?`; Max-Age=${d*86400}`:'';document.cookie=`${n}=${encodeURIComponent(v)}${max}; Path=/`} };
+  const sp=new URLSearchParams(location.search||'');
+  const hp=(h=>{const q=h.includes('?')?h.slice(h.indexOf('?')+1):'';return new URLSearchParams(q)})(location.hash||'');
+
+  // 강제 ON 파라미터 감지
+  const forceON = (sp.get('g5')==='on') || (hp.get('g5')==='on');
+
+  // OFF 우선 규칙
+  let OFF = (store.get('G5_UI_ON', null)===false) || (cookie.get('G5_UI_ON')==='0');
+  if (forceON) OFF = false; // 명시적 g5=on만 OFF를 무시
+
+  // G5 pill (OFF여도 보임)
+  const pill=ce('button',{id:'g5-pill',innerText:'G5',title:'Ctrl+Alt+G (켜기/끄기)'}); Object.assign(pill.style,{position:'fixed',right:'16px',bottom:'16px',width:'44px',height:'44px',borderRadius:'12px',border:'1px solid #4e5568',background:'#111827',color:'#e5e7eb',fontWeight:'700',boxShadow:'0 8px 24px rgba(0,0,0,.35)',zIndex:2147483647,cursor:'pointer'});
+  pill.onclick=()=>{ store.set('G5_UI_ON',true); cookie.set('G5_UI_ON','1',365); history.replaceState(null,'',location.href.replace(/([?#])g5=on(&|$)/,'$1').replace(/[?#]$/,'')); location.reload(); };
+  onReady(()=>document.body.appendChild(pill));
+  window.addEventListener('keydown',e=>{ if(e.ctrlKey&&e.altKey&&(e.key==='g'||e.key==='G')){ const cur=!!store.get('G5_UI_ON',false); store.set('G5_UI_ON',!cur); cookie.set('G5_UI_ON',cur?'0':'1',365); if(cur){history.replaceState(null,'',location.href.replace(/([?#])g5=on(&|$)/,'$1').replace(/[?#]$/,''));} location.reload(); }});
+
+  async function loadPrefs(){ try{ const r=await fetch(API,{cache:'no-cache'}); if(r.ok){ const j=await r.json(); return j && typeof j==='object' ? j : null } }catch{} return null }
+
+  // OFF면 자동 ON 금지(서버 prefs가 있어도 그대로 OFF 유지)
+  if(!forceON && OFF){
+    // 여기서 끝. 필요 시 최소한의 쿠키만 유지
+    return;
+  }
+
+  // 여기부터 ON 시 스타일/패널 적용
+  const st=ce('style',{id:'g5-uiassist-style'}); st.textContent=`:root{--g5-zoom:1;--g5-led:#22d3ee} html{font-size:calc(100% * var(--g5-zoom))} .g5-led button,.g5-led .btn,.g5-led [role="button"]{transition:box-shadow .15s ease,transform .05s ease} .g5-led button:hover,.g5-led .btn:hover,.g5-led [role="button"]:hover{box-shadow:0 0 .5rem var(--g5-led),0 0 1.2rem rgba(34,211,238,.35)} .g5-hc :where(body,main,header,footer,section,article,div){background-color:#0b1020!important;color:#f5f7fb!important} .g5-hc a{color:#60a5fa!important;text-decoration:underline} .g5-outline *:focus{outline:3px solid #22d3ee!important;outline-offset:2px!important} .g5-cb :where(.ok,.success){color:#1fbc1f!important}.g5-cb :where(.warn){color:#ffb020!important}.g5-cb :where(.err,.danger){color:#d61e1e!important} #g5-panel{position:fixed;right:16px;bottom:140px;width:280px;padding:12px;background:linear-gradient(180deg,#0b1020,#0e1426);color:#e5e7eb;border:1px solid #374151;border-radius:16px;box-shadow:0 12px 30px rgba(0,0,0,.45);z-index:2147483646;font-family:system-ui,sans-serif} #g5-panel h3{margin:0 0 8px 0;font-size:14px;letter-spacing:.4px;opacity:.9} #g5-panel .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0} #g5-panel .row label{font-size:13px;opacity:.9} #g5-panel .small{font-size:11px;opacity:.7} #g5-panel input[type=range]{width:140px} #g5-links{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px} #g5-links a{padding:6px 8px;border-radius:10px;background:#111827;border:1px solid #374151;color:#e5e7eb;font-size:12px;text-decoration:none} .g5-toast{position:fixed;right:16px;bottom:100px;background:#111827;color:#e5e7eb;border:1px solid #374151;padding:8px 10px;border-radius:10px;z-index:2147483647;opacity:.98}`;
+  onReady(()=>document.head.appendChild(st));
+  function toast(m){ const t=ce('div',{className:'g5-toast',innerText:m}); onReady(()=>{ document.body.appendChild(t); setTimeout(()=>t.remove(),1200); }); }
+  function applyZoom(v){ const z=Math.max(1,Math.min(2,Number(v)||1)); document.documentElement.style.setProperty('--g5-zoom',String(z)); try{ document.body.style.zoom=String(z) }catch{} }
+
+  let pref = store.get('G5_UI_PREF', null) || await loadPrefs() || {zoom:1.2,led:true,hc:false,cb:false,focus:true};
+  onReady(()=>{ applyZoom(pref.zoom||1); if(pref.led)document.body.classList.add('g5-led'); if(pref.hc)document.body.classList.add('g5-hc'); if(pref.cb)document.body.classList.add('g5-cb'); if(pref.focus)document.body.classList.add('g5-outline'); });
+
+  const p=ce('div',{id:'g5-panel'}); p.innerHTML=`<h3>G5 보조 패널</h3>
+    <div class="row"><label>글자 크기</label><input id="g5-zoom" type="range" min="1.0" max="2.0" step="0.05" value="${pref.zoom||1}"><span id="g5-zoom-val" class="small">${(pref.zoom||1)}x</span></div>
+    <div class="row"><label><input id="g5-led" type="checkbox" ${pref.led?'checked':''}> LED 버튼</label><span class="small">가독/선택 강조</span></div>
+    <div class="row"><label><input id="g5-hc"  type="checkbox" ${pref.hc?'checked':''}> 고대비</label><span class="small">어두운 배경+밝은 글씨</span></div>
+    <div class="row"><label><input id="g5-cb"  type="checkbox" ${pref.cb?'checked':''}> 색약 팔레트</label><span class="small">성공/경고/오류 색 구분</span></div>
+    <div class="row"><label><input id="g5-focus" type="checkbox" ${pref.focus?'checked':''}> 포커스 테두리</label><span class="small">키보드 이동 강조</span></div>
+    <div id="g5-links"><a href="/status.html">Status</a><a href="/github.html">GitHub</a><a href="/console.html">Console</a><a href="/AUTO-Kobong-Han.html">AK-Han</a><a href="/api/kpi" target="_blank">KPI JSON</a></div>
+    <div class="row" style="justify-content:flex-end; margin-top:8px">
+      <button id="g5-save" style="padding:6px 10px;border-radius:10px;border:1px solid #374151;background:#111827;color:#e5e7eb">저장</button>
+      <button id="g5-off"  style="padding:6px 10px;border-radius:10px;border:1px solid #374151;background:#1f2937;color:#e5e7eb;margin-left:6px">끄기</button>
+    </div>
+    <div class="small" style="margin-top:6px">단축키: <b>Ctrl+Alt+G</b> 켜기/끄기</div>`;
+  onReady(()=>document.body.appendChild(p));
+
+  onReady(()=>{ const $=(s)=>qs(s,p), $z=$('#g5-zoom'),$led=$('#g5-led'),$hc=$('#g5-hc'),$cb=$('#g5-cb'),$fo=$('#g5-focus'),$sv=$('#g5-save'),$off=$('#g5-off'),$zv=$('#g5-zoom-val');
+    function apply(){ applyZoom($z.value); document.body.classList.toggle('g5-led',$led.checked); document.body.classList.toggle('g5-hc',$hc.checked); document.body.classList.toggle('g5-cb',$cb.checked); document.body.classList.toggle('g5-outline',$fo.checked); $zv.textContent=(Number($z.value)||1).toFixed(2).replace(/\.00$/,'')+'x'; }
+    $z.addEventListener('input',apply); [$led,$hc,$cb,$fo].forEach(x=>x.addEventListener('change',apply));
+
+    async function save(){ const prefs={ zoom:Number($z.value)||1, led:$led.checked, hc:$hc.checked, cb:$cb.checked, focus:$fo.checked, on:true };
+      store.set('G5_UI_PREF',prefs); store.set('G5_UI_ON',true); cookie.set('G5_UI_ON','1',365);
+      try{ await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(prefs)});}catch{}
+      apply();
+    }
+    async function off(){ // OFF는 서버에도 on:false로 반영 + URL에서 g5=on 제거
+      const cur = await (async()=>{ try{ const r=await fetch(API,{cache:'no-cache'}); if(r.ok) return await r.json(); }catch{} return {}; })();
+      const prefs={ zoom:Number($z.value)||cur.zoom||1, led:$led.checked??cur.led, hc:$hc.checked??cur.hc, cb:$cb.checked??cur.cb, focus:$fo.checked??cur.focus, on:false };
+      try{ await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(prefs)});}catch{}
+      store.set('G5_UI_ON',false); cookie.set('G5_UI_ON','0',365);
+      history.replaceState(null,'',location.href.replace(/([?#])g5=on(&|$)/,'$1').replace(/[?#]$/,''));
+      location.reload();
+    }
+
+    $sv.addEventListener('click',save);
+    $off.addEventListener('click',off);
+    apply();
+  });
+})();
+</script>
+<script\\ id="g5-api-force">\\n\\(function\\(\\)\\{\\ //\\ file://\\ 대응\\ \\+\\ same-origin\\ 강제\\n\\ \\ const\\ CAND=\\['http://localhost:8090','http://127\\.0\\.0\\.1:8090','http://localhost:8080','http://127\\.0\\.0\\.1:8080'];\\n\\ \\ const\\ isHttp=/\\^https\\?:/i\\.test\\(location\\.protocol\\);\\n\\ \\ let\\ BASE=isHttp\\?\\ \\(location\\.origin\\|\\|CAND\\[0]\\)\\ :\\ CAND\\[0];\\n\\ \\ function\\ force\\(u\\)\\{try\\{const\\ t=new\\ URL\\(u,\\ BASE\\);\\ if\\(t\\.pathname\\.startsWith\\('/api/'\\)\\)\\ return\\ t\\.href;}catch\\{}\\ return\\ u;}\\n\\ \\ const\\ of=window\\.fetch\\?\\.bind\\(window\\);\\ if\\(of\\)\\{\\ window\\.fetch=\\(u,o\\)=>of\\(force\\(u\\),o\\);\\ }\\n\\ \\ if\\(window\\.XMLHttpRequest\\)\\{\\ const\\ ox=XMLHttpRequest\\.prototype\\.open;\\ XMLHttpRequest\\.prototype\\.open=function\\(m,u,\\.\\.\\.r\\)\\{\\ return\\ ox\\.call\\(this,m,force\\(u\\),\\.\\.\\.r\\);\\ };\\ }\\n\\ \\ try\\{\\ window\\.API_BASE=BASE;\\ window\\.akApiBase=BASE;\\ }catch\\{}\\n\\ \\ console\\.log\\('\\[G5]\\ API\\ forced\\ →',\\ BASE\\);\\n}\\)\\(\\);\\n</script></body>
+</html>

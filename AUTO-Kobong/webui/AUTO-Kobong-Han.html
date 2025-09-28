@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AUTO‑KOBONG Monitor · Han</title>
+<link rel="stylesheet" href="assets/list.css">
+<style>
+  :root{
+    --bg:#0B0F14; --panel:#121820; --ink:#E6F0FF; --muted:#A4B1C3; --focus:#65D1FF;
+    --success:#2ECC71; --warn:#F1C40F; --danger:#E74C3C; --info:#3498DB;
+    --radius:12px; --tap:44px; --space:16px; --space-lg:24px; --font:16px;
+    --topbar:56px;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font:400 var(--font)/1.6 system-ui,Segoe UI,Apple SD Gothic Neo,Noto Sans KR,Roboto,Arial,sans-serif}
+  .topbar{height:var(--topbar);display:flex;align-items:center;justify-content:space-between;padding:0 var(--space-lg);background:#0E141C;border-bottom:1px solid #1b2634;position:sticky;top:0;z-index:10}
+  .brand{font-weight:700}
+  .focus-ring:focus{outline:3px solid var(--focus);box-shadow:0 0 0 8px rgba(101,209,255,.2);border-radius:8px}
+  .top-actions{display:flex;align-items:center;gap:10px}
+  .top-actions input[type="search"]{height:36px;padding:6px 10px;border-radius:8px;border:1px solid #2a3a4f;background:#0F1720;color:var(--ink);min-width:260px}
+  .chip{padding:6px 10px;border-radius:8px;border:1px solid #27415a;background:#15202B;color:var(--ink);cursor:pointer}
+  .layout{display:grid;grid-template-columns:280px 1fr;min-height:calc(100% - var(--topbar))}
+  .sidebar{border-right:1px solid #1b2634;background:#0E141C;padding:12px}
+  .nav a{display:flex;align-items:center;gap:10px;padding:10px 12px;margin:4px 0;border-radius:8px;text-decoration:none;color:var(--ink)}
+  .nav a.active{background:#16202C}
+  .main{padding:16px}
+  .kpi{display:grid;grid-template-columns:repeat(4,minmax(200px,1fr));gap:16px}
+  .tile{background:var(--panel);padding:16px;border-radius:12px;border:1px solid #1b2634}
+  .led{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px;box-shadow:0 0 6px currentColor,inset 0 0 2px currentColor}
+  .btns{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}
+  .btn{min-height:var(--tap);padding:10px 16px;border-radius:8px;border:1px solid #27415a;background:#15202B;color:var(--ink);cursor:pointer;font-weight:600}
+  .btn.primary{border-color:#2b6cb0;background:#1b2940}
+  .btn.danger{border-color:#a33;background:#3a1616}
+  .btn:focus{outline:3px solid var(--focus);box-shadow:0 0 0 8px rgba(101,209,255,.2)}
+  .tabs{display:flex;gap:8px;margin:8px 0 16px}
+  .tab{padding:8px 12px;border-radius:8px;background:#16202C;cursor:pointer}
+  .tab.active{background:#213043}
+  .card{background:var(--panel);padding:16px;border-radius:12px;border:1px solid #1b2634;margin-bottom:12px}
+  .toast{position:fixed;right:16px;bottom:16px;background:#111a24;color:var(--ink);padding:12px 16px;border-radius:8px;border:1px solid #223246;opacity:.98}
+  .mode{display:flex;align-items:center;gap:8px}
+  /* SplitPane (패널 레이아웃) */
+  .split{display:grid;grid-template-columns:42% 12px 1fr;gap:0;min-height:460px}
+  .pane{overflow:auto;border:1px solid #1b2634;border-radius:12px;background:var(--panel)}
+  .handle{width:12px;cursor:col-resize;margin:0 8px;background:linear-gradient(#1b2634,#1b2634) center/2px 80% no-repeat;border-radius:8px}
+  .handle:focus{outline:3px solid var(--focus)}
+  /* 접근성 옵션 */
+  .readable{font-size:18px}
+  @media (max-width:1024px){ .kpi{grid-template-columns:repeat(2,1fr)} .layout{grid-template-columns:1fr} .split{grid-template-columns:1fr} .handle{display:none} }
+</style>
+</head>
+<body>
+  <div class="topbar" role="region" aria-label="상단바">
+    <div class="brand">AUTO‑KOBONG Monitor</div>
+    <div class="top-actions">
+      <input id="q" type="search" placeholder="검색 (Ctrl+/)" aria-label="검색">
+      <button class="chip" id="cmdk" title="커맨드 팔레트 (Ctrl+K)">⌘K</button>
+      <button class="chip" id="readability">가독 모드</button>
+      <button class="chip" id="zoom">줌 100%</button>
+      <button class="chip" id="theme">테마</button>
+    </div>
+    <div class="mode" role="group" aria-label="실행 모드">
+      <label><input type="radio" name="mode" value="readonly" checked> 읽기전용</label>
+      <label><input type="radio" name="mode" value="dry-run"> Dry‑Run</label>
+      <label><input type="radio" name="mode" value="apply"> Apply</label>
+    </div>
+  </div>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <nav class="nav" id="nav">
+        <a href="#/overview" class="active">개요(Overview)</a>
+        <a href="#/timeline">타임라인</a>
+        <a href="#/messages">메시지</a>
+        <a href="#/shells">Shells</a>
+        <a href="#/errorkb">Error‑KB</a>
+        <a href="#/settings">설정</a>
+        <a target="_blank" rel="noopener" href="gh-console://open" title="GitHub 모니터링 열기">GitHub 모니터</a>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <!-- Overview -->
+      <section id="overview">
+        <div class="kpi" aria-label="KPI 리본">
+          <div class="tile"><span class="led" style="color:#34D399"></span>오늘 요청 <b id="kpi-req">0</b></div>
+          <div class="tile"><span class="led" style="color:#F87171"></span>에러율 <b id="kpi-err">0%</b></div>
+          <div class="tile"><span class="led" style="color:#60A5FA"></span>p95 지연 <b id="kpi-p95">0ms</b></div>
+          <div class="tile"><span class="led" style="color:#F59E0B"></span>Busy(429) <b id="kpi-busy">0</b></div>
+        </div>
+        <div class="btns" role="group" aria-label="큰 버튼">
+          <button class="btn primary" data-action="exec_next">다음 단계 실행</button>
+          <button class="btn" data-action="cancel">중단</button>
+          <button class="btn" data-action="fixloop_preview">FixLoop 미리보기</button>
+          <button class="btn primary" data-action="fixloop_apply">FixLoop 적용</button>
+          <button class="btn" data-action="mark_good">Mark Good</button>
+          <button class="btn danger" data-action="rollback_latest">Rollback good‑1</button>
+          <button class="btn" data-action="shell_open">셸 열기</button>
+          <button class="btn" data-action="export_logs">로그/요약 내보내기</button>
+        </div>
+        <div class="card">고대비/큰 버튼/44×44/LED/키보드 단축키를 기본 제공합니다. (Ctrl+K, Ctrl+/, Alt+1..3)</div>
+      </section>
+
+      <!-- Timeline: 좌 리스트 / 우 디테일 (SplitPane) -->
+      <section id="timeline" style="display:none" aria-label="타임라인">
+        <div class="split" id="split-timeline" data-ratio="0.42">
+          <div class="pane" id="panel-left" aria-label="이벤트 리스트">
+            <div class="list-toolbar card">필터: <select id="filter-intent"><option value="">전체</option><option>exec</option><option>plan</option><option>error</option></select></div>
+            <div id="timeline-list" class="list virtual-list" aria-label="이벤트 목록"></div>
+          </div>
+          <div class="handle" id="split-handle" role="separator" aria-orientation="vertical" tabindex="0" aria-label="패널 크기 조절"></div>
+          <div class="pane" id="panel-right" aria-label="상세">
+            <div id="detail-card" class="card">항목을 선택하면 상세가 여기에 표시됩니다.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Messages -->
+      <section id="messages" data-ak7-messages style="display:none">
+        <div class="tabs" role="tablist">
+          <div class="tab active" role="tab" aria-selected="true">요청</div>
+          <div class="tab" role="tab">응답</div>
+          <div class="tab" role="tab">정책/서명</div>
+        </div>
+        <div class="card">민감정보 마스킹 토글과 headers/body 뷰를 제공합니다.</div>
+      </section>
+
+      <!-- Shells -->
+      <section id="shells" style="display:none"><div class="card">xterm.js 연동 예정 — 3단 모드(읽기전용→Dry‑Run→Apply).</div></section>
+
+      <!-- Error-KB -->
+      <section id="errorkb" style="display:none"><div class="card">재발 지문(fingerprint) 추천 조치·FixLoop 링크와 연계.</div></section>
+
+      <!-- Settings -->
+      <section id="settings" style="display:none"><div class="card">알림 임계/토큰 상한/테마/줌/가독 설정.</div></section>
+    </main>
+  </div>
+
+  <div id="help" class="card" style="position:fixed;left:16px;bottom:16px;display:none;max-width:420px">
+    <b>단축키</b>: Ctrl+/ 검색 · Ctrl+K 커맨드 팔레트 · Alt+1 개요 · Alt+2 타임라인 · Alt+3 메시지 · Alt+←/→ 패널폭 ±5% · ? 도움말
+  </div>
+
+  <script defer src="app.js"></script>
+<script id="g5-config">
+  (function(){
+    // 한 번만 설정: 항상 localhost:18080 사용
+    window.API_BASE = 'http://localhost:18080';
+    try { localStorage.setItem('G5_API_BASE', window.API_BASE); } catch(e) {}
+  })();
+</script>
+<script id="g5-file-origin-fix">
+(function(){
+  if (window.__g5FileOriginFix) return;
+  window.__g5FileOriginFix = true;
+
+  const prevFetch = window.fetch.bind(window);
+  const HOSTS = ['http://localhost:18080','http://127.0.0.1:18080','http://localhost:18085'];
+
+  function apiInfo(u){
+    try{
+      if (typeof u === 'string'){
+        if (/^\/?api\//.test(u)) return {path: u.startsWith('/')?u:'/'.concat(u)};
+        const url = new URL(u, location.href);
+        if (url.pathname.startsWith('/api/')) return {path: url.pathname + url.search};
+        return null;
+      }
+      if (u && typeof u.url === 'string') return apiInfo(u.url);
+    }catch(e){}
+    return null;
+  }
+
+  function rewrite(u, host, info){
+    const full = host + info.path;
+    if (typeof u === 'string') return full;
+    return new Request(full, u);
+  }
+
+  function synthResponse(info){
+    // 요청 경로별 모의 응답
+    if (info.path.startsWith('/api/kpi')){
+      const body = {
+        req_today: 1, err_rate: 0, p95_ms: 300,
+        tokens_in: 0, tokens_out: 0, busy: 0, ts: new Date().toISOString()
+      };
+      return new Response(JSON.stringify(body), {status:200, headers:{'Content-Type':'application/json'}});
+    }
+    if (info.path.startsWith('/api/events')){
+      const body = [{id:1,time:new Date().toISOString(),type:'info',text:'offline fallback'}];
+      return new Response(JSON.stringify(body), {status:200, headers:{'Content-Type':'application/json'}});
+    }
+    // 그 외는 실패 그대로
+    throw new Error('All API hosts failed');
+  }
+
+  window.fetch = async function(input, init){
+    const info = apiInfo(input);
+    // file:// 또는 절대경로여도 API면 폴백 시도
+    if (info){
+      let lastErr;
+      for (const host of HOSTS){
+        try{
+          const patched = rewrite(input, host, info);
+          const res = await prevFetch(patched, init);
+          if (res && res.status < 500) {
+            try { localStorage.setItem('G5_API_BASE', host); } catch(e){}
+            return res;
+          }
+          lastErr = new Error('Upstream '+(res && res.status));
+        }catch(e){ lastErr = e }
+      }
+      // 서버 전부 실패 → 모의 응답(200)
+      console.warn('[G5] API offline, using fallback for', info.path);
+      return synthResponse(info);
+    }
+    return prevFetch(input, init);
+  };
+})();
+</script>
+<script id="g5-kpi-normalize">
+(function(){
+  if (window.__g5KpiNormalizeInstalled) return;
+  window.__g5KpiNormalizeInstalled = true;
+  const origFetch = window.fetch;
+
+  function toIso(v){
+    try{
+      if(!v) return new Date().toISOString();
+      if (typeof v==='string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) return v;
+      return new Date(v).toISOString();
+    }catch(e){ return new Date().toISOString(); }
+  }
+  function normalize(kpi){
+    return {
+      req_today:  kpi.req_today ?? kpi.req ?? 0,
+      err_rate:   kpi.err_rate  ?? kpi.err ?? 0,
+      p95_ms:     kpi.p95_ms    ?? kpi.p95 ?? 0,
+      tokens_in:  kpi.tokens_in ?? 0,
+      tokens_out: kpi.tokens_out ?? 0,
+      busy:       kpi.busy ?? 0,
+      ts:         toIso(kpi.ts)
+    };
+  }
+
+  window.fetch = async function(input, init){
+    const url = (typeof input==='string') ? input : (input && input.url) || '';
+    const res = await origFetch(input, init);
+    if (url && url.includes('/api/kpi')) {
+      const clone = res.clone();
+      try{
+        const kpi = await clone.json();
+        const out = normalize(kpi);
+        return new Response(JSON.stringify(out), {
+          status: res.status,
+          statusText: res.statusText,
+          headers: {'Content-Type':'application/json'}
+        });
+      }catch(e){}
+    }
+    return res;
+  };
+})();
+</script>
+<script id="g5-uiassist">;(function(){
+  if(window.__g5UiAssist) return; window.__g5UiAssist = true;
+  const API="/g5/prefs";
+
+  (function(){ // same-origin force + API_BASE guard
+    const ORIGIN=location.origin;
+    function force(u){ try{ const t=new URL(u,ORIGIN); if(t.pathname.startsWith("/api/")){ t.host=location.host; t.protocol=location.protocol; return t.href; } }catch{} return u; }
+    const of=window.fetch?.bind(window); if(of){ window.fetch=(u,o)=>of(force(u),o); }
+    if(window.XMLHttpRequest){ const ox=XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open=function(m,u,...r){ return ox.call(this,m,force(u),...r); }; }
+    try{ for(const k of ["API_BASE","akApiBase"]){ Object.defineProperty(window,k,{configurable:true,enumerable:true,get(){return location.origin;},set(){}}); } }catch{}
+  })();
+
+  const onReady=(fn)=> (document.readyState==="loading")?document.addEventListener("DOMContentLoaded",fn,{once:true}):fn();
+  const qs=(s,el=document)=>el.querySelector(s);
+  const ce=(t,p={})=>Object.assign(document.createElement(t),p);
+  const store={ get(k,d){ try{const v=localStorage.getItem(k); return v===null?d:JSON.parse(v) }catch{return d} },
+                set(k,v){ try{localStorage.setItem(k,JSON.stringify(v)); return true }catch{return false} } };
+
+  const K_FEATURE="G5_FEATURES_ON";   // 기능 ON/OFF
+  const K_PANEL  ="G5_PANEL_ON";      // 패널 표시/숨김
+  let showPanel = store.get(K_PANEL, true);
+
+  const st=ce("style",{id:"g5-uiassist-style"});
+  st.textContent=`:root{--g5-zoom:1;--g5-led:#22d3ee}
+    html{font-size:calc(100% * var(--g5-zoom))}
+    .g5-led button,.g5-led .btn,[role="button"]{transition:box-shadow .15s ease,transform .05s ease}
+    .g5-led button:hover,.g5-led .btn:hover,[role="button"]:hover{box-shadow:0 0 .5rem var(--g5-led),0 0 1.2rem rgba(34,211,238,.35)}
+    .g5-hc :where(body,main,header,footer,section,article,div){background-color:#0b1020!important;color:#f5f7fb!important}
+    .g5-hc a{color:#60a5fa!important;text-decoration:underline}
+    .g5-outline *:focus{outline:3px solid #22d3ee!important;outline-offset:2px!important}
+    .g5-cb :where(.ok,.success){color:#1fbc1f!important}.g5-cb :where(.warn){color:#ffb020!important}.g5-cb :where(.err,.danger){color:#d61e1e!important}
+    #g5-panel{position:fixed;right:16px;bottom:140px;width:300px;padding:12px;background:linear-gradient(180deg,#0b1020,#0e1426);color:#e5e7eb;border:1px solid #374151;border-radius:16px;box-shadow:0 12px 30px rgba(0,0,0,.45);z-index:2147483646;font-family:system-ui,sans-serif}
+    #g5-panel h3{margin:0 0 8px 0;font-size:14px;letter-spacing:.4px;opacity:.9}
+    #g5-panel .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0}
+    #g5-panel .small{font-size:11px;opacity:.7}
+    #g5-panel input[type=range]{width:140px}
+    #g5-links{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+    #g5-links a{padding:6px 8px;border-radius:10px;background:#111827;border:1px solid #374151;color:#e5e7eb;font-size:12px;text-decoration:none}
+    /* --- NAV FIX: 네비/사이드바/우패널 링크는 원래색+밑줄 없음 (※ 반드시 마지막에 위치) --- */
+    .g5-hc :where(nav,.sidebar,.menu,.tabs,.toolbar,#right-panel,[data-pane="right"],.right) a{
+      color:inherit !important; text-decoration:none !important;
+    }`;
+  onReady(()=>document.head.appendChild(st));
+
+  function applyZoom(v){ const z=Math.max(1,Math.min(2,Number(v)||1)); document.documentElement.style.setProperty("--g5-zoom",String(z)); try{ document.body.style.zoom=String(z) }catch{} }
+  function applyFeatures(pref, on){
+    if(on){ applyZoom(pref.zoom||1); document.body.classList.toggle("g5-led",!!pref.led); document.body.classList.toggle("g5-hc",!!pref.hc); document.body.classList.toggle("g5-cb",!!pref.cb); document.body.classList.toggle("g5-outline",!!pref.focus); }
+    else { applyZoom(1); document.body.classList.remove("g5-led","g5-hc","g5-cb","g5-outline"); }
+  }
+
+  let pref=null, feat=false;
+  function renderPanel(){
+    let p = qs("#g5-panel");
+    if(!showPanel){ if(p) p.remove(); return; }
+    if(!p){ p=ce("div",{id:"g5-panel"}); document.body.appendChild(p); }
+    if(!pref){ p.innerHTML="<h3>G5 보조 패널</h3><div class='small'>로딩중…</div>"; return; }
+    p.innerHTML=`<h3>G5 보조 패널</h3>
+      <div class="row"><label><input id="g5-feat" type="checkbox" ${feat?"checked":""}> 기능 ON</label><span class="small">패널과 무관하게 유지</span></div>
+      <div class="row"><label>글자 크기</label><input id="g5-zoom" type="range" min="1.0" max="2.0" step="0.05" value="${pref.zoom||1}"><span id="g5-zoom-val" class="small">${(pref.zoom||1)}x</span></div>
+      <div class="row"><label><input id="g5-led" type="checkbox" ${pref.led?"checked":""}> LED 버튼</label><span class="small">가독/선택 강조</span></div>
+      <div class="row"><label><input id="g5-hc"  type="checkbox" ${pref.hc?"checked":""}> 고대비</label><span class="small">어두운 배경+밝은 글씨</span></div>
+      <div class="row"><label><input id="g5-cb"  type="checkbox" ${pref.cb?"checked":""}> 색약 팔레트</label><span class="small">성공/경고/오류 색 구분</span></div>
+      <div class="row"><label><input id="g5-focus" type="checkbox" ${pref.focus?"checked":""}> 포커스 테두리</label><span class="small">키보드 이동 강조</span></div>
+      <div id="g5-links"><a href="/status.html">Status</a><a href="/github.html">GitHub</a><a href="/console.html">Console</a><a href="/AUTO-Kobong-Han.html">AK-Han</a><a href="/api/kpi" target="_blank">KPI JSON</a></div>
+      <div class="row" style="justify-content:flex-end; gap:6px; margin-top:8px">
+        <button id="g5-save"  style="padding:6px 10px;border-radius:10px;border:1px solid #374151;background:#111827;color:#e5e7eb">저장</button>
+        <button id="g5-hide"  style="padding:6px 10px;border-radius:10px;border:1px solid #374151;background:#1f2937;color:#e5e7eb">패널 숨김</button>
+      </div>`;
+    const $=(s)=>qs(s,p), $z=$("#g5-zoom"),$led=$("#g5-led"),$hc=$("#g5-hc"),$cb=$("#g5-cb"),$fo=$("#g5-focus"),$zv=$("#g5-zoom-val"),$sv=$("#g5-save"),$hd=$("#g5-hide"),$ft=$("#g5-feat");
+    function syncApply(){
+      const tmp={ zoom:Number($z.value)||1, led:$led.checked, hc:$hc.checked, cb:$cb.checked, focus:$fo.checked };
+      pref = Object.assign({},pref,tmp);
+      applyFeatures(pref, feat);
+      $zv.textContent=(Number($z.value)||1).toFixed(2).replace(/\.00$/,"")+'x';
+    }
+    [$z,$led,$hc,$cb,$fo].forEach(el=>el.addEventListener("input",syncApply));
+    $ft.addEventListener("change", async ()=>{
+      feat = $ft.checked; store.set(K_FEATURE,feat);
+      try{ await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...pref,on:feat})}); }catch{}
+      syncApply();
+    });
+    $sv.addEventListener("click", async ()=>{
+      store.set("G5_UI_PREF",pref);
+      try{ await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...pref,on:feat})}); }catch{}
+      syncApply();
+    });
+    $hd.addEventListener("click", ()=>{ showPanel=false; store.set(K_PANEL,false); renderPanel(); });
+    syncApply();
+  }
+
+  const pill=ce("button",{id:"g5-pill",innerText:"G5",title:"Ctrl+Alt+G (패널 열기/숨김)"});
+  Object.assign(pill.style,{position:"fixed",right:"16px",bottom:"16px",width:"44px",height:"44px",borderRadius:"12px",border:"1px solid #4e5568",background:"#111827",color:"#e5e7eb",fontWeight:"700",boxShadow:"0 8px 24px rgba(0,0,0,.35)",zIndex:2147483647,cursor:"pointer"});
+  pill.onclick=()=>{ showPanel=!showPanel; store.set(K_PANEL,showPanel); renderPanel(); };
+  onReady(()=>document.body.appendChild(pill));
+  window.addEventListener("keydown",e=>{ if(e.ctrlKey&&e.altKey&&(e.key==="g"||e.key==="G")){ showPanel=!showPanel; store.set(K_PANEL,showPanel); renderPanel(); }});
+
+  async function boot(){
+    let sFeat = store.get(K_FEATURE, null);
+    let server=null; try{ const r=await fetch(API,{cache:"no-cache"}); if(r.ok) server=await r.json(); }catch{}
+    if(sFeat===null){ sFeat = (server && typeof server.on==="boolean") ? server.on : true; store.set(K_FEATURE,sFeat); }
+    const prefLocal = store.get("G5_UI_PREF", null);
+    pref = prefLocal || server || {zoom:1.2,led:true,hc:false,cb:false,focus:true,on:true};
+    const feat = !!sFeat; // 유지
+    onReady(()=>applyFeatures(pref, feat));
+    renderPanel();
+  }
+  boot();
+})();</script>
+<script>window.AK7_API_BASE='http://localhost:5191/api/ak7';</script>
+<script>window.AK7_API_FORCE='http://localhost:5191/api/ak7';window.AK7_API_BASE=window.AK7_API_FORCE;</script>
+<script src="public/ak7-bridge.js"></script>
+<script id="ak7-auto-wire">
+(function(){
+  try{
+    if(document.getElementById('ak7-auto-wire-ran')) return;
+    var flag=document.createElement('meta'); flag.id='ak7-auto-wire-ran'; document.head.appendChild(flag);
+    var map=[
+      {txt:["다음","다음 단계","Next"], act:"next"},
+      {txt:["KLC","KLC 점검"],           act:"klc"},
+      {txt:["중지","Stop"],              act:"stop"},
+      {txt:["확정","Good"],              act:"good"},
+      {txt:["Fix 미리보기","미리보기"],  act:"fix-preview"},
+      {txt:["Fix 적용","적용"],          act:"fix-apply"},
+      {txt:["롤백","Rollback"],          act:"rollback"}
+    ];
+    var q = function(s){ return document.querySelectorAll(s); };
+    var cands = q('button, a[role="button"], .btn, [data-action], [aria-label]');
+    cands.forEach(function(el){
+      var label=(el.getAttribute('aria-label')||el.textContent||el.value||"").trim();
+      map.some(function(m){
+        return m.txt.some(function(k){
+          if(label.includes(k)){
+            if(!el.getAttribute('data-ak7-action')) el.setAttribute('data-ak7-action', m.act);
+            return true;
+          }
+          return false;
+        });
+      });
+    });
+    // 브릿지가 자동 바인딩하지만 안전용 보강
+    q('[data-ak7-action]').forEach(function(el){
+      if(el.__ak7_wired) return;
+      el.addEventListener('click', function(e){
+        if(typeof AK7!=="undefined" && AK7.postAction){
+          e.preventDefault();
+          AK7.postAction(el.getAttribute('data-ak7-action'));
+        }
+      });
+      el.__ak7_wired = true;
+    });
+  }catch(e){ console.warn("[ak7-auto-wire]", e); }
+})();
+</script><script id="ak7-filter-wire">
+(function(){
+  function host(){return document.querySelector("[data-ak7-messages]")||document.querySelector("#messages")||document.body;}
+  function filter(type){
+    var h=host();
+    var cards=[].slice.call(h.querySelectorAll("[class*='-card']"));
+    cards.forEach(function(c){
+      var text=(c.textContent||"").toLowerCase();
+      var title=(c.querySelector("strong")?c.querySelector("strong").textContent:"").toLowerCase();
+      var show=true;
+      if(type==="req"){ show = title.includes("request"); }
+      else if(type==="res"){ show = title.includes("response"); }
+      else if(type==="sig"){ show = text.includes("sig:") || text.includes("signature"); }
+      else { show=true; }
+      c.style.display = show? "" : "none";
+    });
+  }
+  // 버튼 클릭시 필터 적용
+  document.addEventListener("click", function(e){
+    var b=e.target.closest("[data-ak7-filter]");
+    if(!b) return;
+    e.preventDefault();
+    filter(b.getAttribute("data-ak7-filter")||"all");
+  }, true);
+  // 텍스트로 자동 매핑: "요청/응답/정책/서명" 들어간 버튼을 필터 버튼으로 지정
+  var btns=document.querySelectorAll('button, a[role="button"], .btn, [aria-label]');
+  [].forEach.call(btns,function(el){
+    var lbl=(el.getAttribute("aria-label")||el.textContent||"").trim();
+    if(!lbl || el.getAttribute("data-ak7-filter")) return;
+    if(lbl.includes("요청")) el.setAttribute("data-ak7-filter","req");
+    else if(lbl.includes("응답")) el.setAttribute("data-ak7-filter","res");
+    else if(lbl.includes("정책") || lbl.includes("서명")) el.setAttribute("data-ak7-filter","sig");
+  });
+})();
+</script><!-- AK7-PERSIST v1 -->
+<script id="ak7-persist">
+(()=>{if(window.__AK7_PERSIST__)return;window.__AK7_PERSIST__=true;
+const KEY="ak7:cards:"+location.pathname+((location.hash||"").split("?")[0]||"");
+const load=()=>{try{return JSON.parse(localStorage.getItem(KEY)||"[]")}catch(e){return[]}};
+const save=a=>localStorage.setItem(KEY,JSON.stringify(a));
+const add=e=>{let a=load();a.unshift(e);if(a.length>50)a=a.slice(0,50);save(a)};
+function ensureWrap(){let w=document.querySelector("[data-ak7-messages],#ak7-messages");
+ if(!w){w=document.createElement("div");w.setAttribute("data-ak7-messages","");
+ Object.assign(w.style,{position:"fixed",right:"16px",bottom:"16px",maxWidth:"420px",zIndex:99999,display:"flex",flexDirection:"column",gap:"10px"});
+ document.body.appendChild(w)}return w}
+function restore(){const w=ensureWrap(),h=load();for(let i=h.length-1;i>=0;i--){const x=h[i],d=document.createElement("div");
+ d.style.cssText="padding:12px;border-radius:14px;background:#fff;border:1px solid #e5e7eb;box-shadow:0 8px 24px rgba(0,0,0,.08)";
+ d.innerHTML=`<div style="font-weight:600;margin-bottom:6px">${x.title}</div><pre style="margin:0;white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;">${x.body}</pre>`; w.prepend(d)}}
+function hook(){ if(!(window.AK7&&typeof AK7.postAction==="function")){ setTimeout(hook,200); return }
+ const o=AK7.postAction.bind(AK7); AK7.postAction=function(a,p){ let r=o(a,p); if(!r||typeof r.then!=="function") r=Promise.resolve(r);
+ return r.then(res=>{const title=`AK7 ${a} → exitCode=${(res&&res.exitCode)||0}`, body=JSON.stringify(res||{},null,2);
+ add({ts:Date.now(),title,body}); return res }).catch(err=>{const title=`AK7 ${a} → ERROR`, body=String(err&&err.stack||err);
+ add({ts:Date.now(),title,body}); throw err }) } }
+document.addEventListener("DOMContentLoaded",()=>{restore();hook()});
+window.addEventListener("hashchange",restore);
+})();
+</script>
+<!-- /AK7-PERSIST v1 -->
+</body>
+</html>
+
+
+
+
+

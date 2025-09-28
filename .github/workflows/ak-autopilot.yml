@@ -1,0 +1,135 @@
+name: AK Autopilot
+
+on:
+  workflow_dispatch: {}
+  # 필요하면 스케줄도 켜세요
+  # schedule:
+  #   - cron: "0 2 * * *"  # UTC 02:00 매일
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: write
+  issues: write
+
+jobs:
+  autopilot:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ak-autopilot
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: gh sanity
+        shell: bash
+        run: |
+          set -e
+          gh --version
+          gh api repos/${{ github.repository }} >/dev/null
+
+      - name: Choose target PR (auto)
+        id: pick
+        shell: bash
+        run: |
+          set -e
+          PR=$(gh pr list --state open --limit 1 --json number --jq '.[0].number' || true)
+          if [ -z "$PR" ]; then PR=201; fi
+          echo "pr=$PR" >> "$GITHUB_OUTPUT"
+          echo "Picked PR #$PR"
+
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ steps.pick.outputs.pr }}/head
+          fetch-depth: 1
+
+      - name: Capture SHA
+        id: sha
+        shell: bash
+        run: echo "value=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
+
+      - name: Hydrate scripts (if missing)
+        shell: bash
+        run: |
+          set -e
+          if [ ! -d scripts/g5 ]; then
+            git fetch --depth=1 origin main
+            git checkout origin/main -- scripts/g5/ || true
+          fi
+          # 필수 스크립트가 없어도 자동 생성(스텁)
+          mkdir -p scripts/g5
+          for f in ak-rewrite.ps1 ak-fixloop.ps1; do
+            if [ ! -f scripts/g5/$f ]; then
+              cat > scripts/g5/$f <<'EOF'
+param([string]$Sha,[string]$Pr)
+$log = Join-Path (Get-Location) "logs/ak7.jsonl"
+$line = (@{ timestamp=(Get-Date).ToString("s"); level="INFO"; action="$($MyInvocation.MyCommand.Name)"; message="stub run pr=$Pr sha=$Sha" } | ConvertTo-Json -Compress)
+New-Item -ItemType Directory -Force -Path (Split-Path $log) | Out-Null
+$line | Out-File -FilePath $log -Append -Encoding utf8
+Write-Host "[$($MyInvocation.MyCommand.Name)] stub completed."
+EOF
+            fi
+          done
+          ls -la scripts/g5
+
+      - name: Bootstrap logs
+        shell: bash
+        run: |
+          mkdir -p logs
+          printf '{"timestamp":"%s","level":"INFO","action":"bootstrap","message":"init"}\n' "$(date -Iseconds)" >> logs/ak7.jsonl
+
+      - name: Run ALL commands (scan → test → rewrite → fixloop)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = "Continue"
+          $cmds = @("scan","test","rewrite","fixloop")
+          foreach($c in $cmds){
+            Write-Host "==> RUN $c"
+            pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
+              -Command $c `
+              -Sha "${{ steps.sha.outputs.value }}" `
+              -Pr "${{ steps.pick.outputs.pr }}" `
+            || Write-Host "[WARN] step $c failed but continue"
+          }
+
+      - name: Show logs (debug)
+        if: always()
+        shell: bash
+        run: |
+          echo "::group::logs"; ls -la logs || true; echo "::endgroup::"
+          echo "::group::ak7.jsonl"; tail -n +1 logs/ak7.jsonl || true; echo "::endgroup::"
+
+      - name: Upload ak logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ak7-logs
+          path: logs/ak7.jsonl
+          retention-days: 5
+
+      - name: Comment to PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = ${{ steps.pick.outputs.pr }};
+            const url = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              "## AK Autopilot run",
+              `- PR: #${pr}`,
+              `- SHA: \`${{ steps.sha.outputs.value }}\``,
+              `- Logs: [ak7-logs artifact](${url})`,
+              `- Runner: ${process.env.GITHUB_RUN_ID}`
+            ].join("\n");
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number(pr),
+              body
+            });
