@@ -1,8 +1,7 @@
 name: Deploy GitHub Pages
 on:
   push:
-    branches:
-      - pages-setup-20250930-054335
+    branches: [ main, pages-setup-20250930-054335 ]
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,10 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # 레포 루트 전체를 아티팩트로 업로드(정적 사이트)
       - uses: actions/upload-pages-artifact@v3
         with:
           path: .
       - id: deployment
         uses: actions/deploy-pages@v4
-
