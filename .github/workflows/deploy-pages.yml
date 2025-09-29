@@ -1,7 +1,8 @@
 name: Deploy GitHub Pages
 on:
   push:
-    branches: [ main ]
+    branches:
+      - pages-setup-20250930-054335
   workflow_dispatch:
 permissions:
   contents: read
@@ -24,3 +25,4 @@ jobs:
           path: .
       - id: deployment
         uses: actions/deploy-pages@v4
+
