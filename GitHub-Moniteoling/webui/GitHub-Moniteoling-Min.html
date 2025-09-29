@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>GH Console — Monitoring</title>
+<style>
+  :root{
+    --bg:#0B0F14; --card:#121820; --ink:#E6F0FF;
+    --focus:#65D1FF; --ok:#2ECC71; --warn:#F1C40F; --err:#E74C3C; --info:#3498DB;
+    --topbar:56px; --radius:8px; --tap:44px;
+    --space-4:4px; --space-8:8px; --space-12:12px; --space-16:16px; --space-24:24px; --space-32:32px; --space-40:40px; --space-48:48px;
+    --sidebar-min:280px;
+    --font-base:16px; /* 가독모드에서 18px로 토글 */
+  }
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important; } }
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font:400 var(--font-base)/1.5 system-ui, "Apple SD Gothic Neo","Segoe UI","Noto Sans KR",Roboto,Arial,sans-serif}
+  *:focus-visible{outline:3px solid var(--focus); box-shadow:0 0 0 8px color-mix(in oklab, var(--focus) 25%, transparent)}
+  .topbar{position:sticky;top:0;height:var(--topbar);display:flex;align-items:center;gap:12px;padding:0 var(--space-16);background:linear-gradient(to bottom, #0B0F14 92%, transparent);z-index:10;border-bottom:1px solid #1B2430}
+  .brand{font-weight:700;letter-spacing:.2px}
+  .topbar .spacer{flex:1}
+  .btn,button{min-height:var(--tap);padding:0 14px;border-radius:var(--radius);border:1px solid #233244;background:#17202A;color:var(--ink);cursor:pointer}
+  .btn.primary{background:#17364a;border-color:#1f516d}
+  .btn.danger{background:#3a1311;border-color:#5a1f1b}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .led{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:-2px;margin-right:8px;box-shadow: inset 0 0 2px currentColor, 0 0 6px currentColor}
+  .led.ok{color:var(--ok)} .led.warn{color:var(--warn)} .led.err{color:var(--err)} .led.info{color:var(--info)}
+  .layout{display:grid;grid-template-columns:minmax(var(--sidebar-min), 300px) 1fr; height:calc(100vh - var(--topbar));}
+  nav.sidebar{border-right:1px solid #1B2430;overflow:auto}
+  nav.sidebar button{width:100%;justify-content:flex-start;display:flex;gap:12px;border:none;background:transparent;padding:12px 16px;border-radius:8px}
+  nav.sidebar button[aria-current="page"]{background:#101722;box-shadow:inset 0 0 0 2px #1f2c3f}
+  main{position:relative;overflow:auto;padding:16px}
+  /* 카드/타일 */
+  .tiles{display:grid;grid-template-columns:repeat(4, minmax(240px, 1fr));gap:16px}
+  .tile{background:var(--card);border-radius:12px;padding:16px;border:1px solid #1B2430}
+  .tile h3{margin:0 0 8px 0;font-weight:600}
+  /* 표/리스트 */
+  table{border-collapse:collapse;width:100%}
+  th,td{padding:12px 10px;border-bottom:1px solid #233244}
+  thead th{position:sticky;top:0;background:#0D131B;border-bottom:2px solid #2a3b53}
+  tr[tabindex]{outline:none}
+  tr[aria-selected="true"]{box-shadow:inset 0 0 0 2px var(--focus), 0 0 0 6px color-mix(in oklab, var(--focus) 25%, transparent)}
+  /* 분할패널 (PR 인박스) */
+  .split{display:grid;grid-template-columns: 42% 12px auto;grid-template-rows: auto 1fr; height:calc(100vh - var(--topbar) - 32px)}
+  .split .left{min-width:420px;overflow:auto;border-right:1px solid #1B2430}
+  .split .handle{cursor:col-resize;background:#0f1620;border-left:1px solid #1B2430;border-right:1px solid #1B2430}
+  .split .right{overflow:auto;padding-left:16px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .actions .btn{min-height:48px;font-weight:600}
+  .tabs{display:flex;gap:8px;border-bottom:1px solid #233244;margin:12px 0}
+  .tabs button{background:transparent;border:none;padding:10px 12px;border-radius:8px}
+  .tabs button[aria-selected="true"]{background:#0e1824}
+  /* Shell grid */
+  .grid{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:16px}
+  .panel{background:var(--card);border:1px solid #1B2430;border-radius:12px;display:flex;flex-direction:column;min-height:320px}
+  .panel header{display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid #1B2430}
+  .panel pre{flex:1;margin:0;padding:12px;overflow:auto;font:400 14px/1.4 JetBrains Mono, SFMono-Regular, Consolas, Menlo, monospace;white-space:pre}
+  .panel footer{display:flex;gap:8px;border-top:1px solid #1B2430;padding:10px 12px}
+  /* 토스트 */
+  .toast{position:fixed;right:16px;bottom:16px;background:#102030;border:1px solid #233244;border-radius:10px;padding:12px 14px;opacity:.98}
+  /* 접근성/포커스 */
+  .sr{position:absolute;left:-9999px}
+  /* 가독 모드/줌 */
+  [data-readable="true"]{--font-base:18px}
+</style>
+</head>
+<body>
+  <header class="topbar" role="banner">
+    <span class="brand">GH Console</span>
+    <button class="btn" id="btn-search" title="검색 (Ctrl+/)">검색</button>
+    <button class="btn" id="btn-cmd" title="커맨드 팔레트 (Ctrl+K)">명령</button>
+    <div class="spacer"></div>
+    <button class="btn" id="btn-readable" aria-pressed="false" title="가독 모드">가독</button>
+    <button class="btn" id="btn-zoom" title="줌 100%">줌 100%</button>
+    <button class="btn" id="btn-theme" title="테마">다크</button>
+  </header>
+
+  <div class="layout" role="application">
+    <nav class="sidebar" aria-label="주 메뉴">
+      <button data-route="/" aria-current="page"><span class="led info"></span>개요</button>
+      <button data-route="/prs"><span class="led info"></span>PR 인박스</button>
+      <button data-route="/ci"><span class="led info"></span>CI / Actions</button>
+      <button data-route="/security"><span class="led warn"></span>보안 센터</button>
+      <button data-route="/release"><span class="led info"></span>릴리즈 콘솔</button>
+      <button data-route="/shell"><span class="led ok"></span>Shell Ops</button>
+      <button data-route="/settings"><span class="led info"></span>설정</button>
+    </nav>
+
+    <main id="view" role="main" tabindex="-1">
+      <!-- Overview -->
+      <section data-page="/" hidden>
+        <div class="tiles" aria-label="KPI 4개">
+          <div class="tile"><h3>오픈 PR</h3><div id="kpi_open_prs">12</div></div>
+          <div class="tile"><h3>PR 첫 응답(시간)</h3><div id="kpi_first_response">3.8</div></div>
+          <div class="tile"><h3>Actions 성공률</h3><div id="kpi_actions_success">97%</div></div>
+          <div class="tile"><h3>High+ 경보</h3><div id="kpi_high_alerts">2</div></div>
+        </div>
+        <h3 style="margin-top:24px">오늘 내 작업</h3>
+        <table aria-label="오늘 내 작업">
+          <thead><tr><th>종류</th><th>제목</th><th>레포</th><th>업데이트</th></tr></thead>
+          <tbody id="today_list"></tbody>
+        </table>
+      </section>
+
+      <!-- PR 인박스 -->
+      <section data-page="/prs" hidden>
+        <div class="split" role="group" aria-label="PR 인박스">
+          <div class="left" id="pr_list" tabindex="0" aria-label="PR 목록"></div>
+          <div class="handle" id="split_handle" role="separator" aria-orientation="vertical" aria-label="패널 크기 조절"></div>
+          <div class="right">
+            <div class="actions">
+              <button class="btn" id="act_request_review">리뷰요청</button>
+              <button class="btn primary" id="act_approve">승인</button>
+              <button class="btn danger" id="act_request_changes">변경요청</button>
+              <button class="btn primary" id="act_merge">머지 / 머지큐</button>
+            </div>
+            <div class="tabs" role="tablist">
+              <button role="tab" aria-selected="true" data-tab="diff">Diff</button>
+              <button role="tab" data-tab="checks">Checks</button>
+              <button role="tab" data-tab="timeline">Timeline</button>
+              <button role="tab" data-tab="files">Files</button>
+            </div>
+            <div id="tab_content" aria-live="polite"></div>
+            <aside id="ai_panel" style="margin-top:12px">
+              <div class="tile"><h3>GPT‑5 브리핑</h3><p>요약/리스크/검토 포인트/권장 리뷰어</p></div>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <!-- CI / Actions -->
+      <section data-page="/ci" hidden>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <select aria-label="워크플로우"><option>모든 워크플로우</option></select>
+          <select aria-label="상태"><option>전체</option><option>성공</option><option>실패</option></select>
+          <select aria-label="레포"><option>모든 레포</option></select>
+          <input aria-label="기간" placeholder="최근 7일" style="min-height:var(--tap);padding:0 10px;border-radius:8px;border:1px solid #233244;background:#0F1620;color:var(--ink)"/>
+        </div>
+        <table aria-label="워크플로우 런">
+          <thead><tr><th>Run ID</th><th>Workflow</th><th>결과</th><th>대기</th><th>실행</th><th>시작</th><th>레포</th></tr></thead>
+          <tbody id="ci_table"></tbody>
+        </table>
+      </section>
+
+      <!-- 보안 센터 -->
+      <section data-page="/security" hidden>
+        <div class="tabs" role="tablist">
+          <button role="tab" aria-selected="true" data-tab="code">Code Scanning</button>
+          <button role="tab" data-tab="deps">Dependabot</button>
+          <button role="tab" data-tab="secret">Secret</button>
+        </div>
+        <div id="sec_content"></div>
+      </section>
+
+      <!-- 릴리즈 -->
+      <section data-page="/release" hidden>
+        <div class="tile">
+          <h3>릴리즈 생성</h3>
+          <label>버전(semver): <input id="rel_ver" placeholder="v1.2.3"/></label>
+          <label>대상 브랜치: <input id="rel_branch" placeholder="main"/></label>
+          <div style="margin-top:8px">
+            <button class="btn primary">릴리즈 생성</button>
+            <button class="btn">배포 트리거</button>
+            <button class="btn">백포트 만들기</button>
+          </div>
+          <h4 style="margin-top:12px">릴리즈 노트</h4>
+          <pre id="notes" style="white-space:pre-wrap;background:#0F1620;padding:12px;border-radius:12px">자동 생성 미리보기…</pre>
+        </div>
+      </section>
+
+      <!-- Shell Ops -->
+      <section data-page="/shell" hidden>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button class="btn primary" id="btn_add_shell">새 Shell 추가</button>
+          <button class="btn" id="btn_save_layout">레이아웃 저장</button>
+        </div>
+        <div class="grid" id="shell_grid"></div>
+      </section>
+
+      <!-- 설정 -->
+      <section data-page="/settings" hidden>
+        <div class="tile"><h3>설정</h3>
+          <ul>
+            <li>테마: 다크/라이트(고대비)</li>
+            <li>가독 모드/줌/행간</li>
+            <li>단축키 도움말</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" hidden aria-live="polite"></div>
+
+  <!-- UI 매니페스트(요약) : 지침의 JSON 구조를 내장(동작 연결은 후속 단계) -->
+  <script type="application/json" id="ui_manifest">
+    {
+      "nav":{"topbar":{"height_px":56,"items":["search","command_palette","readability","zoom","theme"]},
+             "sidebar":{"min_width_px":280,"items":["overview","prs","ci","security","release","shell","settings"]}},
+      "pages":{"/":{"kpis":4,"today":"list"},
+               "/prs":{"layout":"split","actions":["request_review","approve","request_changes","merge_or_queue"],
+                       "tabs":["diff","checks","timeline","files"],"ai_panel":true},
+               "/ci":{"filters":["workflow","status","repo","date_range"],"columns":7},
+               "/security":{"tabs":["code_scanning","dependabot","secret_scanning"]},
+               "/release":{"form":["version","branch","notes"],"actions":["create_release","trigger_deploy","create_backport"]},
+               "/shell":{"grid":{"row_height_px":320},"user_buttons":true}}
+    }
+  </script>
+
+  <script>
+    // 라우팅/초기화
+    const view = document.getElementById('view');
+    const pages = [...view.querySelectorAll('section[data-page]')];
+    const toast = document.getElementById('toast');
+    const navButtons = [...document.querySelectorAll('nav.sidebar button[data-route]')];
+
+    function show(route) {
+      pages.forEach(sec => sec.hidden = (sec.dataset.page !== route));
+      navButtons.forEach(btn => btn.setAttribute('aria-current', btn.dataset.route===route ? 'page' : 'false'));
+      // 포커스 이동(접근성)
+      view.focus({preventScroll:true});
+      history.replaceState({}, '', '#' + (route === '/' ? '' : route.substring(1)));
+      // 탭 초기화
+      if (route==='/prs') renderPR();
+      if (route==='/ci')  renderCI();
+      if (route==='/security') renderSEC();
+      if (route==='/shell') renderShells();
+      if (route==='/') renderHome();
+    }
+    function goHash(){ const h=location.hash.replace('#',''); show(h ? '/'+h : '/'); }
+    navButtons.forEach(b => b.addEventListener('click', ()=>show(b.dataset.route)));
+    window.addEventListener('hashchange', goHash); goHash();
+
+    // 탑바: 가독/줌/테마
+    const rootEl = document.documentElement;
+    document.getElementById('btn-readable').onclick = (e)=>{
+      const on = rootEl.getAttribute('data-readable')!=='true';
+      rootEl.setAttribute('data-readable', on);
+      e.currentTarget.setAttribute('aria-pressed', on);
+      note('가독 모드 ' + (on?'ON':'OFF'));
+    };
+    let zoomLv = 100;
+    document.getElementById('btn-zoom').onclick = ()=>{
+      const steps=[100,125,150,175,200]; let i=steps.indexOf(zoomLv); i=(i+1)%steps.length; zoomLv=steps[i];
+      rootEl.style.setProperty('--font-base', (zoomLv/100*16)+'px');
+      document.getElementById('btn-zoom').textContent='줌 '+zoomLv+'%'; note('줌 '+zoomLv+'%');
+    };
+    document.getElementById('btn-theme').onclick = ()=>{
+      const dark = rootEl.getAttribute('data-theme')!=='light';
+      rootEl.setAttribute('data-theme', dark?'light':'dark');
+      note('테마: '+(dark?'라이트':'다크'));
+    };
+
+    // 단축키 (Ctrl+K, Ctrl+/, G G, PR: A/R/M/Q; CI: E/L/C)
+    let gseq = 0;
+    window.addEventListener('keydown', (e)=>{
+      if (e.ctrlKey && e.key === '/') { e.preventDefault(); note('검색창 포커스'); }
+      if (e.ctrlKey && e.key.toLowerCase()==='k') { e.preventDefault(); note('커맨드 팔레트'); }
+      if (!e.ctrlKey && !e.altKey && e.key.toLowerCase()==='g'){ gseq = (gseq===0?1:0); setTimeout(()=>gseq=0,800); return }
+      if (gseq===1 && e.key.toLowerCase()==='g'){ show('/'); gseq=0; }
+      // PR 핫키
+      const route = location.hash.replace('#','') || '';
+      if (route==='prs'){ if (e.key.toLowerCase()==='a') note('승인'); if (e.key.toLowerCase()==='r') note('변경요청'); if (e.key.toLowerCase()==='m') note('머지'); if (e.key.toLowerCase()==='q') note('머지큐'); }
+      // CI 핫키
+      if (route==='ci'){ if (['e','l','c'].includes(e.key.toLowerCase())) note('CI 빠른 액션: '+e.key.toUpperCase()); }
+    });
+
+    // 토스트
+    function note(msg){ toast.textContent = msg; toast.hidden=false; setTimeout(()=>toast.hidden=true, 2200); }
+
+    // Home 더미 데이터
+    function renderHome(){
+      const list = document.getElementById('today_list');
+      list.innerHTML = [{k:'PR',t:'결제 API 구조 개선',r:'payments-api',u:'2시간 전'},
+                        {k:'승인',t:'프론트엔드 eslint 정리',r:'web-frontend',u:'1시간 전'}]
+        .map(i=>`<tr tabindex="0"><td>${i.k}</td><td>${i.t}</td><td>${i.r}</td><td>${i.u}</td></tr>`).join('');
+    }
+
+    // PR 인박스: 간단 렌더
+    const prs = Array.from({length:18}).map((_,i)=>({n:123+i,title:`기능 개선 #${i+1}`, repo:'web-frontend', author:'alice', updated:`${1+i%5}시간 전`, checks:i%3?'통과':'실패'}));
+    function renderPR(){
+      const L = document.getElementById('pr_list');
+      L.innerHTML = prs.map((p,idx)=>`<div role="button" tabindex="0" data-idx="${idx}" style="padding:10px 12px;border-bottom:1px solid #1B2430">
+        <div><b>#${p.n}</b> ${p.title}</div>
+        <div style="opacity:.8;font-size:.9em">${p.repo} · ${p.author} · ${p.updated} · Checks: ${p.checks}</div>
+      </div>`).join('');
+      L.querySelectorAll('[role="button"]').forEach(el=>el.addEventListener('click',()=>showPR(el.dataset.idx)));
+      showPR('0');
+      // 분할 핸들 드래그
+      const handle = document.getElementById('split_handle');
+      handle.onpointerdown = e=>{
+        handle.setPointerCapture(e.pointerId);
+        const split = handle.parentElement;
+        const startX = e.clientX; const cols = getComputedStyle(split).gridTemplateColumns.split(' ');
+        const leftPx = parseFloat(cols[0]); const mid = parseFloat(cols[1]); const right = cols[2];
+        handle.onpointermove = ev=>{
+          const dx = ev.clientX - startX; const next = Math.max(420, leftPx + dx);
+          split.style.gridTemplateColumns = `${next}px ${mid}px ${right}`;
+        };
+        handle.onpointerup = ()=>{ handle.onpointermove=null; handle.releasePointerCapture(e.pointerId); };
+      };
+    }
+    function showPR(i){
+      const p = prs[+i]; const t = document.getElementById('tab_content');
+      t.innerHTML = `<div class="tile"><h3>#${p.n} ${p.title}</h3>
+        <p>레포: ${p.repo}, 작성자: ${p.author}, 상태: ${p.checks}</p>
+        <p>여기서 Diff/Checks/Timeline/Files 탭이 전환됩니다.</p></div>`;
+    }
+
+    // CI
+    function renderCI(){
+      const tbody = document.getElementById('ci_table');
+      const rows = Array.from({length:14}).map((_,i)=>({id:9000+i,wf:'build',c:i%3?'success':'failure',q:`${i}m`,r:`${4+i}m`,s:'09:1'+i,rp:'web-frontend'}));
+      tbody.innerHTML = rows.map(r=>`<tr tabindex="0"><td>${r.id}</td><td>${r.wf}</td><td>${r.c}</td><td>${r.q}</td><td>${r.r}</td><td>${r.s}</td><td>${r.rp}</td></tr>`).join('');
+    }
+
+    // 보안
+    function renderSEC(){
+      const el = document.getElementById('sec_content');
+      el.innerHTML = `<div class="tile"><span class="led warn"></span> High 경보 2건 · Dismiss 사유/배치처리 버튼은 후속 연결</div>`;
+    }
+
+    // Shells
+    function renderShells(){
+      const grid = document.getElementById('shell_grid');
+      grid.innerHTML = '';
+      for (let i=0;i<2;i++){
+        const p=document.createElement('div'); p.className='panel';
+        p.innerHTML = `<header><span class="led ok"></span>연결됨 · RTT 120ms <span style="opacity:.7;margin-left:8px">마지막: 방금</span></header>
+          <pre>[readonly] ready
+$ echo "hello"
+hello
+</pre>
+          <footer>
+            <button class="btn">연결/재연결</button><button class="btn">중단</button><button class="btn">복사</button><button class="btn">다운로드</button><button class="btn">고정</button>
+          </footer>`;
+        grid.appendChild(p);
+      }
+    }
+  </script>
+<script id="g5-uiassist">
+(function(){
+  if (window.__g5UiAssist) return; window.__g5UiAssist = true;
+  const API="/g5/prefs";
+
+  // API same-origin 강제
+  (function(){const ORIGIN=location.origin;const of=window.fetch?.bind(window);
+    function force(u){try{const t=new URL(u,ORIGIN); if(t.pathname.startsWith('/api/')){ t.host=location.host; t.protocol=location.protocol; return t.href; }}catch{} return u;}
+    if(of){ window.fetch=(u,o)=>of(force(u),o); }
+    if(window.XMLHttpRequest){ const ox=XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open=function(m,u,...r){ return ox.call(this,m,force(u),...r); }; }
+  })();
+
+  // 유틸
+  const onReady=(fn)=> (document.readyState==='loading')?document.addEventListener('DOMContentLoaded',fn,{once:true}):fn();
+  const qs=(s,el=document)=>el.querySelector(s);
+  const ce=(t,p={})=>Object.assign(document.createElement(t),p);
+  const store={ get(k,d){ try{const v=localStorage.getItem(k); return v===null?d:JSON.parse(v) }catch{return d} },
+                set(k,v){ try{localStorage.setItem(k,JSON.stringify(v)); return true }catch{return false} } };
+  const cookie={ get(n){const m=document.cookie.match(new RegExp('(?:^|; )'+n+'=([^;]*)'));return m?decodeURIComponent(m[1]):null},
+                 set(n,v,d){const max=d?`; Max-Age=${d*86400}`:'';document.cookie=`${n}=${encodeURIComponent(v)}${max}; Path=/`} };
+  const sp=new URLSearchParams(location.search||'');
+  const hp=(h=>{const q=h.includes('?')?h.slice(h.indexOf('?')+1):'';return new URLSearchParams(q)})(location.hash||'');
+
+  // 강제 ON 파라미터 감지
+  const forceON = (sp.get('g5')==='on') || (hp.get('g5')==='on');
+
+  // OFF 우선 규칙
+  let OFF = (store.get('G5_UI_ON', null)===false) || (cookie.get('G5_UI_ON')==='0');
+  if (forceON) OFF = false; // 명시적 g5=on만 OFF를 무시
+
+  // G5 pill (OFF여도 보임)
+  const pill=ce('button',{id:'g5-pill',innerText:'G5',title:'Ctrl+Alt+G (켜기/끄기)'}); Object.assign(pill.style,{position:'fixed',right:'16px',bottom:'16px',width:'44px',height:'44px',borderRadius:'12px',border:'1px solid #4e5568',background:'#111827',color:'#e5e7eb',fontWeight:'700',boxShadow:'0 8px 24px rgba(0,0,0,.35)',zIndex:2147483647,cursor:'pointer'});
+  pill.onclick=()=>{ store.set('G5_UI_ON',true); cookie.set('G5_UI_ON','1',365); history.replaceState(null,'',location.href.replace(/([?#])g5=on(&|$)/,'$1').replace(/[?#]$/,'')); location.reload(); };
+  onReady(()=>document.body.appendChild(pill));
+  window.addEventListener('keydown',e=>{ if(e.ctrlKey&&e.altKey&&(e.key==='g'||e.key==='G')){ const cur=!!store.get('G5_UI_ON',false); store.set('G5_UI_ON',!cur); cookie.set('G5_UI_ON',cur?'0':'1',365); if(cur){history.replaceState(null,'',location.href.replace(/([?#])g5=on(&|$)/,'$1').replace(/[?#]$/,''));} location.reload(); }});
+
+  async function loadPrefs(){ try{ const r=await fetch(API,{cache:'no-cache'}); if(r.ok){ const j=await r.json(); return j && typeof j==='object' ? j : null } }catch{} return null }
+
+  // OFF면 자동 ON 금지(서버 prefs가 있어도 그대로 OFF 유지)
+  if(!forceON && OFF){
+    // 여기서 끝. 필요 시 최소한의 쿠키만 유지
+    return;
+  }
+
+  // 여기부터 ON 시 스타일/패널 적용
+  const st=ce('style',{id:'g5-uiassist-style'}); st.textContent=`:root{--g5-zoom:1;--g5-led:#22d3ee} html{font-size:calc(100% * var(--g5-zoom))} .g5-led button,.g5-led .btn,.g5-led [role="button"]{transition:box-shadow .15s ease,transform .05s ease} .g5-led button:hover,.g5-led .btn:hover,.g5-led [role="button"]:hover{box-shadow:0 0 .5rem var(--g5-led),0 0 1.2rem rgba(34,211,238,.35)} .g5-hc :where(body,main,header,footer,section,article,div){background-color:#0b1020!important;color:#f5f7fb!important} .g5-hc a{color:#60a5fa!important;text-decoration:underline} .g5-outline *:focus{outline:3px solid #22d3ee!important;outline-offset:2px!important} .g5-cb :where(.ok,.success){color:#1fbc1f!important}.g5-cb :where(.warn){color:#ffb020!important}.g5-cb :where(.err,.danger){color:#d61e1e!important} #g5-panel{position:fixed;right:16px;bottom:140px;width:280px;padding:12px;background:linear-gradient(180deg,#0b1020,#0e1426);color:#e5e7eb;border:1px solid #374151;border-radius:16px;box-shadow:0 12px 30px rgba(0,0,0,.45);z-index:2147483646;font-family:system-ui,sans-serif} #g5-panel h3{margin:0 0 8px 0;font-size:14px;letter-spacing:.4px;opacity:.9} #g5-panel .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0} #g5-panel .row label{font-size:13px;opacity:.9} #g5-panel .small{font-size:11px;opacity:.7} #g5-panel input[type=range]{width:140px} #g5-links{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px} #g5-links a{padding:6px 8px;border-radius:10px;background:#111827;border:1px solid #374151;color:#e5e7eb;font-size:12px;text-decoration:none} .g5-toast{position:fixed;right:16px;bottom:100px;background:#111827;color:#e5e7eb;border:1px solid #374151;padding:8px 10px;border-radius:10px;z-index:2147483647;opacity:.98}`;
+  onReady(()=>document.head.appendChild(st));
+  function toast(m){ const t=ce('div',{className:'g5-toast',innerText:m}); onReady(()=>{ document.body.appendChild(t); setTimeout(()=>t.remove(),1200); }); }
+  function applyZoom(v){ const z=Math.max(1,Math.min(2,Number(v)||1)); document.documentElement.style.setProperty('--g5-zoom',String(z)); try{ document.body.style.zoom=String(z) }catch{} }
+
+  let pref = store.get('G5_UI_PREF', null) || await loadPrefs() || {zoom:1.2,led:true,hc:false,cb:false,focus:true};
+  onReady(()=>{ applyZoom(pref.zoom||1); if(pref.led)document.body.classList.add('g5-led'); if(pref.hc)document.body.classList.add('g5-hc'); if(pref.cb)document.body.classList.add('g5-cb'); if(pref.focus)document.body.classList.add('g5-outline'); });
+
+  const p=ce('div',{id:'g5-panel'}); p.innerHTML=`<h3>G5 보조 패널</h3>
+    <div class="row"><label>글자 크기</label><input id="g5-zoom" type="range" min="1.0" max="2.0" step="0.05" value="${pref.zoom||1}"><span id="g5-zoom-val" class="small">${(pref.zoom||1)}x</span></div>
+    <div class="row"><label><input id="g5-led" type="checkbox" ${pref.led?'checked':''}> LED 버튼</label><span class="small">가독/선택 강조</span></div>
+    <div class="row"><label><input id="g5-hc"  type="checkbox" ${pref.hc?'checked':''}> 고대비</label><span class="small">어두운 배경+밝은 글씨</span></div>
+    <div class="row"><label><input id="g5-cb"  type="checkbox" ${pref.cb?'checked':''}> 색약 팔레트</label><span class="small">성공/경고/오류 색 구분</span></div>
+    <div class="row"><label><input id="g5-focus" type="checkbox" ${pref.focus?'checked':''}> 포커스 테두리</label><span class="small">키보드 이동 강조</span></div>
+    <div id="g5-links"><a href="/status.html">Status</a><a href="/github.html">GitHub</a><a href="/console.html">Console</a><a href="/AUTO-Kobong-Han.html">AK-Han</a><a href="/api/kpi" target="_blank">KPI JSON</a></div>
+    <div class="row" style="justify-content:flex-end; margin-top:8px">
+      <button id="g5-save" style="padding:6px 10px;border-radius:10px;border:1px solid #374151;background:#111827;color:#e5e7eb">저장</button>
+      <button id="g5-off"  style="padding:6px 10px;border-radius:10px;border:1px solid #374151;background:#1f2937;color:#e5e7eb;margin-left:6px">끄기</button>
+    </div>
+    <div class="small" style="margin-top:6px">단축키: <b>Ctrl+Alt+G</b> 켜기/끄기</div>`;
+  onReady(()=>document.body.appendChild(p));
+
+  onReady(()=>{ const $=(s)=>qs(s,p), $z=$('#g5-zoom'),$led=$('#g5-led'),$hc=$('#g5-hc'),$cb=$('#g5-cb'),$fo=$('#g5-focus'),$sv=$('#g5-save'),$off=$('#g5-off'),$zv=$('#g5-zoom-val');
+    function apply(){ applyZoom($z.value); document.body.classList.toggle('g5-led',$led.checked); document.body.classList.toggle('g5-hc',$hc.checked); document.body.classList.toggle('g5-cb',$cb.checked); document.body.classList.toggle('g5-outline',$fo.checked); $zv.textContent=(Number($z.value)||1).toFixed(2).replace(/\.00$/,'')+'x'; }
+    $z.addEventListener('input',apply); [$led,$hc,$cb,$fo].forEach(x=>x.addEventListener('change',apply));
+
+    async function save(){ const prefs={ zoom:Number($z.value)||1, led:$led.checked, hc:$hc.checked, cb:$cb.checked, focus:$fo.checked, on:true };
+      store.set('G5_UI_PREF',prefs); store.set('G5_UI_ON',true); cookie.set('G5_UI_ON','1',365);
+      try{ await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(prefs)});}catch{}
+      apply();
+    }
+    async function off(){ // OFF는 서버에도 on:false로 반영 + URL에서 g5=on 제거
+      const cur = await (async()=>{ try{ const r=await fetch(API,{cache:'no-cache'}); if(r.ok) return await r.json(); }catch{} return {}; })();
+      const prefs={ zoom:Number($z.value)||cur.zoom||1, led:$led.checked??cur.led, hc:$hc.checked??cur.hc, cb:$cb.checked??cur.cb, focus:$fo.checked??cur.focus, on:false };
+      try{ await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(prefs)});}catch{}
+      store.set('G5_UI_ON',false); cookie.set('G5_UI_ON','0',365);
+      history.replaceState(null,'',location.href.replace(/([?#])g5=on(&|$)/,'$1').replace(/[?#]$/,''));
+      location.reload();
+    }
+
+    $sv.addEventListener('click',save);
+    $off.addEventListener('click',off);
+    apply();
+  });
+})();
+</script>
+<script\\ id="g5-api-force">\\n\\(function\\(\\)\\{\\ //\\ file://\\ 대응\\ \\+\\ same-origin\\ 강제\\n\\ \\ const\\ CAND=\\['http://localhost:8090','http://127\\.0\\.0\\.1:8090','http://localhost:8080','http://127\\.0\\.0\\.1:8080'];\\n\\ \\ const\\ isHttp=/\\^https\\?:/i\\.test\\(location\\.protocol\\);\\n\\ \\ let\\ BASE=isHttp\\?\\ \\(location\\.origin\\|\\|CAND\\[0]\\)\\ :\\ CAND\\[0];\\n\\ \\ function\\ force\\(u\\)\\{try\\{const\\ t=new\\ URL\\(u,\\ BASE\\);\\ if\\(t\\.pathname\\.startsWith\\('/api/'\\)\\)\\ return\\ t\\.href;}catch\\{}\\ return\\ u;}\\n\\ \\ const\\ of=window\\.fetch\\?\\.bind\\(window\\);\\ if\\(of\\)\\{\\ window\\.fetch=\\(u,o\\)=>of\\(force\\(u\\),o\\);\\ }\\n\\ \\ if\\(window\\.XMLHttpRequest\\)\\{\\ const\\ ox=XMLHttpRequest\\.prototype\\.open;\\ XMLHttpRequest\\.prototype\\.open=function\\(m,u,\\.\\.\\.r\\)\\{\\ return\\ ox\\.call\\(this,m,force\\(u\\),\\.\\.\\.r\\);\\ };\\ }\\n\\ \\ try\\{\\ window\\.API_BASE=BASE;\\ window\\.akApiBase=BASE;\\ }catch\\{}\\n\\ \\ console\\.log\\('\\[G5]\\ API\\ forced\\ →',\\ BASE\\);\\n}\\)\\(\\);\\n</script></body>
+</html>
