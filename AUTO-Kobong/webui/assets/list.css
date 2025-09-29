@@ -1,0 +1,6 @@
+html,body{margin:0;padding:0;font-family:Segoe UI,Malgun Gothic,Apple SD Gothic Neo,Roboto,sans-serif;background:#0b0e13;color:#e9eef5}
+a,button{cursor:pointer}
+.btn{display:inline-block;padding:.55rem .9rem;border-radius:.65rem;border:1px solid rgba(255,255,255,.25)}
+.btn:hover{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.2) inset}
+.card{background:#121722;border:1px solid #202a3a;border-radius:1rem;padding:1rem;margin:.5rem 0}
+.ok{color:#87ffa3}.warn{color:#ffd36b}.err{color:#ff7b8a}

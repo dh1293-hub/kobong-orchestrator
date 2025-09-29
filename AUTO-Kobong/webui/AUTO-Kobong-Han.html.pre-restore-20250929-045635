@@ -1,9 +1,13 @@
 <!doctype html>
+
+
 <html lang="ko">
 <head>
+
+
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AUTO‑KOBONG Monitor · Han ✅</title>
+<title>AUTO‑KOBONG Monitor · Han</title>
 <link rel="stylesheet" href="assets/list.css">
 <style>
   :root{
@@ -199,10 +203,177 @@ function move(){ var el=pick(); if(!el) return false; if(!el.id) el.id="ak7-g5-a
   }catch(_){ } return true; }
 window.addEventListener("DOMContentLoaded",function(){ if(move()) return; var n=0,tm=setInterval(function(){ if(move()||++n>20) clearInterval(tm); },200); });
 })();</script>
+<!-- AK7_ROLLBACK_HOOK_V1 -->
+<script>(function(){
+  function findRollbackButtons(){
+    return [].slice.call(document.querySelectorAll("button, a, .btn")).filter(function(el){
+      var s=(el.textContent||"").trim().toLowerCase();
+      return s.startsWith("rollback")||s.indexOf("rollback ")===0;
+    });
+  }
+  async function callApi(url, body){
+    try{ let r = await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})});
+         return await r.json(); }catch(e){ return {ok:false,error:e.message} }
+  }
+  function toToast(msg,level){
+    try{ if(window.AK7_TOAST){ AK7_TOAST(level||"ok", msg, "Rollback") } else { console.log("Rollback:",msg) } }catch(_){}
+  }
+  function bind(){
+    var list=findRollbackButtons();
+    list.forEach(function(el){
+      if(el._ak7Bind) return; el._ak7Bind=true;
+      el.addEventListener("click", async function(ev){
+        ev.preventDefault();
+        var label=(el.textContent||"").trim();
+        var name=label.replace(/.*?rollback\s*/i,"").trim()||"good-1";
+
+        if(window.AK7_FORCE_OFFLINE){
+          // ⚠ 오프라인: PowerShell 한 줄 복붙 안내(템플릿 리터럴 사용)
+          var cmd = `pwsh -File scripts\\g5\\ak7-cli.ps1 -RollbackRestore -RollbackName ${name}`;
+          toToast("오프라인 모드: 콘솔에서 아래 실행\n"+cmd,"warn");
+          return;
+        }
+
+        var base = location.origin==="null" ? "http://localhost:5192" : location.origin;
+        var res  = await callApi(base+"/api/ak7/rollback/restore",{name:name});
+        if(res && res.ok){
+          toToast("복원 완료: "+(res.restored||name),"ok");
+          setTimeout(function(){ location.reload(); }, 1200);
+        } else {
+          toToast("복원 실패: "+(res && res.error || "unknown"),"err");
+        }
+      });
+    });
+  }
+  window.addEventListener("DOMContentLoaded", function(){ bind(); setInterval(bind, 1500); });
+})();</script>
+<!-- AK7_AUTOSNAP_V1 -->
+<style>
+#ak7-autosnap{display:inline-flex;align-items:center;margin-left:8px;padding:2px 8px;border:1px solid #3a4a66;border-radius:8px;font:12px/1 Segoe UI,Malgun Gothic;color:#e9eef5;background:#121722}
+#ak7-autosnap input{margin:0 6px}
+</style>
+<script>(function(){
+  function base(){ return (location.origin && location.origin!=="null") ? location.origin : "http://localhost:5192"; }
+  function pref(v){ if(arguments.length){ try{ localStorage.setItem("ak7.autosnap", v?"1":"0") }catch(_){} } try{ return localStorage.getItem("ak7.autosnap")!=="0" }catch(_){ return true } }
+  async function preSnapshot(tag){
+    if(!pref()) return;
+    var name = "auto-"+new Date().toISOString().replace(/[-:.TZ]/g,"").slice(0,14)+"-"+(tag||"act");
+    if(window.AK7_FORCE_OFFLINE){
+      var cmd = `pwsh -File scripts\\g5\\ak7-cli.ps1 -RollbackCreate -RollbackName ${name}`;
+      try{ if(window.AK7_TOAST){ AK7_TOAST("warn","AutoSnapshot(offline):\n"+cmd,"Rollback") } }catch(_){}
+      return;
+    }
+    try{
+      let r = await fetch(base()+"/api/ak7/rollback/create",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
+      let j = await r.json();
+      if(j && j.ok){ try{ AK7_TOAST && AK7_TOAST("ok","Snapshot created: "+(j.point||name),"Rollback") }catch(_){ } }
+      else{ try{ AK7_TOAST && AK7_TOAST("warn","Snapshot failed","Rollback") }catch(_){ } }
+    }catch(e){ try{ AK7_TOAST && AK7_TOAST("warn","Snapshot error: "+e.message,"Rollback") }catch(_){ } }
+  }
+  function attachToggle(){
+    var p=document.getElementById("ak7-pill");
+    if(!p || document.getElementById("ak7-autosnap")) return;
+    var box=document.createElement("label"); box.id="ak7-autosnap";
+    box.innerHTML = 'AutoSnapshot <input type="checkbox" id="ak7-autosnap-cb"> ON';
+    p.parentNode.insertBefore(box, p.nextSibling);
+    var cb=document.getElementById("ak7-autosnap-cb"); cb.checked=pref(); cb.onchange=function(){ pref(cb.checked); try{ AK7_TOAST && AK7_TOAST("ok",(cb.checked?"ON":"OFF"),"AutoSnapshot") }catch(_){} };
+  }
+  function captureClicks(){
+    document.addEventListener("click", function(ev){
+      var el=ev.target;
+      var id=(el.id||"");
+      var txt=(el.textContent||"").toLowerCase();
+      // Quick Test 버튼 id들
+      if(id==="ak7-b-scan"){ preSnapshot("scan"); return; }
+      if(id==="ak7-b-test"){ preSnapshot("test"); return; }
+      if(id==="ak7-b-fix"){  preSnapshot("fixloop"); return; }
+      if(id==="ak7-b-next"){ preSnapshot("next"); return; }
+      // 텍스트 기반 일반 버튼(Apply/FixLoop/Next/Scan/Test)
+      if(/\b(apply|fixloop|scan|test|next)\b/.test(txt)){ preSnapshot(txt.replace(/.*\b(apply|fixloop|scan|test|next)\b.*/,'$1')); }
+    }, true); // capture: 선 스냅샷 후 기존 핸들러 실행
+  }
+  // 복원 미리보기(콘솔용): AK7.previewRollback('이름')
+  window.AK7 = window.AK7 || {};
+  window.AK7.previewRollback = async function(name){
+    name = name || "last";
+    if(window.AK7_FORCE_OFFLINE){ try{ AK7_TOAST && AK7_TOAST("warn","Offline: preview는 서버 필요","Rollback") }catch(_){ } return; }
+    try{
+      let r = await fetch(base()+"/api/ak7/rollback/preview",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
+      let j = await r.json();
+      if(j && j.ok){
+        var files=(j.files||[]); var msg=(files.slice(0,10).join("\\n")); if(files.length>10) msg += `\n(+${files.length-10} more)`;
+        AK7_TOAST && AK7_TOAST("ok", msg || "변경 없음", "Preview: "+(j.restored||name));
+      } else {
+        AK7_TOAST && AK7_TOAST("err", (j && j.error)||"preview failed", "Rollback");
+      }
+    }catch(e){ AK7_TOAST && AK7_TOAST("err", e.message, "Rollback") }
+  }
+
+  window.addEventListener("DOMContentLoaded", function(){
+    attachToggle(); captureClicks();
+    // pill 이동 스크립트가 늦게 적용될 수 있어 재시도
+    var n=0,tm=setInterval(function(){ attachToggle(); if(++n>10) clearInterval(tm); },300);
+  });
+})();
+</script>
+<!-- AK7_AUTOSNAP_MOVE_TO_PILL_V1 -->
+<style>
+  /* Pill 높이와 맞춤 */
+  .ak7-pill.toolbar{height:28px}
+  .ak7-pill .ak7-auto-chip{
+    display:inline-flex; align-items:center; margin-left:10px;
+    background:transparent; border:0; padding:0; height:28px; /* pill과 동일 */
+    font:inherit; color:inherit;
+  }
+  .ak7-pill .ak7-auto-chip .lbl{opacity:.9; margin-right:6px}
+  .ak7-pill .ak7-auto-chip input{margin:0}
+</style>
+<script>(function(){
+  function pref(v){
+    try{
+      if(arguments.length){ localStorage.setItem("ak7.autosnap", v?"1":"0"); return v }
+      return localStorage.getItem("ak7.autosnap")!=="0"
+    }catch(_){ return true }
+  }
+  function ensure(){
+    var pill=document.getElementById("ak7-pill"); if(!pill) return;
+    var txt=document.getElementById("ak7-pill-text")||pill.firstChild;
+    // 기존 #ak7-autosnap(외부 라벨) 있으면 재활용 → pill 내부 chip으로 변환
+    var box=document.getElementById("ak7-autosnap") || document.getElementById("ak7-autosnap-chip");
+    var created=false;
+    if(!box){
+      box=document.createElement("label"); created=true;
+      box.id="ak7-autosnap-chip"; box.className="ak7-auto-chip";
+      var cb=document.createElement("input"); cb.type="checkbox"; cb.id="ak7-autosnap-cb";
+      var span=document.createElement("span"); span.className="lbl"; span.textContent="AutoSnapshot";
+      box.appendChild(span); box.appendChild(cb);
+    } else {
+      box.id="ak7-autosnap-chip"; box.className="ak7-auto-chip"; box.style.cssText="";
+      if(!box.querySelector(".lbl")){
+        var lbl=document.createElement("span"); lbl.className="lbl"; lbl.textContent="AutoSnapshot";
+        box.insertBefore(lbl, box.firstChild);
+      }
+      if(!box.querySelector("#ak7-autosnap-cb")){
+        var cb2=document.createElement("input"); cb2.type="checkbox"; cb2.id="ak7-autosnap-cb"; box.appendChild(cb2);
+      }
+    }
+    // pill 내부, ONLINE 텍스트 바로 오른쪽에 삽입
+    if(txt && txt.parentNode===pill){ txt.insertAdjacentElement("afterend", box); } else { pill.appendChild(box); }
+    // 체크 상태/이벤트
+    var cb=box.querySelector("#ak7-autosnap-cb");
+    cb.checked=pref();
+    cb.onchange=function(){ pref(cb.checked); try{ window.AK7_TOAST && AK7_TOAST("ok",(cb.checked?"ON":"OFF"),"AutoSnapshot") }catch(_){} };
+  }
+  window.addEventListener("DOMContentLoaded", function(){
+    ensure();
+    // 레이아웃 지연 대비 재시도
+    var n=0, tm=setInterval(function(){ ensure(); if(++n>10) clearInterval(tm); }, 300);
+  });
+})();</script>
 </head>
 <body>
   <div class="topbar" role="region" aria-label="상단바">
-    <div class="brand">AUTO‑KOBONG Monitor · Han ✅</div>
+    <div class="brand">AUTO‑KOBONG Monitor</div>
     <div class="top-actions">
       <input id="q" type="search" placeholder="검색 (Ctrl+/)" aria-label="검색">
       <button class="chip" id="cmdk" title="커맨드 팔레트 (Ctrl+K)">⌘K</button>
@@ -623,6 +794,10 @@ window.addEventListener("hashchange",restore);
 <!-- /AK7-PERSIST v1 -->
 </body>
 </html>
+
+
+
+
 
 
 
