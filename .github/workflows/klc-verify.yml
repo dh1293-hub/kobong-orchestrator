@@ -18,7 +18,8 @@ jobs:
             Select-String -Pattern 'traceId','durationMs','exitCode','anchorHash' -SimpleMatch
           if(-not $hits){
             Write-Host 'No KLC lines found → soft warning' -ForegroundColor Yellow
-            exit 0  # 초기엔 통과(소프트). 정착되면 1로 바꿔 Fail 처리
+            exit 1  # 초기엔 통과(소프트). 정착되면 1로 바꿔 Fail 처리
           } else {
             Write-Host "KLC lines detected: $($hits.Count)" -ForegroundColor Green
           }
+
