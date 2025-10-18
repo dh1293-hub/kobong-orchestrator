@@ -1,0 +1,24 @@
+name: Guard Sentinel & Bridge (HTML shape)
+on:
+  pull_request: { branches: [ main ] }
+jobs:
+  guard:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify sentinel comment and bridge wiring
+        shell: pwsh
+        run: |
+          $hits = 0
+          $files = Get-ChildItem -Recurse -Include *.html,*.htm -Path . -File -ErrorAction SilentlyContinue
+          foreach($f in $files){
+            $t = Get-Content $f.FullName -Raw
+            if($t -match '<!-- __G5_SENTINEL:.*?_v1\.1__' -and $t -match '<script>window\.' -and $t -match '-bridge\.js'){
+              $hits++
+            }
+          }
+          if($files.Count -gt 0 -and $hits -eq 0){
+            Write-Error "No sentinel/bridge wiring found in HTML. Prevent direct edits. FAIL."
+            exit 1
+          }
+          Write-Host "Sentinel/bridge OK in $hits file(s)."
