@@ -1,0 +1,34 @@
+name: Weekly Housekeeping
+on:
+  schedule:
+    - cron: "0 1 * * 1"  # 매주 월 10:00 KST
+  workflow_dispatch:
+jobs:
+  clean:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete remote g5/* branches older than 14d
+        env: { GH_TOKEN: ${{ github.token }} }
+        run: |
+          set -e
+          REPO="${{ github.repository }}"
+          gh api repos/$REPO/branches --paginate --jq '.[] | select(.name|test("^g5/")) | .name' > branches.txt
+          while read B; do
+            # 최근 커밋 14일 초과 시 삭제(보호 예외)
+            LAST=$(gh api repos/$REPO/commits/$B --jq '.commit.committer.date' || echo "")
+            if [ -n "$LAST" ]; then
+              python - <<'PY'
+import os,sys,datetime
+from dateutil import parser
+d=parser.isoparse(os.environ.get("LAST")); 
+if (datetime.datetime.now(datetime.timezone.utc)-d).days>14: print("DEL")
+PY
+              if [ "$?" = "0" ]; then
+                git push origin --delete "$B" || true
+              fi
+            fi
+          done < branches.txt
+      - name: Keep artifacts 30d (noop if default)
+        run: echo "Retention is managed at repo settings; manual prune optional."

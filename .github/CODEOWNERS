@@ -1,0 +1,5 @@
+# CODEOWNERS — 최소 예시(필요시 팀/사용자 핸들로 바꾸세요)
+*                @dh1293-hub
+/scripts/        @dh1293-hub
+/.github/        @dh1293-hub
+/webui/          @dh1293-hub

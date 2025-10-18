@@ -1,0 +1,31 @@
+name: Post-release Canary
+on:
+  release:
+    types: [published]
+  repository_dispatch:
+    types: [deploy]
+jobs:
+  canary:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PowerShell 7
+        uses: PowerShell/PowerShell@v1
+        with: { pwsh-version: "7.4.x" }
+      - name: Canary
+        id: canary
+        shell: pwsh
+        continue-on-error: true
+        run: pwsh -NoProfile -File ops/canary-postrelease.ps1
+      - name: Create incident issue on failure
+        if: steps.canary.outcome != 'success'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $title = "Post-release canary failed"
+          $body  = "자동 카나리 실패: /health 응답 실패. 즉시 점검 및 `urs-rollback.ps1 -Mode prev` 권고."
+          gh issue create -t $title -b $body
