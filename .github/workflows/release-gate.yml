@@ -1,0 +1,19 @@
+name: Release Gate (light)
+on:
+  release:
+    types: [published]
+jobs:
+  gate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: KLC one-liner present?
+        shell: pwsh
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          $body = gh release view $env:TAG_NAME --json body -q .body
+          if(-not $body -or -not ($body -match "KLC \\| traceId=")){
+            Write-Error "KLC one-liner missing in release notes"; exit 1
+          }
+          Write-Host "KLC line found. OK."
