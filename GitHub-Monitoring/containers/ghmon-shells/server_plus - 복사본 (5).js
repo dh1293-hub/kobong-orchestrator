@@ -1,0 +1,364 @@
+"use strict";
+const http = require("http"), https = require("https"), url = require("url");
+const PORT  = process.env.PORT || 5182;
+let   CUR_REPO = (process.env.GH_REPO || "").trim();     // 런타임 변경 가능
+const TOKEN    = (process.env.GH_TOKEN || "").trim();
+
+/* ---------- 공통 ---------- */
+function send(res, code, obj){
+  const b = JSON.stringify(obj);
+  res.writeHead(code, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "86400"
+  });
+  res.end(b);
+}
+const ok = (res, extras)=> send(res, 200, { ok:true, code:0, ...extras });
+const bad= (res, code, msg, extras={})=> send(res, code, { ok:false, code:1, message: msg, ...extras });
+
+function parseRepo(s){ const [owner, repo] = String(s||"").split("/"); return { owner, repo }; }
+function gh(path, accept){
+  return new Promise((resolve, reject)=>{
+    const { owner, repo } = parseRepo(CUR_REPO);
+    if (!owner || !repo) return reject(new Error("GH_REPO missing (owner/repo)"));
+    const opts = {
+      hostname: "api.github.com",
+      path,
+      method: "GET",
+      headers: {
+        "User-Agent": "ghmon-shells-plus",
+        "Accept": accept || "application/vnd.github+json"
+      }
+    };
+    if (TOKEN) opts.headers["Authorization"] = "Bearer " + TOKEN;
+    const req = https.request(opts, (r)=>{
+      const chunks = [];
+      r.on("data",(c)=>chunks.push(c));
+      r.on("end", ()=>{
+        const raw = Buffer.concat(chunks).toString("utf8");
+        let j = null; try { j = JSON.parse(raw); } catch(_) { j = { raw }; }
+        if (r.statusCode>=200 && r.statusCode<300) return resolve(j);
+        const e = new Error("HTTP " + r.statusCode); e.status=r.statusCode; e.body=raw; reject(e);
+      });
+    });
+    req.on("error", reject); req.end();
+  });
+}
+function ghWrite(path, method, body, accept){
+  return new Promise((resolve, reject)=>{
+    const { owner, repo } = parseRepo(CUR_REPO);
+    if (!owner || !repo) return reject(new Error("GH_REPO missing (owner/repo)"));
+    const data = body ? Buffer.from(JSON.stringify(body), "utf8") : null;
+    const opts = {
+      hostname: "api.github.com",
+      path,
+      method,
+      headers: {
+        "User-Agent": "ghmon-shells-plus",
+        "Accept": accept || "application/vnd.github+json",
+        "Content-Type": "application/json"
+      }
+    };
+    if (TOKEN) opts.headers["Authorization"] = "Bearer " + TOKEN;
+    if (data)  opts.headers["Content-Length"] = String(data.length);
+    const req = https.request(opts, (r)=>{
+      const chunks = [];
+      r.on("data",(c)=>chunks.push(c));
+      r.on("end", ()=>{
+        const raw = Buffer.concat(chunks).toString("utf8");
+        let j = {};
+        try { j = raw ? JSON.parse(raw) : {}; } catch(_) { j = { raw }; }
+        if (r.statusCode>=200 && r.statusCode<300) return resolve(j);
+        const e = new Error("HTTP " + r.statusCode); e.status=r.statusCode; e.body=raw; reject(e);
+      });
+    });
+    req.on("error", reject);
+    if (data) req.write(data);
+    req.end();
+  });
+}
+
+/* ---------- 목록 ---------- */
+async function listPRs(q){ const state=q.state||"open"; const per=Number(q.limit||50);
+  const {owner,repo}=parseRepo(CUR_REPO);
+  return gh(`/repos/${owner}/${repo}/pulls?state=${encodeURIComponent(state)}&per_page=${per}`);
+}
+async function listIssues(q){ const state=q.state||"open"; const per=Number(q.limit||50);
+  const {owner,repo}=parseRepo(CUR_REPO);
+  const data=await gh(`/repos/${owner}/${repo}/issues?state=${encodeURIComponent(state)}&per_page=${per}`);
+  return Array.isArray(data)? data.filter(x=>!x.pull_request) : data;
+}
+async function listRuns(q){ const per=Number(q.limit||30);
+  const {owner,repo}=parseRepo(CUR_REPO);
+  const data=await gh(`/repos/${owner}/${repo}/actions/runs?per_page=${per}`); return data.workflow_runs||[];
+}
+async function listLabels(){ const {owner,repo}=parseRepo(CUR_REPO); return gh(`/repos/${owner}/${repo}/labels?per_page=100`); }
+async function listHooks(){  const {owner,repo}=parseRepo(CUR_REPO); return gh(`/repos/${owner}/${repo}/hooks?per_page=100`); }
+async function listAlerts(q){ const per=Number(q.limit||50);
+  const {owner,repo}=parseRepo(CUR_REPO);
+  try{
+    const acc="application/vnd.github+json";
+    const data=await gh(`/repos/${owner}/${repo}/dependabot/alerts?per_page=${per}`, acc);
+    return Array.isArray(data)?data:[];
+  } catch(e){ if (e.status===403 || e.status===404) return []; throw e; }
+}
+async function overview(){
+  const [prs,issues,runs]=await Promise.all([ listPRs({}), listIssues({}), listRuns({}) ]);
+  const newestRun=(runs[0]?.created_at)||null;
+  return [
+    { name:"repo", value: CUR_REPO },
+    { name:"open_prs", value: Array.isArray(prs)?prs.length:0 },
+    { name:"open_issues", value: Array.isArray(issues)?issues.length:0 },
+    { name:"latest_workflow_run", value: newestRun }
+  ];
+}
+
+/* ---------- 시큐리티 목록 ---------- */
+async function listCodeAlerts(q){
+  const per = Number(q?.limit || 100);
+  const { owner, repo } = parseRepo(CUR_REPO);
+  try {
+    return await gh(`/repos/${owner}/${repo}/code-scanning/alerts?per_page=${per}`, "application/vnd.github+json");
+  } catch (e){ if (e.status===403 || e.status===404) return []; throw e; }
+}
+async function listSecretAlerts(q){
+  const per = Number(q?.limit || 100);
+  const { owner, repo } = parseRepo(CUR_REPO);
+  try {
+    return await gh(`/repos/${owner}/${repo}/secret-scanning/alerts?per_page=${per}`, "application/vnd.github+json");
+  } catch (e){ if (e.status===403 || e.status===404) return []; throw e; }
+}
+
+/* ---------- PR 상세 ---------- */
+async function getPR(no){
+  const { owner, repo } = parseRepo(CUR_REPO);
+  return gh(`/repos/${owner}/${repo}/pulls/${Number(no)}`);
+}
+async function getPRChecks(no){
+  const pr = await getPR(no);
+  const sha = pr?.head?.sha;
+  if (!sha) return { head_sha:null, status:null, checks:[] };
+  const { owner, repo } = parseRepo(CUR_REPO);
+  const accept = "application/vnd.github+json";
+  const runs = await gh(`/repos/${owner}/${repo}/commits/${sha}/check-runs`, accept);
+  const checks = Array.isArray(runs?.check_runs) ? runs.check_runs : [];
+  let status = null; try { status = await gh(`/repos/${owner}/${repo}/commits/${sha}/status`, accept); } catch(_) {}
+  return { head_sha: sha, status, checks };
+}
+async function getPRTimeline(no){
+  const { owner, repo } = parseRepo(CUR_REPO);
+  const accept = "application/vnd.github+json";
+  const items = await gh(`/repos/${owner}/${repo}/issues/${Number(no)}/timeline?per_page=100`, accept);
+  return Array.isArray(items) ? items : [];
+}
+async function getPRFiles(no){
+  const { owner, repo } = parseRepo(CUR_REPO);
+  const items = await gh(`/repos/${owner}/${repo}/pulls/${Number(no)}/files?per_page=300`);
+  return Array.isArray(items) ? items.map(f => ({
+    filename: f.filename, status: f.status, additions: f.additions, deletions: f.deletions,
+    changes: f.changes, blob_url: f.blob_url, raw_url: f.raw_url,
+    patch: f.patch && String(f.patch).slice(0, 8000)
+  })) : [];
+}
+
+/* ---------- 보안 액션(쓰기) ---------- */
+// 알림 단건 가져오기
+async function getAlertByType(type, number){
+  const { owner, repo } = parseRepo(CUR_REPO);
+  const n = Number(number);
+  const acc = "application/vnd.github+json";
+  if (type==="deps")   return gh(`/repos/${owner}/${repo}/dependabot/alerts/${n}`, acc);
+  if (type==="code")   return gh(`/repos/${owner}/${repo}/code-scanning/alerts/${n}`, acc);
+  if (type==="secret") return gh(`/repos/${owner}/${repo}/secret-scanning/alerts/${n}`, acc);
+  throw new Error("unknown type");
+}
+// 추적 이슈 찾기(있으면 사용, 없으면 생성)
+async function ensureTrackingIssue(type, number, extras){
+  const { owner, repo } = parseRepo(CUR_REPO);
+  const tag = `sec-alert-${type}-${number}`;
+  // 1) 기존 오픈 이슈 목록에서 제목/바디에 태그 포함된 것 탐색
+  const cand = await listIssues({ state:"open", limit: 100 });
+  const hit = (cand||[]).find(i => (i.title||"").includes(tag) || (i.body||"").includes(tag));
+  if (hit) return hit;
+
+  // 2) 알림 내용 조회 후 새 이슈 생성
+  const a = await getAlertByType(type, number).catch(()=>null);
+  const title = `[SEC][${type}] Alert #${number} ${a?.rule?.id || a?.dependency?.package?.name || a?.secret_type || ""} — ${tag}`;
+  const body  = [
+    `자동 생성된 추적 이슈\n`,
+    `- 타입: ${type}`,
+    `- 알림번호: ${number}`,
+    a?.html_url ? `- 링크: ${a.html_url}` : "",
+    `- 태그: ${tag}`,
+  ].filter(Boolean).join("\n");
+  const payload = { title, body, labels: ["security", `sec/${type}`].concat(extras?.labels||[]) };
+  if (Array.isArray(extras?.assignees) && extras.assignees.length) payload.assignees = extras.assignees;
+  return ghWrite(`/repos/${owner}/${repo}/issues`, "POST", payload);
+}
+async function addIssueAssignees(issue_number, assignees){
+  const { owner, repo } = parseRepo(CUR_REPO);
+  if (!assignees || !assignees.length) return { ok:true, skipped:"no-assignees" };
+  return ghWrite(`/repos/${owner}/${repo}/issues/${Number(issue_number)}`, "PATCH", { assignees });
+}
+async function addIssueLabels(issue_number, labels){
+  const { owner, repo } = parseRepo(CUR_REPO);
+  if (!labels || !labels.length) return { ok:true, skipped:"no-labels" };
+  return ghWrite(`/repos/${owner}/${repo}/issues/${Number(issue_number)}`, "PATCH", { labels });
+}
+async function dismissAlert(type, number, fields){
+  const { owner, repo } = parseRepo(CUR_REPO);
+  const n = Number(number);
+  if (type==="code"){
+    const body = { state:"dismissed" };
+    if (fields?.reason)  body.dismissed_reason  = fields.reason;        // allowed: "false positive","won't fix","used in tests", ...
+    if (fields?.comment) body.dismissed_comment = fields.comment;
+    return ghWrite(`/repos/${owner}/${repo}/code-scanning/alerts/${n}`, "PATCH", body);
+  }
+  if (type==="deps"){
+    const body = { state:"dismissed" };
+    if (fields?.reason)  body.dismissed_reason  = fields.reason;        // allowed: "fix_started","inaccurate","no_bandwidth","tolerable_risk"
+    if (fields?.comment) body.dismissed_comment = fields.comment;
+    return ghWrite(`/repos/${owner}/${repo}/dependabot/alerts/${n}`, "PATCH", body);
+  }
+  if (type==="secret"){
+    const body = { state:"resolved" };
+    if (fields?.reason)  body.resolution = fields.reason;               // e.g., "revoked","false_positive","pattern_deleted","used_in_tests","won't_fix"
+    return ghWrite(`/repos/${owner}/${repo}/secret-scanning/alerts/${n}`, "PATCH", body);
+  }
+  throw new Error("unknown type");
+}
+
+/* ---------- 서버 ---------- */
+const server = http.createServer(async (req,res)=>{
+  // CORS preflight
+  if (req.method==="OPTIONS"){
+    res.writeHead(204,{
+      "Access-Control-Allow-Origin":"*",
+      "Access-Control-Allow-Methods":"GET,POST,OPTIONS",
+      "Access-Control-Allow-Headers":"Content-Type, Authorization",
+      "Access-Control-Max-Age":"86400"
+    }); return res.end();
+  }
+
+  const u=url.parse(req.url,true); const p=u.pathname||"";
+  const common={ service:"ghmon-shells-plus", ts:new Date().toISOString() };
+
+  // Health
+  if (req.method==="GET" && (p==="/health" || p==="/api/ghmon/health")){
+    return ok(res, { ...common, env:{ GH_REPO: CUR_REPO? "set":"unset", GH_TOKEN_ASCII_LEN: TOKEN?TOKEN.length:0 }, repo: CUR_REPO });
+  }
+
+  // API prefix
+  if (!p.startsWith("/api/ghmon/")){
+    return bad(res, 404, "Not Found", { ...common, path:p });
+  }
+
+  try{
+    // owner 레포 목록
+    if (req.method==="GET" && p==="/api/ghmon/repos"){
+      const owner=(u.query.owner||"").trim();
+      if (!owner) return bad(res, 400, "owner required", common);
+      const accept="application/vnd.github+json";
+      const tryGet=(path)=>new Promise((reslv,rej)=>{
+        const opts={hostname:"api.github.com",path,method:"GET",headers:{"User-Agent":"ghmon-shells-plus","Accept":accept}};
+        if (TOKEN) opts.headers["Authorization"]="Bearer "+TOKEN;
+        const rq=https.request(opts,(r)=>{const chunks=[];r.on("data",c=>chunks.push(c));r.on("end",()=>{const raw=Buffer.concat(chunks).toString("utf8");let j;try{j=JSON.parse(raw);}catch(_){j={raw}};(r.statusCode>=200&&r.statusCode<300)?reslv(j):rej(Object.assign(new Error("HTTP "+r.statusCode),{status:r.statusCode,body:raw}))});});rq.on("error",rej);rq.end();});
+      let list=[]; try{ list=await tryGet(`/users/${owner}/repos?per_page=100&type=all&sort=updated`);}catch(_){ list=await tryGet(`/orgs/${owner}/repos?per_page=100&type=all&sort=updated`);}
+      return ok(res, { ...common, items: Array.isArray(list)? list: [] });
+    }
+
+    // 런타임 repo 설정
+    if (req.method==="POST" && p==="/api/ghmon/action/set-repo"){
+      const owner=(u.query.owner||"").trim();
+      const repo =(u.query.repo ||"").trim();
+      if (!owner || !repo) return bad(res, 400, "owner and repo required", common);
+      CUR_REPO = `${owner}/${repo}`;
+      return ok(res, { ...common, repo: CUR_REPO, message:"repo switched" });
+    }
+
+    // PR 상세
+    if (req.method==="GET" && p==="/api/ghmon/pr/checks"){
+      const no = Number(u.query.number||0); if (!no) return bad(res, 400, "number required", common);
+      const data = await getPRChecks(no); return ok(res, { ...common, number:no, ...data });
+    }
+    if (req.method==="GET" && p==="/api/ghmon/pr/timeline"){
+      const no = Number(u.query.number||0); if (!no) return bad(res, 400, "number required", common);
+      const items = await getPRTimeline(no); return ok(res, { ...common, number:no, items });
+    }
+    if (req.method==="GET" && p==="/api/ghmon/pr/files"){
+      const no = Number(u.query.number||0); if (!no) return bad(res, 400, "number required", common);
+      const items = await getPRFiles(no); return ok(res, { ...common, number:no, items });
+    }
+
+    // 시큐리티 목록
+    if (req.method==="GET" && p==="/api/ghmon/security/code"){   const items = await listCodeAlerts(u.query||{});   return ok(res, { ...common, items }); }
+    if (req.method==="GET" && p==="/api/ghmon/security/deps"){   const items = await listAlerts(u.query||{});       return ok(res, { ...common, items }); }
+    if (req.method==="GET" && p==="/api/ghmon/security/secret"){ const items = await listSecretAlerts(u.query||{});  return ok(res, { ...common, items }); }
+
+    // 액션: 시큐리티(실제 쓰기)
+    if (req.method==="POST" && p.startsWith("/api/ghmon/action/security@")){
+      const action = decodeURIComponent(p.split("@")[1]||"");
+      const type   = String(u.query.type||"").trim() || "deps";   // 기본 deps
+      const number = Number(u.query.number||0);
+      // Body 파싱(assignees, labels, reason, comment)
+      let body = {}; await new Promise(resolve => {
+        const chunks=[]; req.on("data",c=>chunks.push(c)); req.on("end",()=>{ try{ body = JSON.parse(Buffer.concat(chunks).toString("utf8")||"{}"); }catch(_){ body={}; } resolve(); });
+      });
+
+      if (["create_issues","assign","label","dismiss_with_reason"].indexOf(action)<0)
+        return bad(res, 400, "unknown action", { ...common, action });
+
+      if (!number && action!=="label") // label은 추적 이슈에 직접 달기용으로 number 없어도 허용 가능하지만 여기선 number 필요로 통일
+        return bad(res, 400, "number required", { ...common, action });
+
+      if (action==="create_issues"){
+        const issue = await ensureTrackingIssue(type, number, { labels: body.labels||[], assignees: body.assignees||[] });
+        return ok(res, { ...common, action, type, number, issue });
+      }
+      if (action==="assign"){
+        const issue = await ensureTrackingIssue(type, number, {});
+        const r = await addIssueAssignees(issue.number, Array.isArray(body.assignees)?body.assignees:String(body.assignees||"").split(",").map(s=>s.trim()).filter(Boolean));
+        return ok(res, { ...common, action, type, number, issue, result:r });
+      }
+      if (action==="label"){
+        const issue = await ensureTrackingIssue(type, number, {});
+        const r = await addIssueLabels(issue.number, Array.isArray(body.labels)?body.labels:String(body.labels||"").split(",").map(s=>s.trim()).filter(Boolean));
+        return ok(res, { ...common, action, type, number, issue, result:r });
+      }
+      if (action==="dismiss_with_reason"){
+        const r = await dismissAlert(type, number, { reason: body.reason||u.query.reason, comment: body.comment||u.query.comment });
+        return ok(res, { ...common, action, type, number, result:r });
+      }
+    }
+
+    /* 기존 목록 엔드포인트 */
+    if (req.method==="GET" && p==="/api/ghmon/overview")     return ok(res, { ...common, items: await overview() });
+    if (req.method==="GET" && p==="/api/ghmon/prs")          return ok(res, { ...common, items: await listPRs(u.query||{}) });
+    if (req.method==="GET" && p==="/api/ghmon/issues")       return ok(res, { ...common, items: await listIssues(u.query||{}) });
+    if (req.method==="GET" && p==="/api/ghmon/actions/runs") return ok(res, { ...common, items: await listRuns(u.query||{}) });
+    if (req.method==="GET" && p==="/api/ghmon/labels")       return ok(res, { ...common, items: await listLabels() });
+    if (req.method==="GET" && p==="/api/ghmon/hooks")        return ok(res, { ...common, items: await listHooks() });
+    if (req.method==="GET" && p==="/api/ghmon/alerts")       return ok(res, { ...common, items: await listAlerts(u.query||{}) });
+
+    // /list/<key>
+    const m = p.match(/^\/api\/ghmon\/list\/([a-z\-]+)$/);
+    if (req.method==="GET" && m){
+      const k=m[1]; const map={overview,prs:listPRs,issues:listIssues,actions:listRuns,hooks:listHooks,labels:listLabels,alerts:listAlerts};
+      const fn=map[k]; if (fn){ const items=await fn(u.query||{}); return ok(res, { ...common, items }); }
+    }
+
+    // 자리표시자 액션
+    if (req.method==="POST" && p.startsWith("/api/ghmon/action/")){
+      const action=decodeURIComponent(p.split("/").pop()||"");
+      return ok(res, { ...common, action });
+    }
+
+    return bad(res, 404, "Not Found", { ...common, path:p });
+  }catch(e){
+    return ok(res, { ...common, error:String(e.message||e), stack:(e.stack||"").split("\n").slice(0,2).join("\n") });
+  }
+});
+server.listen(PORT, ()=> console.log(`[GHMON] shells+api up :${PORT} repo=${CUR_REPO||"n/a"}`));

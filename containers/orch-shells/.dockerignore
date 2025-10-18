@@ -1,0 +1,13 @@
+.git
+.gitignore
+_deploy
+logs
+automation_logs
+node_modules
+*.env
+*.pem
+*.pfx
+*.key
+*.crt
+*.zip
+*.7z

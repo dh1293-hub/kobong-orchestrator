@@ -1,0 +1,189 @@
+# PATCH START
+TARGET: Orchestrator-Moniteoling\webui\Orchestrator-Moniteoling-Su.html
+MODE: plain-replace
+FIND <<'EOF'
+^[\s\S]*$
+EOF
+REPLACE <<'EOF'
+<!doctype html>
+<html lang="ko" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Orchestrator-Moniteoling — UI</title>
+  <link rel="stylesheet" href="./public/css/orchmon.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">OM Monitor</div>
+    <nav class="actions">
+      <button data-orchmon-action="fix-preview" class="btn">Fix 미리보기</button>
+      <button data-orchmon-action="fix-apply" class="btn btn-primary">Fix 적용</button>
+      <button data-orchmon-action="good" class="btn">Mark GOOD</button>
+      <button data-orchmon-action="rollback" class="btn">Rollback</button>
+      <button data-orchmon-action="logs-export" class="btn">Logs Export</button>
+      <span class="sep"></span>
+      <label class="switch"><input id="themeToggle" type="checkbox" /> <span>Dark</span></label>
+      <label class="switch"><input id="hcToggle" type="checkbox" /> <span>AA+</span></label>
+      <span class="led" aria-label="status" title="status" data-state="warn"></span>
+      <span class="meta">
+        <strong data-orchmon-meta="module">ORCHMON</strong>
+        <span data-orchmon-meta="mode">OFFLINE</span>
+        <span data-orchmon-meta="port">:5183</span>
+      </span>
+    </nav>
+  </header>
+
+  <main class="tabs">
+    <section id="tab-overview" class="tab">
+      <div class="card">
+        <h3>연결 상태</h3>
+        <p data-orchmon-messages class="messages" aria-live="polite">초기화 중…</p>
+        <div class="row">
+          <button data-orchmon-action="health" class="btn">/health 확인</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-shells" class="tab">
+      <div class="shells-grid">
+        <article class="pane pane-left">
+          <h3>입력 Shell</h3>
+          <div class="term" data-orchmon-shell="input" data-placeholder="xterm 미설치: 텍스트 패널로 동작합니다."></div>
+        </article>
+        <div class="pane-right">
+          <article class="pane q1"><h4>서버</h4><div class="term" data-orchmon-shell="server" data-placeholder="xterm 미설치"></div></article>
+          <article class="pane q2"><h4>가상서버</h4><div class="term" data-orchmon-shell="vserver" data-placeholder="xterm 미설치"></div></article>
+          <article class="pane q3"><h4>보조</h4><div class="term" data-orchmon-shell="aux" data-placeholder="xterm 미설치"></div></article>
+          <article class="pane q4"><h4>보조</h4><div class="term" data-orchmon-shell="extra" data-placeholder="xterm 미설치"></div></article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 센티넬(멱등): ORCHMON API BASE + 브릿지 2줄 — 삭제 금지 -->
+  <!-- KOBO-SENTINEL:orchmon-api-base -->
+  <script>
+    // 초기엔 OFFLINE 모드(서버 없이 화면 스모크). 나중에 서버 준비되면 false로.
+    window.G5_OFFLINE = true;
+    window.ORCHMON_API_BASE = window.ORCHMON_API_BASE || "http://localhost:5183/api/orchmon";
+  </script>
+  <script src="./orchmon-bridge.js" defer></script>
+</body>
+</html>
+EOF
+# PATCH END
+# PATCH START
+TARGET: Orchestrator-Moniteoling\webui\orchmon-bridge.js
+MODE: plain-replace
+FIND <<'EOF'
+^[\s\S]*$
+EOF
+REPLACE <<'EOF'
+(() => {
+  const BASE = (window.ORCHMON_API_BASE || 'http://localhost:5183/api/orchmon').replace(/\/$/, '');
+  const OFFLINE = window.G5_OFFLINE === true;
+  const $ = (sel, all=false) => all ? document.querySelectorAll(sel) : document.querySelector(sel);
+  const led = $('.led'); const msg = $('[data-orchmon-messages]');
+  const setLED = s => led && led.setAttribute('data-state', s);
+  const say = t => msg && (msg.textContent = `[${new Date().toLocaleTimeString()}] ${t}`);
+
+  // 상단 메타 반영
+  $('[data-orchmon-meta="module"]')?.textContent = 'ORCHMON';
+  $('[data-orchmon-meta="mode"]')?.textContent = OFFLINE ? 'OFFLINE' : (BASE.includes(':5193')?'MOCK':'DEV');
+  $('[data-orchmon-meta="port"]')?.textContent = `:${(BASE.match(/:(\d+)/)||[])[1] || '5183'}`;
+
+  async function health() {
+    try {
+      if (OFFLINE) { setLED('ok'); say('OFFLINE 모드: 가짜 /health OK'); return { ok:true, code:0, message:'offline-ok' }; }
+      const r = await fetch(`${BASE}/health`, { method:'GET' });
+      const j = await r.json();
+      setLED(j?.ok ? 'ok' : 'err'); say(`/health: ${j?.ok?'OK':'NG'}`);
+      return j;
+    } catch(e){ setLED('err'); say(`/health 에러: ${e.message}`); return { ok:false, code:1, message:e.message }; }
+  }
+
+  async function postAction(action){
+    if(action==='health'){ return health(); }
+    try {
+      setLED('warn');
+      if (OFFLINE) { setTimeout(()=>{ setLED('ok'); say(`${action}: OK(offline)`); }, 200); return {ok:true, code:0, message:'offline-ok'}; }
+      const r = await fetch(`${BASE}/action/${encodeURIComponent(action)}`, { method:'POST' });
+      const j = await r.json();
+      setLED(j?.ok?'ok':'err'); say(`${action}: ${j?.ok?'OK':'NG'} (code=${j?.code})`);
+      return j;
+    } catch(e){ setLED('err'); say(`${action}: ERROR ${e.message}`); return { ok:false, code:1, message:e.message }; }
+  }
+
+  // 버튼 오토와이어
+  document.querySelectorAll('[data-orchmon-action]').forEach(btn=>{
+    btn.addEventListener('click', () => postAction(btn.getAttribute('data-orchmon-action')));
+  });
+
+  // 쉘 영역: xterm 없으면 텍스트 패널로 폴리백
+  const hasXterm = !!(window.Terminal);
+  document.querySelectorAll('[data-orchmon-shell]').forEach(el=>{
+    if (!hasXterm) {
+      el.classList.add('fallback');
+      const tip = el.getAttribute('data-placeholder') || '텍스트 패널';
+      el.innerHTML = `<pre class="fallback-pre">${tip}\n(G5_OFFLINE=true 상태에선 WS 연결을 생략합니다)</pre>`;
+      return;
+    }
+    // xterm 사용 시: 필요하면 xterm.js를 추후 추가
+  });
+
+  // 초기 /health 체크
+  health();
+})();
+EOF
+# PATCH END
+# PATCH START
+TARGET: Orchestrator-Moniteoling\webui\public\css\orchmon.css
+MODE: plain-replace
+FIND <<'EOF'
+^[\s\S]*$
+EOF
+REPLACE <<'EOF'
+:root{ --gap:16px; --pane-h:320px; --ink:#0B0F14; }
+*{ box-sizing:border-box }
+html,body{ height:100% }
+body{ margin:0; font:14px/1.5 system-ui,Segoe UI,Apple SD Gothic Neo,Malgun Gothic,sans-serif; color:#0b1220; }
+.topbar{ display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-bottom:1px solid #e5e7eb; background:#ffffffcc; backdrop-filter:saturate(1.2) blur(4px); position:sticky; top:0; z-index:10;}
+.brand{ font-weight:700 }
+.actions{ display:flex; gap:8px; align-items:center }
+.sep{ width:1px; height:24px; background:#ddd; margin:0 4px }
+.btn{ min-width:44px; min-height:44px; padding:8px 12px; border-radius:10px; border:1px solid #9ca3af; background:#fff; cursor:pointer }
+.btn:hover{ background:#f3f4f6 }
+.btn-primary{ background:#2563eb; color:#fff; border-color:#1e40af }
+.led{ width:12px; height:12px; border-radius:50%; display:inline-block; margin-left:6px; box-shadow:0 0 0 2px #fff inset }
+.led[data-state="ok"]{ background:#22c55e; box-shadow:0 0 10px #22c55e }
+.led[data-state="warn"]{ background:#f59e0b; box-shadow:0 0 10px #f59e0b }
+.led[data-state="err"]{ background:#ef4444; box-shadow:0 0 10px #ef4444 }
+.meta{ margin-left:8px; color:#64748b; font-size:12px; display:inline-flex; gap:6px }
+.tabs{ padding:16px }
+.card{ border:1px solid #e5e7eb; border-radius:12px; padding:16px; background:#fff; box-shadow:0 2px 8px #0000000d }
+.row{ display:flex; gap:8px; margin-top:8px }
+.shells-grid{ display:grid; grid-template-columns:1fr 1fr; gap:var(--gap); padding:var(--gap); }
+.pane{ border:1px solid #e5e7eb; border-radius:12px; padding:8px; background:#fff; box-shadow:0 2px 8px #0000000d }
+.pane-left{ grid-column:1 / span 1; height:calc(var(--pane-h) * 2 + var(--gap)); }
+.pane-right{ grid-column:2 / span 1; display:grid; grid-template-columns:1fr 1fr; grid-auto-rows:var(--pane-h); gap:var(--gap) }
+.term{ height:100%; border:1px dashed #cbd5e1; border-radius:8px; padding:8px; overflow:auto; background:#fafafa }
+.fallback-pre{ margin:0; white-space:pre-wrap; font-family:ui-monospace,Consolas,Menlo,monospace; font-size:12px; color:#111827}
+.switch{ display:inline-flex; align-items:center; gap:6px; font-size:12px; color:#334155 }
+@media (prefers-color-scheme: dark){
+  body{ color:#e6f0ff; background:#0B0F14 }
+  .topbar{ background:#111826cc; border-color:#20304a }
+  .btn{ background:#0b1220; color:#dbeafe; border-color:#20304a }
+  .btn:hover{ background:#0f172a }
+  .card,.pane{ background:#0b1220; border-color:#20304a }
+  .term{ background:#0c1423; border-color:#20304a; color:#dbeafe }
+  .meta{ color:#94a3b8 }
+}
+@media (max-width:1280px){
+  .shells-grid{ grid-template-columns:1fr }
+  .pane-left{ height:var(--pane-h) }
+  .pane-right{ grid-column:1 }
+}
+EOF
+# PATCH END
+

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Soft guard: block pushing to main from local (Free Private cannot enforce server-side)
+# Allow override with BYPASS_GUARD=1
+set -euo pipefail
+if [ "${BYPASS_GUARD:-0}" = "1" ]; then
+  exit 0
+fi
+
+# Read refs from stdin: <local_ref> <local_sha> <remote_ref> <remote_sha>
+while read local_ref local_sha remote_ref remote_sha; do
+  if [[ "$remote_ref" == "refs/heads/main" ]]; then
+    echo "✖ Guard: direct push to 'main' is blocked on this repo."
+    echo "  - Create a PR instead."
+    echo "  - Or set BYPASS_GUARD=1 to override (not recommended)."
+    exit 1
+  fi
+done
+
+exit 0

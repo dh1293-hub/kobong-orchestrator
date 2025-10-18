@@ -1,0 +1,12 @@
+# PATCH START
+TARGET: scripts\g5\apply-patches.ps1
+MODE: plain-replace
+FIND <<'EOF'
+$resolved = $resolved | Sort-Object -Unique
+if($resolved.Count -eq 0){
+EOF
+REPLACE <<'EOF'
+$resolved = @($resolved | Sort-Object -Unique)
+if(@($resolved).Count -eq 0){
+EOF
+# PATCH END
