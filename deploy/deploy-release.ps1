@@ -54,3 +54,13 @@ if($SwitchNow){
 } else {
   Write-Host "[READY] prepared $Tag at $RelDir (use -SwitchNow to activate)"
 }
+
+
+# === G5 hook: Post-switch ===
+try {
+  if ($SwitchNow) {
+    $ps = Join-Path $PSScriptRoot 'deploy-postswitch.ps1'
+    if (Test-Path $ps) { pwsh -NoProfile -File $ps }
+  }
+} catch {}
+# === G5 hook end ===
