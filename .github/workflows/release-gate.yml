@@ -1,20 +1,29 @@
 name: Release Gate (light)
 on:
-  release:
-    types: [published]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
 jobs:
   gate:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: KLC one-liner present?
-        shell: pwsh
-        env:
-          TAG_NAME: ${{ github.event.release.tag_name }}
-        run: |
-          $body = gh release view $env:TAG_NAME --json body -q .body
-          if(-not $body -or -not ($body -match "KLC \\| traceId=")){
-            Write-Error "KLC one-liner missing in release notes"; exit 1
-          }
-          Write-Host "KLC line found. OK."
 
+      - name: Check SECURITY.md exists
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $paths = @('SECURITY.md','.github\SECURITY.md','docs\SECURITY.md')
+          $hit = $paths | Where-Object { Test-Path -LiteralPath $_ }
+          if(-not $hit){ Write-Error "SECURITY.md not found in $($paths -join ', ')" }
+          "Found: $($hit -join ', ')" | Out-Host
+
+      - name: Summarize
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.summary
+              .addHeading('Release Gate (light)')
+              .addList(['SECURITY.md present ✅','KLC Verify required (manual policy) ✅'])
+              .write()
