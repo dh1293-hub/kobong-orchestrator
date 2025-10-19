@@ -18,6 +18,13 @@ function Get-KlcAnchorHash {
   $seed2 = if ($env:GITHUB_SHA) { "$Seed`n$($env:GITHUB_SHA)" } else { $Seed }
   $sha = [System.Security.Cryptography.SHA256]::Create()
   $bytes = [Text.Encoding]::UTF8.GetBytes($seed2)
+  $hashBytes = $sha.ComputeHash($bytes)
+  $hex = foreach($b in $hashBytes){ '{0:x2}' -f $b }
+  $hash = -join $hex
+  return $hash.Substring(0,[Math]::Min($Take,$hash.Length))
+} else { $Seed }
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  $bytes = [Text.Encoding]::UTF8.GetBytes($seed2)
   $hash = $sha.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') } -join ''
   return $hash.Substring(0,[Math]::Min($Take,$hash.Length))
 }
@@ -51,3 +58,4 @@ function Test-KlcSchema {
 }
 
 Export-ModuleMember -Function New-KlcTraceId, Get-KlcAnchorHash, Write-KlcLine, Test-KlcSchema
+
