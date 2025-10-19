@@ -46,3 +46,4 @@ jobs:
               body: '⛔ 이 PR은 **메뉴얼**을 변경하거나 삭제하려 합니다. OWNER 또는 `doc:allow-edit` 라벨이 필요합니다.'
             });
             core.setFailed('Manual change blocked: require OWNER or doc:allow-edit');
+

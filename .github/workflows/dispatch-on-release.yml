@@ -1,0 +1,23 @@
+name: Dispatch On Release
+on:
+  release:
+    types: [published]
+jobs:
+  dispatch:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Fire repository_dispatch (deploy)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          $payload = @{ tag = $env:TAG_NAME; env = "DEV" } | ConvertTo-Json -Compress
+          gh api -X POST repos/:owner/:repo/dispatches `
+            -H "Accept: application/vnd.github+json" `
+            -f event_type="deploy" `
+            -f client_payload="$payload"
+          Write-Host "repository_dispatch sent: deploy → $($env:TAG_NAME)"
+

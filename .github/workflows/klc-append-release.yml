@@ -1,0 +1,42 @@
+name: KLC Append to Release Notes
+on:
+  release:
+    types: [published]  # 릴리즈가 게시되면 실행
+jobs:
+  append:
+    runs-on: windows-latest
+    permissions:
+      contents: write   # gh release edit에 필요
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PowerShell 7
+        with:
+          pwsh-version: '7.4.x'
+
+      - name: Append KLC one-liner
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          # 1) 요약 한 줄 생성
+          $traceId = [guid]::NewGuid().ToString()
+          $anchor  = Get-Random
+          $klcLine = "KLC | traceId=$traceId | durationMs=0 | exitCode=0 | anchorHash=$anchor"
+
+          # 2) 기존 릴리즈 노트 읽어서 맨 아래에 덧붙임(없으면 새로 씀)
+          $bodyOld = gh release view $env:TAG_NAME --json body -q .body
+          if ([string]::IsNullOrEmpty($bodyOld)) {
+            $bodyNew = $klcLine
+          } else {
+            $bodyNew = $bodyOld + "`n`n---`n" + $klcLine
+          }
+
+          # 3) 릴리즈 본문 업데이트
+          gh release edit $env:TAG_NAME --notes "$bodyNew"
+
+          # 4) 콘솔에 무엇을 붙였는지 출력(로그 가시화)
+          Write-Host "Appended:" $klcLine
+
+
