@@ -11,10 +11,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: PowerShell version
-        shell: pwsh
-        run: '$PSVersionTable.PSVersion'
-
       - name: Run KLC verify smoke
         shell: pwsh
         run: |
