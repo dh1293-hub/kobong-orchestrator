@@ -27,3 +27,4 @@ _deploy/
 
 # GHMON env
 GitHub-Monitoring/containers/ghmon-shells/*.env
+
