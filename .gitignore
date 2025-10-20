@@ -38,3 +38,5 @@ GitHub-Monitoring/logs/**
 
 # prevent re-adding removed module
 AUTO-Kobong/
+
+AUTO-Kobong-Monitoring/logs/**
