@@ -33,3 +33,7 @@ GitHub-Monitoring/containers/ghmon-shells/*.env
 !GitHub-Monitoring/**
 
 GitHub-Monitoring/logs/*
+# --- GHMON overrides (track module, ignore only secrets/logs) ---
+!GitHub-Monitoring/**
+GitHub-Monitoring/containers/ghmon-shells/*.env
+GitHub-Monitoring/logs/**
