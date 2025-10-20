@@ -27,18 +27,4 @@ _deploy/
 
 # GHMON env
 GitHub-Monitoring/containers/ghmon-shells/*.env
-# --- GHMON overrides (track module, ignore only secrets/logs) ---
-!GitHub-Monitoring/
-!GitHub-Monitoring/**
-GitHub-Monitoring/containers/ghmon-shells/*.env
-GitHub-Monitoring/logs/**
 
-# local-only secret quarantine
-.secrets-local/
-
-# prevent re-adding removed module
-AUTO-Kobong/
-
-AUTO-Kobong-Monitoring/logs/**
-
-GitHub-Monitoring/containers/ghmon-shells/$null
