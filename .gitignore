@@ -18,7 +18,6 @@ webui/node_modules/
 webui/.env.local
 webui/.env.*.local
 
-AUTO-Kobong-Monitoring/
 _deploy/
 
 
@@ -26,5 +25,6 @@ _deploy/
 
 
 # GHMON env
-GitHub-Monitoring/containers/ghmon-shells/*.env
+
+
 
