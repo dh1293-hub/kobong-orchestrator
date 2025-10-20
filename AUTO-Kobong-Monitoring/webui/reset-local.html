@@ -1,0 +1,13 @@
+<!doctype html><meta charset="utf-8">
+<title>Reset Local Storage</title>
+<script>
+try{
+  localStorage.removeItem('FETCH_REDIRECT');
+  localStorage.removeItem('ORCHBUS_URL');
+  localStorage.removeItem('ORCHBUS_SUBS');
+  localStorage.setItem('AK7_API_BASE','http://localhost:5191/api/ak7');
+  localStorage.setItem('ORCHMON_API_BASE','http://localhost:5191/api/ak7');
+}catch(e){}
+location.href = 'AUTO-Kobong-Monitoring-Han.html';
+</script>
+<body><h3>Resetting local storage…</h3></body>
