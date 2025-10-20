@@ -37,3 +37,7 @@ GitHub-Monitoring/logs/*
 !GitHub-Monitoring/**
 GitHub-Monitoring/containers/ghmon-shells/*.env
 GitHub-Monitoring/logs/**
+
+.secrets-local/
+
+AUTO-Kobong/
