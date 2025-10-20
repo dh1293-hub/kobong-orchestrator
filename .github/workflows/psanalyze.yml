@@ -67,3 +67,4 @@ jobs:
         if: always()
         shell: pwsh
         run: echo "psanalyze is non-blocking by design."
+
