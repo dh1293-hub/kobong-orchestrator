@@ -14,7 +14,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Setup PowerShell 7
-        uses: PowerShell/installer@v1
         with:
           version: "7.4.4"
       - name: Dry-run housekeeping weekly

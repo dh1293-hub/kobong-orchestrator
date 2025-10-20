@@ -17,3 +17,13 @@ webui/node_modules/
 # local env
 webui/.env.local
 webui/.env.*.local
+
+AUTO-Kobong-Monitoring/
+_deploy/
+
+
+*.env
+
+
+# GHMON env
+GitHub-Monitoring/containers/ghmon-shells/*.env
