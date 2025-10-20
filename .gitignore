@@ -28,3 +28,6 @@ _deploy/
 # GHMON env
 GitHub-Monitoring/containers/ghmon-shells/*.env
 
+GitHub-Monitoring/containers/ghmon-shells/*.env
+GitHub-Monitoring/logs/**
+AUTO-Kobong-Monitoring/logs/**
