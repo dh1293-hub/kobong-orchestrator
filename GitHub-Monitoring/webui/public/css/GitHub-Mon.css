@@ -1,0 +1,96 @@
+
+/* GitHub-Mon.css — 큰 글씨(가독), 겹침 방지, 고대비/다크 지원 */
+:root{
+  --bg: #0B0F14; --card:#121820; --ink:#E6F0FF;
+  --ink-dark:#0B0F14; --card-light:#ffffff; --bg-light:#f8fafc;
+  --focus:#65D1FF;
+  --success:#22c55e; --warn:#f59e0b; --danger:#ef4444; --info:#3b82f6;
+  --radius:12px; --gap:16px; --tap:44px;
+  --font-rem: 1.0; /* 1.0=16px. 가독 모드에서 1.125=18px */
+}
+html[data-theme="light"] body{ background: var(--bg-light); color:#0b1220 }
+html[data-theme="dark"] body{ background: var(--bg); color: var(--ink) }
+html[data-theme="hc"] body{ background:#000; color:#fff }
+
+*{ box-sizing:border-box }
+body{ margin:0; font: calc(var(--font-rem) * 16px)/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif; }
+
+.topbar{
+  position:sticky; top:0; z-index:1000;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 12px; gap:var(--gap);
+  background:linear-gradient(180deg, rgba(0,0,0,.2), transparent);
+  backdrop-filter: blur(4px);
+  border-bottom:1px solid #1f2937;
+}
+.brand{ display:flex; align-items:center; gap:10px; font-weight:700 }
+.badge-port { padding:6px 10px; border-radius:10px; border:1px solid #334155; font-size:.9rem; }
+
+.kpis{ display:flex; flex-wrap:wrap; gap:8px; align-items:center }
+.kpi{ min-height:var(--tap); min-width:88px; padding:6px 10px; border-radius:10px; border:2px solid #334155; display:flex; gap:8px; align-items:center; background:rgba(0,0,0,.1) }
+.kpi strong{ font-size:1.1rem }
+
+.actions{ display:flex; flex-wrap:wrap; gap:var(--gap) }
+.btn{ min-height:var(--tap); padding:10px 14px; border-radius:12px; border:2px solid #64748b; background:transparent; color:inherit; cursor:pointer; transition: .12s border-color, .12s box-shadow }
+.btn.primary{ background:#2563eb; color:#fff; border-color:#1e40af }
+.btn.warn{ background:#f59e0b; color:#000 }
+.btn.good{ background:#16a34a; color:#fff; border-color:#15803d }
+.btn:hover{ border-color:#334155; box-shadow:0 2px 12px rgba(0,0,0,.25) }
+.btn:focus-visible{ outline:3px solid var(--focus); outline-offset:2px; box-shadow:0 0 0 6px color-mix(in oklab, var(--focus) 25%, transparent) }
+
+.led{ width:12px; height:12px; border-radius:50%; display:inline-block; box-shadow:0 0 0 2px #fff inset }
+.led.ok{ background: var(--success); box-shadow:0 0 12px var(--success) }
+.led.warn{ background: var(--warn); box-shadow:0 0 12px var(--warn) }
+.led.err{ background: var(--danger); box-shadow:0 0 12px var(--danger) }
+
+.layout{ display:grid; grid-template-columns: 300px 1fr; min-height:calc(100vh - 64px); }
+.sidebar{ border-right:1px solid #1f2937; padding:12px; display:flex; flex-direction:column; gap:8px }
+.nav-btn{ width:100%; text-align:left }
+.main{ padding:16px; }
+.section{ display:none }
+.section.active{ display:block }
+
+.cards{ display:grid; gap:var(--gap); grid-template-columns: repeat(12, 1fr) }
+.card{ grid-column: span 6; border:2px solid #334155; border-radius: var(--radius); padding:12px; background: color-mix(in oklab, currentColor 2%, transparent); }
+.card.header{ display:flex; justify-content:space-between; align-items:center }
+.card h3{ margin:0 0 8px 0 }
+.card.kpi-grid{ grid-column: span 12; display:grid; grid-template-columns: repeat(4, minmax(200px, 1fr)); gap:var(--gap) }
+.card.table{ overflow:auto }
+.table{ width:100%; border-collapse: collapse; }
+.table th,.table td{ border-bottom:1px solid #334155; padding:10px; font-size:1rem }
+.badge{ display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:10px; border:1px solid #334155; font-size:.9rem }
+.badge .dot{ width:10px; height:10px; border-radius:50% }
+.dot.ok{ background:var(--success) } .dot.warn{ background:var(--warn) } .dot.err{ background:var(--danger) }
+
+/* PR 인박스 */
+.split{ display:grid; grid-template-columns: 420px 1fr; gap:var(--gap) }
+.list{ border:2px solid #334155; border-radius:var(--radius); overflow:auto; background: color-mix(in oklab, currentColor 2%, transparent) }
+.list .row{ padding:10px 12px; border-bottom:1px solid #334155; display:flex; gap:10px; align-items:center; cursor:pointer }
+.list .row:hover, .list .row.active{ background: color-mix(in oklab, currentColor 6%, transparent) }
+.filters{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px }
+.detail{ border:2px solid #334155; border-radius:var(--radius); min-height:480px; padding:12px; }
+.detail .tabbar{ display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap }
+.tab{ padding:8px 12px; border-radius:10px; border:1px solid #334155; cursor:pointer }
+.tab.active{ background: color-mix(in oklab, currentColor 6%, transparent) }
+.diff, .checks, .timeline, .files{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:.95rem; white-space: pre-wrap; background:rgba(0,0,0,.15); padding:12px; border-radius:10px; min-height:220px }
+
+/* CI / Actions */
+.table-actions .qa{ display:flex; gap:8px }
+
+/* Shell Ops (2패널) */
+.shell-grid{ display:grid; grid-template-columns: 1fr 1fr; gap:var(--gap) }
+.terminal{ border:2px dashed #334155; border-radius:var(--radius); min-height:300px; padding:12px; font-family: ui-monospace, monospace; }
+.term-input{ width:100%; min-height:40px }
+
+/* 메시지/토스트 */
+#messages{ margin-top:8px; display:grid; gap:6px; }
+.msg{ display:flex; align-items:center; gap:10px; border:1px solid #334155; border-left-width:6px; border-radius:10px; padding:6px 8px; background:rgba(0,0,0,.1) }
+.msg.ok{ border-left-color: var(--success) } .msg.err{ border-left-color: var(--danger) } .msg.info{ border-left-color: var(--info) }
+.msg small{ opacity:.8 }
+
+/* 접근성/반응형 */
+@media (max-width: 1280px){
+  .layout{ grid-template-columns: 1fr }
+  .split{ grid-template-columns: 1fr }
+  .card{ grid-column: span 12 }
+}
