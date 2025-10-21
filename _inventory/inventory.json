@@ -125,6 +125,11 @@
     "LastWriteTimeUtc": "2025-10-20T02:05:31.5686692Z"
   },
   {
+    "path": ".github\\workflows\\ak-context.yml",
+    "Length": 2053,
+    "LastWriteTimeUtc": "2025-10-21T20:24:24.570959Z"
+  },
+  {
     "path": ".github\\workflows\\auto-github-release.yml",
     "Length": 1259,
     "LastWriteTimeUtc": "2025-10-20T02:05:31.5686692Z"
@@ -183,6 +188,11 @@
     "path": ".github\\workflows\\klc-nightly-aggregate.yml",
     "Length": 538,
     "LastWriteTimeUtc": "2025-10-20T02:05:31.5716608Z"
+  },
+  {
+    "path": ".github\\workflows\\klc-validate.yml",
+    "Length": 1376,
+    "LastWriteTimeUtc": "2025-10-21T20:25:00.9466155Z"
   },
   {
     "path": ".github\\workflows\\klc-verify.yml",
@@ -251,18 +261,18 @@
   },
   {
     "path": ".kobong\\context\\context-latest.json",
-    "Length": 917,
-    "LastWriteTimeUtc": "2025-10-21T20:06:45.5105512Z"
+    "Length": 908,
+    "LastWriteTimeUtc": "2025-10-21T20:29:43.3637443Z"
   },
   {
     "path": ".kobong\\context\\context-latest.txt",
-    "Length": 236,
-    "LastWriteTimeUtc": "2025-10-21T20:06:45.5112755Z"
+    "Length": 227,
+    "LastWriteTimeUtc": "2025-10-21T20:29:43.364752Z"
   },
   {
     "path": ".kobong\\logs\\api.log",
-    "Length": 3059,
-    "LastWriteTimeUtc": "2025-10-21T20:06:45.5296788Z"
+    "Length": 3966,
+    "LastWriteTimeUtc": "2025-10-21T20:29:43.3818282Z"
   },
   {
     "path": ".kobong\\logs\\ak\\run-1761069472151.log",
@@ -283,6 +293,11 @@
     "path": ".kobong\\reports\\ERROR-KB.md",
     "Length": 5768,
     "LastWriteTimeUtc": "2025-09-27T23:41:52.4516814Z"
+  },
+  {
+    "path": ".kobong\\schema\\klc-log-v1.3.schema.json",
+    "Length": 906,
+    "LastWriteTimeUtc": "2025-10-21T20:26:05.9369273Z"
   },
   {
     "path": ".pr-artifacts\\xp-summary-20250915-125039.md",

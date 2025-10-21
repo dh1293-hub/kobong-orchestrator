@@ -1,6 +1,6 @@
 {
   "version": "g5-context.v1",
-  "when": "2025-10-22 05:06:45",
+  "when": "2025-10-22 05:29:43",
   "mode": "DEV",
   "health": [
     {
@@ -30,5 +30,5 @@
   "ssot_exists": false,
   "docsmanifest_exists": false,
   "inventory_exists": true,
-  "last_commit": "f3ba284 chore(ops-one-key): patches+context+inventory refresh (auto, MOCK)"
+  "last_commit": "67b244e feat: /ak context reply + KLC v1.3 CI + EOL normalization"
 }
