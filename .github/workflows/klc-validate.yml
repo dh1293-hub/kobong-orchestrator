@@ -1,0 +1,33 @@
+name: CI · KLC v1.3 validate
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  klc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Emit KLC lines (make context + inventory)
+        shell: pwsh
+        run: |
+          if (Test-Path 'scripts/g5/make-g5-context.ps1')          { pwsh -NoProfile -File scripts/g5/make-g5-context.ps1 -Mode MOCK }
+          if (Test-Path 'scripts/g5/update-docs-and-inventory.ps1'){ pwsh -NoProfile -File scripts/g5/update-docs-and-inventory.ps1 }
+
+      - name: Validate last 50 lines contain required keys
+        shell: pwsh
+        run: |
+          $path = '.kobong/logs/api.log'
+          if (!(Test-Path $path)) { Write-Warning "no KLC log found (skipping)"; exit 0 }
+          $lines = Get-Content $path -Tail 50
+          $bad = @()
+          foreach($l in $lines){
+            try { $j = $l | ConvertFrom-Json -ErrorAction Stop } catch { continue }
+            $must = 'version','timestamp','traceId','message','outcome','exitCode','hash','hashAlgo','canonAlgo','anchorHash'
+            foreach($k in $must){ if(-not $j.PSObject.Properties.Match($k)){ $bad += $l; break } }
+          }
+          if ($bad.Count -gt 0) {
+            Write-Host "Invalid KLC lines:"; $bad | ForEach-Object { Write-Host $_ }
+            throw "KLC schema violation"
+          } else { Write-Host "KLC validate OK" }
