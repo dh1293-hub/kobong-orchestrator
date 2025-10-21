@@ -251,18 +251,18 @@
   },
   {
     "path": ".kobong\\context\\context-latest.json",
-    "Length": 919,
-    "LastWriteTimeUtc": "2025-10-21T20:00:59.998051Z"
+    "Length": 917,
+    "LastWriteTimeUtc": "2025-10-21T20:06:45.5105512Z"
   },
   {
     "path": ".kobong\\context\\context-latest.txt",
-    "Length": 238,
-    "LastWriteTimeUtc": "2025-10-21T20:00:59.9991898Z"
+    "Length": 236,
+    "LastWriteTimeUtc": "2025-10-21T20:06:45.5112755Z"
   },
   {
     "path": ".kobong\\logs\\api.log",
-    "Length": 2152,
-    "LastWriteTimeUtc": "2025-10-21T20:01:00.0165596Z"
+    "Length": 3059,
+    "LastWriteTimeUtc": "2025-10-21T20:06:45.5296788Z"
   },
   {
     "path": ".kobong\\logs\\ak\\run-1761069472151.log",
@@ -1576,8 +1576,8 @@
   },
   {
     "path": "scripts\\g5\\ops-one-key.ps1",
-    "Length": 2239,
-    "LastWriteTimeUtc": "2025-10-21T20:00:45.4137886Z"
+    "Length": 4963,
+    "LastWriteTimeUtc": "2025-10-21T20:06:19.3793937Z"
   },
   {
     "path": "scripts\\g5\\Patch-OrchMon-NodePath.ps1",

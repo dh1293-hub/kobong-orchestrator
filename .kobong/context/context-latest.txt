@@ -1,4 +1,4 @@
-GPT-5 CONTEXT · Mode=DEV · 2025-10-22 05:00:59
+GPT-5 CONTEXT · Mode=DEV · 2025-10-22 05:06:45
 Health: AK7:5181→FAIL GHMON:5182→OK ORCHMON:5183→FAIL
 _inventory present: inventory.json
-Last Commit: 6769176 chore(ship): context+inventory refresh after merge (2025.10.22-0453)
+Last Commit: f3ba284 chore(ops-one-key): patches+context+inventory refresh (auto, MOCK)

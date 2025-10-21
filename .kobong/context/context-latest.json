@@ -1,6 +1,6 @@
 {
   "version": "g5-context.v1",
-  "when": "2025-10-22 05:00:59",
+  "when": "2025-10-22 05:06:45",
   "mode": "DEV",
   "health": [
     {
@@ -30,5 +30,5 @@
   "ssot_exists": false,
   "docsmanifest_exists": false,
   "inventory_exists": true,
-  "last_commit": "6769176 chore(ship): context+inventory refresh after merge (2025.10.22-0453)"
+  "last_commit": "f3ba284 chore(ops-one-key): patches+context+inventory refresh (auto, MOCK)"
 }
