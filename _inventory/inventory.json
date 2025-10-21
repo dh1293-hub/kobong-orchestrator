@@ -261,18 +261,18 @@
   },
   {
     "path": ".kobong\\context\\context-latest.json",
-    "Length": 908,
-    "LastWriteTimeUtc": "2025-10-21T20:29:43.3637443Z"
+    "Length": 925,
+    "LastWriteTimeUtc": "2025-10-21T20:41:08.0835513Z"
   },
   {
     "path": ".kobong\\context\\context-latest.txt",
-    "Length": 227,
-    "LastWriteTimeUtc": "2025-10-21T20:29:43.364752Z"
+    "Length": 244,
+    "LastWriteTimeUtc": "2025-10-21T20:41:08.0845507Z"
   },
   {
     "path": ".kobong\\logs\\api.log",
-    "Length": 3966,
-    "LastWriteTimeUtc": "2025-10-21T20:29:43.3818282Z"
+    "Length": 4873,
+    "LastWriteTimeUtc": "2025-10-21T20:41:08.1018279Z"
   },
   {
     "path": ".kobong\\logs\\ak\\run-1761069472151.log",
@@ -571,8 +571,8 @@
   },
   {
     "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\overview-cards.js",
-    "Length": 9363,
-    "LastWriteTimeUtc": "2025-10-21T19:16:37.5635218Z"
+    "Length": 12245,
+    "LastWriteTimeUtc": "2025-10-21T20:40:40.1607155Z"
   },
   {
     "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\settings-pane.js",
