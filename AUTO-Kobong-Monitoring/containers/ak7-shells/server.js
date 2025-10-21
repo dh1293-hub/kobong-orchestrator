@@ -62,7 +62,14 @@ const srv = http.createServer((req,res)=>{
     const action = decodeURIComponent(p.split("/").pop() || "");
     SSE_emit({ type:"action", action });
     return j(res,200,{ ok:true, code:0, action, traceId:`t-${Date.now()}` });
-  }
+}
+// [추가] 루트 경로도 허용: /action/*  (GET/POST 모두 200)
+if ((req.method === "POST" || req.method === "GET") && p.startsWith("/action/")) {
+  const action = decodeURIComponent(p.split("/").pop() || "");
+  SSE_emit({ type: "action", action });
+  return j(res, 200, { ok: true, code: 0, action, traceId: `t-${Date.now()}` });
+}
+
   j(res,404,{ ok:false, code:404, message:"not found", path:p });
 });
 
