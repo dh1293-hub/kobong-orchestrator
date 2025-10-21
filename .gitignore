@@ -34,3 +34,4 @@ AUTO-Kobong-Monitoring/logs/**
 
 
 .backup/
+_deploy/cache/
