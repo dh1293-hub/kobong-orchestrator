@@ -1,0 +1,34 @@
+{
+  "version": "g5-context.v1",
+  "when": "2025-10-22 05:00:59",
+  "mode": "DEV",
+  "health": [
+    {
+      "name": "AK7",
+      "port": 5181,
+      "ok": false,
+      "code": 1,
+      "url": "http://localhost:5181/api/ak7/health",
+      "error": "Response status code does not indicate success: 404 (Not Found)."
+    },
+    {
+      "name": "GHMON",
+      "port": 5182,
+      "ok": true,
+      "code": 0,
+      "url": "http://localhost:5182/api/ghmon/health"
+    },
+    {
+      "name": "ORCHMON",
+      "port": 5183,
+      "ok": false,
+      "code": 1,
+      "url": "http://localhost:5183/api/orchmon/health",
+      "error": "Response status code does not indicate success: 404 (Not Found)."
+    }
+  ],
+  "ssot_exists": false,
+  "docsmanifest_exists": false,
+  "inventory_exists": true,
+  "last_commit": "6769176 chore(ship): context+inventory refresh after merge (2025.10.22-0453)"
+}
