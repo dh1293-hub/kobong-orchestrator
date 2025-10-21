@@ -1,4 +1,4 @@
-[![Release](https://img.shields.io/github/v/release/dh1293-hub/kobong-orchestrator?display_name=tag&sort=semver)](https://github.com/dh1293-hub/kobong-orchestrator/releases/tag/v0.1.35)
+[![Release](https://img.shields.io/github/v/release/dh1293-hub/kobong-orchestrator?display_name=tag&sort=semver)](https://github.com/dh1293-hub/kobong-orchestrator/releases/tag/v1.1.1-apply-patches+2025.10.22-0453)
 
 
 
