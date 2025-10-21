@@ -1,6 +1,6 @@
 {
   "version": "g5-context.v1",
-  "when": "2025-10-22 05:41:08",
+  "when": "2025-10-22 05:53:42",
   "mode": "DEV",
   "health": [
     {
@@ -30,5 +30,5 @@
   "ssot_exists": false,
   "docsmanifest_exists": false,
   "inventory_exists": true,
-  "last_commit": "83cd201 chore(ops-one-key): RO-safe patches+context+inventory refresh (auto, MOCK)"
+  "last_commit": "af6d5ad chore(ops-one-key): RO-safe patches+context+inventory refresh (auto, MOCK)"
 }
