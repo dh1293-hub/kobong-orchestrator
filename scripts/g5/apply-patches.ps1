@@ -1,212 +1,121 @@
 #requires -Version 7.0
 <#
-  scripts/g5/apply-patches.ps1 — v1.0 (URS·센티넬 멱등)
-  목적: “패치 블록(# PATCH START/END)”을 기반으로 **부분 패치**를 DRYRUN→APPLY 2단계로 적용.
-
-  표준 규칙:
-    - PS7 전용, StrictMode, UTF-8(LF), `$ErrorActionPreference='Stop'`
-    - URS: Apply 전 `.bak-<ts>` 스냅샷 → 임시파일에 기록 후 원자 교체
-    - 멱등: **센티넬(KOBO-SENTINEL:xyz)**이 이미 존재하면 멱등 SKIP
-    - KLC 로그(JSONL): `logs/apply-log.jsonl`에 traceId/durationMs/exitCode/anchorHash
-    - 표준 종료코드(SSOT): 0=OK, 10=SKIP, 11=DRYRUN, 12=PRECONDITION, 13=CONFLICT, 1=ERROR
-
-  사용 예시:
-    DRYRUN: pwsh -File scripts/g5/apply-patches.ps1 -Root "D:\\ChatGPT5_AI_Link\\dosc\\Kobong-Orchestrator-VIP" -Patch ".\\patches\\ghmon.patch"
-    APPLY : pwsh -File scripts/g5/apply-patches.ps1 -Root "..." -Patch ".\\patches\\ghmon.patch" -ConfirmApply
-
-  패치 블록 예시:
-    # PATCH START
-    TARGET: GitHub-Monitoring/webui/GitHub-Monitoring-Min.html
-    MODE: insert-before
-    MULTI: false
-    FIND <<'EOF'
-    </body>
-    EOF
-    REPLACE <<'EOF'
-    <!-- KOBO-SENTINEL:ghmon-boot-v1 -->
-    <script>window.GHMON={API_BASE:'http://localhost:5182/api/ghmon',MODE:'DEV'};</script>
-    <script src="/GitHub-Monitoring/webui/GitHub-Mon-bridge.js" defer></script>
-    EOF
-    # PATCH END
+  apply-patches.ps1 — 안정판(전자동)
+  - 질문/옵션 없이 실행 → DRYRUN 내부검사 → 바로 APPLY
+  - UI 파일 3종(AK7/GHMON/ORCHMON) 에 '센티넬+2줄 주입' 멱등 적용
+  - 포트/프리픽스 고정: AK7 5181/5191, GHMON 5182/5199, ORCHMON 5183/5193
+  - URS: .bak 스냅샷 + GOOD 슬롯(최신 파일 good-slot1 복사)
+  - KLC v1.3 최소 1행 로그(traceId/durationMs/exitCode/anchorHash)
 #>
 
+[CmdletBinding()]
 param(
-  [Parameter(Mandatory=$false)]
-  [string]$Root = (Get-Location).Path,
-
-  [Parameter(Mandatory=$false)]
-  [string[]]$Patch,
-
-  [switch]$FromStdin,
-  [switch]$ConfirmApply
+  # DEV(기본) 또는 MOCK — 질문 없이 자동 적용
+  [ValidateSet('DEV','MOCK')] [string] $Mode = 'DEV'
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
+$PSDefaultParameterValues['*:Encoding'] = 'utf8'
 
-function New-TraceId { (New-Guid).ToString('N').Substring(0,12) }
-function Get-NowIso  { (Get-Date).ToUniversalTime().ToString('o') }
-function Get-Sha256([string]$s){
-  $sha = [System.Security.Cryptography.SHA256]::Create()
-  $bytes = [System.Text.Encoding]::UTF8.GetBytes($s)
-  ($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) -join ''
-}
-
-$Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+function New-TraceId { ([guid]::NewGuid().ToString('N')).Substring(0,16) }
 $traceId = New-TraceId
-$logDir  = Join-Path $Root 'logs'
-$logPath = Join-Path $logDir 'apply-log.jsonl'
-if(!(Test-Path $logDir)){ New-Item -ItemType Directory -Force -Path $logDir | Out-Null }
+$sw = [System.Diagnostics.Stopwatch]::StartNew()
 
-function Write-KlcLog([int]$exit,[hashtable]$meta){
-  $rec = [ordered]@{
-    ts         = Get-NowIso
-    traceId    = $traceId
-    durationMs = [int]$Stopwatch.Elapsed.TotalMilliseconds
-    exitCode   = $exit
-    anchorHash = Get-Sha256(($meta.targetPath ?? '') + '|' + ($meta.mode ?? '') + '|' + ($meta.sentinel ?? ''))
-    meta       = $meta
-  } | ConvertTo-Json -Compress -Depth 5
-  Add-Content -Path $logPath -Value $rec
-}
+# 0) 루트/로그 디렉터리
+$RepoRoot = (git rev-parse --show-toplevel 2>$null)
+if (-not $RepoRoot) { $RepoRoot = (Get-Location).Path }
+$RepoRoot = (Resolve-Path $RepoRoot).Path
+$LogsDir = Join-Path $RepoRoot ".kobong\logs\ak"
+New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
 
-function Read-Text([string]$path){ Get-Content -Raw -LiteralPath $path -Encoding UTF8 }
-function Write-TextAtomic([string]$path,[string]$content){
-  $tmp = "$path.tmp"
-  $content | Set-Content -LiteralPath $tmp -Encoding UTF8 -NoNewline
-  Move-Item -LiteralPath $tmp -Destination $path -Force
-}
+# 1) 모듈 매트릭스(포트/프리픽스/브릿지명)
+$Matrix = @(
+  @{ Name='AK7';     Api='/api/ak7';     Dev=5181; Mock=5191; UiGlob='AUTO-Kobong-Monitoring\webui\*.html'; Bridge='ak7-bridge.js' },
+  @{ Name='GHMON';   Api='/api/ghmon';   Dev=5182; Mock=5199; UiGlob='GitHub-Monitoring\webui\*.html';   Bridge='GitHub-Mon-bridge.js' },
+  @{ Name='ORCHMON'; Api='/api/orchmon'; Dev=5183; Mock=5193; UiGlob='Orchestrator-Monitoring\webui\*.html'; Bridge='orchmon-bridge.js' }
+)
 
-function Backup-File([string]$path){
-  $ts = (Get-Date).ToString('yyyyMMdd-HHmmss')
-  $bak = "$path.bak-$ts"
-  Copy-Item -LiteralPath $path -Destination $bak -Force
-  return $bak
-}
+$Changes = New-Object System.Collections.Generic.List[hashtable]
 
-function Parse-PatchText([string]$text){
-  $lines = $text -split "`r?`n"
-  $out = @()
-  $i = 0
-  while($i -lt $lines.Length){
-    if($lines[$i] -match '^\s*#\s*PATCH\s+START'){
-      $obj = @{}
-      $i++
-      while($i -lt $lines.Length -and ($lines[$i] -notmatch '^\s*#\s*PATCH\s+END')){
-        $line = $lines[$i]
-        if($line -match '^\s*([A-Z_]+):\s*(.+)$'){
-          $k=$Matches[1]; $v=$Matches[2]
-          if($v -match "<<'EOF'"){
-            # heredoc capture
-            $buf = @()
-            $i++
-            while($i -lt $lines.Length -and ($lines[$i] -ne 'EOF')){ $buf += $lines[$i]; $i++ }
-            $obj[$k] = ($buf -join "`n")
-          } else { $obj[$k] = $v }
-        }
-        $i++
+# 2) 각 UI HTML에 '센티넬+2줄' 멱등 주입/업데이트
+foreach ($m in $Matrix) {
+  $pattern = Join-Path $RepoRoot $m.UiGlob
+  $files = Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue
+  foreach ($f in $files) {
+    $html = Get-Content -Raw -Path $f.FullName
+    $port = if ($Mode -eq 'DEV') { $m.Dev } else { $m.Mock }
+    $base = "http://localhost:{0}{1}" -f $port, $m.Api
+
+    # 브릿지 파일은 같은 webui 폴더 안에서 탐색해 상대경로로 연결
+    $bridgePath = Join-Path $f.DirectoryName $m.Bridge
+    $bridgeSrc  = if (Test-Path $bridgePath) { [IO.Path]::GetFileName($bridgePath) } else { $m.Bridge }
+
+    # 모듈 소문자 키로 센티넬 고정
+    $sentKey = $m.Name.ToLowerInvariant()
+    $sentinel = "<!-- __G5_{0}_perma: do not remove -->" -f $sentKey
+    $inject1  = "<script>window.{0}_MODE=""{1}"";window.{0}_BASE=""{2}"";</script>" -f $m.Name, $Mode, $base
+    $inject2  = "<script src=""{0}"" defer></script>" -f $bridgeSrc
+
+    $needWrite = $false
+    $new = $html
+
+    if ($html -notmatch [regex]::Escape($sentinel)) {
+      if ($html -notmatch '</body>') { throw "No </body> tag in $($f.FullName)" }
+      # DRYRUN 판단 완료 → APPLY (백업 후)
+      Copy-Item $f.FullName "$($f.FullName).bak-$(Get-Date -Format yyyyMMdd-HHmmss)"
+      $new = $html -replace '</body>', ($sentinel + "`r`n" + $inject1 + "`r`n" + $inject2 + "`r`n</body>")
+      $needWrite = $true
+      $Changes.Add(@{file=$f.FullName; action='inject'; mode=$Mode; base=$base})
+    }
+    else {
+      # 이미 센티넬 있음: BASE/MODE만 최신화
+      $tmp = [regex]::Replace($new, "window\.$($m.Name)_MODE=""(DEV|MOCK)""", "window.$($m.Name)_MODE=""$Mode""")
+      $tmp = [regex]::Replace($tmp,  "window\.$($m.Name)_BASE=""[^""]+""",    "window.$($m.Name)_BASE=""$base""")
+      if ($tmp -ne $new) {
+        Copy-Item $f.FullName "$($f.FullName).bak-$(Get-Date -Format yyyyMMdd-HHmmss)"
+        $new = $tmp; $needWrite = $true
+        $Changes.Add(@{file=$f.FullName; action='update'; mode=$Mode; base=$base})
       }
-      $out += $obj
-    } else { $i++ }
-  }
-  return $out
-}
-
-# 1) 패치 소스 수집
-$patchTexts = @()
-if($FromStdin){ $patchTexts += [Console]::In.ReadToEnd() }
-if($Patch){ foreach($p in $Patch){ $patchTexts += (Read-Text (Resolve-Path $p)) } }
-if(-not $FromStdin -and -not $Patch){
-  $defaultDir1 = Join-Path $Root 'patches'
-  if(Test-Path $defaultDir1){
-    Get-ChildItem $defaultDir1 -File -Recurse -Include *.patch,*.g5.patch,*.patch.txt | ForEach-Object {
-      $patchTexts += (Read-Text $_.FullName)
-    }
-  }
-}
-if($patchTexts.Count -eq 0){
-  Write-Error '패치 소스를 찾을 수 없습니다. -Patch 파일을 지정하거나 -FromStdin 를 사용하세요.'
-}
-
-$patches = @()
-foreach($txt in $patchTexts){ $patches += Parse-PatchText $txt }
-if($patches.Count -eq 0){ Write-Error '유효한 # PATCH START/END 블록이 없습니다.' }
-
-# 2) 실행
-$applied = 0; $skipped = 0; $preconds = 0; $conflicts = 0
-
-foreach($p in $patches){
-  $targetRel = $p.TARGET; if(-not $targetRel){ $preconds++; Write-KlcLog 12 @{ reason='NO_TARGET'; patch=$p }; continue }
-  $mode = ($p.MODE ?? 'replace').ToLower()
-  $multi = [System.Convert]::ToBoolean(($p.MULTI ?? 'false'))
-  $find = $p.FIND; $repl = $p.REPLACE
-  $targetPath = Join-Path $Root $targetRel
-  if(-not (Test-Path $targetPath)){ $preconds++; Write-KlcLog 12 @{ reason='TARGET_NOT_FOUND'; targetPath=$targetPath; patch=$p }; continue }
-
-  $src = Read-Text $targetPath
-  $sentinel = $null
-  if($repl -and $repl -match 'KOBO-SENTINEL:[^\s>]+' ){ $sentinel = $Matches[0] }
-
-  if($sentinel -and ($src -match [Regex]::Escape($sentinel)) -and -not $multi){
-    $skipped++; Write-KlcLog 10 @{ result='SKIP_SENTINEL'; targetPath=$targetPath; mode=$mode; sentinel=$sentinel }; continue
-  }
-
-  $new = $null
-  switch($mode){
-    'insert-after' {
-      if(-not $find){ $preconds++; Write-KlcLog 12 @{ reason='MISSING_FIND'; targetPath=$targetPath; mode=$mode }; break }
-      $m = [Regex]::Match($src, $find, [System.Text.RegularExpressions.RegexOptions]::Singleline)
-      if(-not $m.Success){ $preconds++; Write-KlcLog 12 @{ reason='FIND_NOT_MATCH'; targetPath=$targetPath; mode=$mode }; break }
-      $new = $src.Substring(0,$m.Index+$m.Length) + "`n" + ($repl ?? '') + $src.Substring($m.Index+$m.Length)
-    }
-    'insert-before' {
-      if(-not $find){ $preconds++; Write-KlcLog 12 @{ reason='MISSING_FIND'; targetPath=$targetPath; mode=$mode }; break }
-      $m = [Regex]::Match($src, $find, [System.Text.RegularExpressions.RegexOptions]::Singleline)
-      if(-not $m.Success){ $preconds++; Write-KlcLog 12 @{ reason='FIND_NOT_MATCH'; targetPath=$targetPath; mode=$mode }; break }
-      $new = $src.Substring(0,$m.Index) + ($repl ?? '') + "`n" + $src.Substring($m.Index)
-    }
-    'replace' {
-      if(-not $find){ $preconds++; Write-KlcLog 12 @{ reason='MISSING_FIND'; targetPath=$targetPath; mode=$mode }; break }
-      if($multi){ $new = [Regex]::Replace($src, $find, ($repl ?? ''), [System.Text.RegularExpressions.RegexOptions]::Singleline) }
-      else {
-        $m = [Regex]::Match($src, $find, [System.Text.RegularExpressions.RegexOptions]::Singleline)
-        if(-not $m.Success){ $preconds++; Write-KlcLog 12 @{ reason='FIND_NOT_MATCH'; targetPath=$targetPath; mode=$mode }; break }
-        $new = $src.Substring(0,$m.Index) + ($repl ?? '') + $src.Substring($m.Index+$m.Length)
+      # 브릿지 라인이 없다면 추가
+      if ($new -notmatch [regex]::Escape($inject2)) {
+        $new = $new -replace '</body>', ($inject2 + "`r`n</body>")
+        $needWrite = $true
+        $Changes.Add(@{file=$f.FullName; action='bridge-add'; mode=$Mode; base=$base})
       }
     }
-    'append' { $new = $src + "`n" + ($repl ?? '') }
-    Default { $preconds++; Write-KlcLog 12 @{ reason='BAD_MODE'; targetPath=$targetPath; mode=$mode }; }
-  }
 
-  if($null -eq $new){ continue }
-  if($new -eq $src){ $skipped++; Write-KlcLog 10 @{ result='SKIP_NOCHANGE'; targetPath=$targetPath; mode=$mode; sentinel=$sentinel }; continue }
-
-  if($ConfirmApply){
-    $bak = Backup-File $targetPath
-    try { Write-TextAtomic $targetPath $new } catch { $conflicts++; Write-KlcLog 13 @{ result='CONFLICT_WRITE'; targetPath=$targetPath; bak=$bak; error=$_.Exception.Message }; continue }
-    $applied++
-    Write-KlcLog 0 @{ result='APPLIED'; targetPath=$targetPath; mode=$mode; bak=$bak; sentinel=$sentinel }
-  }
-  else {
-    # DRYRUN: 변경 미리보기(앞부분 240자)
-    $deltaHead = ($new.Substring(0,[Math]::Min($new.Length,240)))
-    Write-KlcLog 11 @{ result='DRYRUN'; targetPath=$targetPath; mode=$mode; preview=$deltaHead; sentinel=$sentinel }
+    if ($needWrite) { Set-Content -Path $f.FullName -Value $new -NoNewline }
   }
 }
 
-$Stopwatch.Stop()
+# 3) GOOD 슬롯(최신본 복제) — 간단 회전(슬롯1만 유지)
+$goodRoot = Join-Path $RepoRoot ".rollbacks\webui"
+New-Item -ItemType Directory -Force -Path $goodRoot | Out-Null
+foreach ($c in $Changes) {
+  $leaf = (Split-Path $c.file -Leaf)
+  Copy-Item $c.file (Join-Path $goodRoot "$leaf.good-slot1") -Force
+}
 
-if($ConfirmApply){
-  if($applied -gt 0 -and $conflicts -eq 0 -and $preconds -eq 0){ exit 0 }
-  elseif($applied -eq 0 -and $skipped -gt 0 -and $conflicts -eq 0 -and $preconds -eq 0){ exit 10 }
-  elseif($preconds -gt 0){ exit 12 }
-  elseif($conflicts -gt 0){ exit 13 }
-  else { exit 1 }
+# 4) KLC v1.3 로그 1행
+$sw.Stop()
+$canon = ($Changes | ConvertTo-Json -Depth 6)
+$sha = [Convert]::ToHexString([System.Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($canon))).ToLower()
+$exit = if ($Changes.Count -gt 0) { 0 } else { 13 }  # 0=성공, 13=SKIP
+
+$log = [ordered]@{
+  version='1.3'
+  timestamp=(Get-Date).ToString('o')
+  traceId=$traceId
+  message='apply-patches auto'
+  outcome= if ($Changes.Count -gt 0) { 'SUCCESS' } else { 'SKIP' }
+  hash=$sha; prevHash=''; hashAlgo='sha256'; canonAlgo='json.v1'
+  env=$Mode; mode='APPLY'; service='apply-patches.ps1'
+  exitCode=$exit; durationMs=[int]$sw.Elapsed.TotalMilliseconds; anchorHash=$sha
 }
-else {
-  # DRYRUN
-  if($preconds -gt 0){ exit 12 }
-  elseif($conflicts -gt 0){ exit 13 }
-  else { exit 11 }
-}
+$logFile = Join-Path $LogsDir "run-$([DateTimeOffset]::Now.ToUnixTimeMilliseconds()).log"
+$log | ConvertTo-Json -Depth 5 | Out-File -FilePath $logFile
+
+Write-Host ("[apply-patches] exit={0}, changed={1}, log={2}" -f $exit, $Changes.Count, $logFile)
+exit $exit
