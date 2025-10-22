@@ -3,7 +3,7 @@ param([switch]$Dev, [switch]$Mock)
 $ErrorActionPreference='Stop'
 
 $ROOT='D:\ChatGPT5_AI_Link\dosc\Kobong-Orchestrator-VIP'
-$DIR = Join-Path $ROOT 'AUTO-Kobong-Monitoring\containers\ak7-shells'
+$DIR = Join-Path $ROOT 'Orchestrator-Monitoring\containers\orch-shells'
 if(!(Test-Path $DIR)){ throw "경로 없음: $DIR" }
 
 $node = (Get-Command node -ErrorAction SilentlyContinue).Source; if(-not $node){ $node='C:\Program Files\nodejs\node.exe' }
@@ -13,13 +13,12 @@ $LOG = Join-Path $ROOT 'scripts\g5\logs'; New-Item -ItemType Directory -Force -P
 $stamp=Get-Date -Format 'yyyyMMdd_HHmmss'
 
 $targets=@()
-if($Dev -or (-not $Dev -and -not $Mock)){ $targets += @{ name='AK7-DEV'; exe='server.js';     port=5181 } }
-if($Mock){                                 $targets += @{ name='AK7-MOCK';exe='server-ak7.js'; port=5191 } }
+if($Dev -or (-not $Dev -and -not $Mock)){ $targets += @{ name='ORCH-DEV';  exe='server.js'; port=5183 } }
+if($Mock){                                 $targets += @{ name='ORCH-MOCK'; exe='server.js'; port=5193 } }
 
 foreach($t in $targets){
-  # 포트 점유 정리
   Get-NetTCPConnection -State Listen -LocalPort $t.port -ErrorAction SilentlyContinue |
-    Select-Object -ExpandProperty OwningProcess -Unique | % { try{ Stop-Process -Id $_ -Force }catch{} }
+    Select -Expand OwningProcess -Unique | % { try{ Stop-Process -Id $_ -Force }catch{} }
 
   $out=Join-Path $LOG ("{0}_{1}.out.log" -f $t.name,$stamp)
   $err=Join-Path $LOG ("{0}_{1}.err.log" -f $t.name,$stamp)
@@ -32,5 +31,5 @@ foreach($t in $targets){
     -RedirectStandardOutput $out `
     -RedirectStandardError  $err | Out-Null
 }
-"✅ AK7 started: " + ($targets | % { "$($_.name)@$_(port)" } | Out-String)
+"✅ ORCH started: " + ($targets | % { "$($_.name)@$_(port)" } | Out-String)
 "📜 logs: $LOG"
