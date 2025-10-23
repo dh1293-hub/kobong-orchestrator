@@ -12,19 +12,15 @@ permissions:
   checks: write
 
 jobs:
-  # 1) "/ak" 트리거 확인 + 즉시 ack 댓글
   ack:
     if: ${{ startsWith(github.event.comment.body, '/ak') }}
     runs-on: ubuntu-latest
     outputs:
       body: ${{ steps.capture.outputs.body }}
     steps:
-      - name: Capture body
-        id: capture
+      - id: capture
         run: echo "body=${{ github.event.comment.body }}" >> $GITHUB_OUTPUT
-
-      - name: Reply ack
-        uses: actions/github-script@v7
+      - uses: actions/github-script@v7
         with:
           github-token: ${{ github.token }}
           script: |
@@ -36,15 +32,14 @@ jobs:
               body: `ack ✅ ${body} (trigger ok)`
             });
 
-  # 2) 윈도우 러너에서 실제 파워셸 스크립트 실행
   run:
     needs: ack
+    if: ${{ startsWith(needs.ack.outputs.body, '/ak') }}
     runs-on: windows-latest
-    if: ${{ startsWith(needs.ack.outputs.body, '/ak') }}  # ack가 뜨면 run도 반드시 뜸
     steps:
       - uses: actions/checkout@v4
 
-      - name: Parse command
+      - name: Parse
         id: parse
         shell: pwsh
         run: |
@@ -68,7 +63,6 @@ jobs:
             Join-Path 'scripts'    $map[$cmd],
             $map[$cmd]
           ) | ? { Test-Path $_ } | Select-Object -First 1
-
           if(-not $cand){ "Script not found: $($map[$cmd])" | Tee-Object .ak-out.txt -Append; exit 11 }
 
           $supportsMode = try { (Get-Command $cand -ErrorAction Stop).Parameters.ContainsKey('Mode') } catch { $false }
@@ -77,7 +71,6 @@ jobs:
           ">> Running $cand $args" | Tee-Object .ak-out.txt -Append
           try { & pwsh -NoProfile -File $cand @args 2>&1 | Tee-Object .ak-out.txt -Append; $code=$LASTEXITCODE }
           catch { $_ | Out-String | Tee-Object .ak-out.txt -Append; $code=1 }
-
           "exit_code=$code" | Out-File $env:GITHUB_OUTPUT -Append
           if($code -ne 0){ Write-Error "AK step failed with code $code" }
 
