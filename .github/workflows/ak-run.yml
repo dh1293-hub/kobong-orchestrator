@@ -82,12 +82,3 @@ jobs:
       # 실제 실행은 Windows 러너에서 (여기선 트리거/회신만 책임)
       - name: Done
         run: echo "gate+ack complete"
-
-          exec:
-    needs: ak
-    if: ${{ steps.gate.outputs.isAK == '1' }}   # ak-run 쪽의 gate/캡처 이름에 맞게 조정
-    uses: ./.github/workflows/ak-exec.yml
-    with:
-      issue_number: ${{ steps.gate.outputs.issue }}
-      body:         ${{ steps.gate.outputs.body }}
-
