@@ -1,8 +1,8 @@
 name: AK7 run (/ak only)
 
 on:
-  issue_comment:              { types: [created, edited] }
-  pull_request_review_comment:{ types: [created, edited] }
+  issue_comment:               { types: [created, edited] }
+  pull_request_review_comment: { types: [created, edited] }
   workflow_dispatch:
     inputs:
       issue_number: { description: "Issue/PR number", required: true }
@@ -15,59 +15,84 @@ permissions:
   checks: write
 
 jobs:
+  # 항상 뜨는 게이트 (여기서만 필터링) ── "아무 반응 없음" 방지
   gate:
     runs-on: ubuntu-latest
     outputs:
       body:  ${{ steps.out.outputs.body }}
-      kind:  ${{ steps.out.outputs.kind }}
+      is_ak: ${{ steps.out.outputs.is_ak }}
       issue: ${{ steps.out.outputs.issue }}
     steps:
       - id: out
         shell: bash
         run: |
+          # 1) 본문/타깃 이슈 번호 확보 (이벤트/수동 모두)
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             body="${{ inputs.body }}"
             issue="${{ inputs.issue_number }}"
           else
             body="${{ github.event.comment.body }}"
-            # 이슈/PR/리뷰댓글 모두 커버 (없으면 빈 값)
-            issue="${{ github.event.issue.number || github.event.pull_request.number || github.event.comment.pull_request_url && github.event.pull_request.number }}"
+            issue=""  # 아래 JS에서 안전하게 계산
           fi
-          body="$(printf '%s' "$body" | sed -e 's/^[[:space:]]*//' )"
-          echo "body=$body"  >> $GITHUB_OUTPUT
-          kind=""
-          [[ "$body" == /ak* ]] && kind="ak"
-          echo "kind=$kind" >> $GITHUB_OUTPUT
-          echo "issue=$issue">> $GITHUB_OUTPUT
-      - name: Note
-        run: echo "triggered: kind='${{ steps.out.outputs.kind }}' body='${{ steps.out.outputs.body }}' issue='${{ steps.out.outputs.issue }}'"
+          body_trim="$(printf '%s' "$body" | sed -e 's/^[[:space:]]*//' )"
+          is_ak="0"; case "$body_trim" in (/ak*|/AK*) is_ak="1";; esac
+          echo "body=$body_trim" >> $GITHUB_OUTPUT
+          echo "is_ak=$is_ak"    >> $GITHUB_OUTPUT
+          echo "issue=$issue"    >> $GITHUB_OUTPUT
+      - name: note
+        run: echo "gate: body='${{ steps.out.outputs.body }}' is_ak='${{ steps.out.outputs.is_ak }}'"
 
+  # ack 댓글 (PR 줄댓글/이슈댓글 모두 지원; 이슈번호를 안전하게 계산)
   ack:
     needs: gate
-    if: ${{ needs.gate.outputs.kind == 'ak' }}
+    if: ${{ needs.gate.outputs.is_ak == '1' }}
     runs-on: ubuntu-latest
     outputs:
       body:  ${{ steps.cap.outputs.body }}
-      issue: ${{ needs.gate.outputs.issue }}
+      issue: ${{ steps.cap.outputs.issue }}
     steps:
       - id: cap
-        run: echo "body=${{ needs.gate.outputs.body }}" >> $GITHUB_OUTPUT
-      - uses: actions/github-script@v7
+        uses: actions/github-script@v7
         with:
           github-token: ${{ github.token }}
           script: |
-            const issue = Number("${{ needs.gate.outputs.issue }}");
-            const body  = `${{ toJson(needs.gate.outputs.body) }}`.trim();
+            // 1) 본문
+            const body = `${{ toJson(needs.gate.outputs.body) }}`.trim();
+
+            // 2) 타깃 번호 계산 (이슈댓글/PR 대화/PR 줄댓글 모두)
+            let issue = `${{ needs.gate.outputs.issue }}` || "";
+            if (!issue) {
+              const p = context.payload;
+              // issue_comment: 이슈나 PR 대화 탭
+              if (p.issue && p.issue.number) {
+                issue = String(p.issue.number);
+              }
+              // pull_request_review_comment: 코드 줄댓글 (PR 번호는 URL에서 추출)
+              else if (p.comment && p.comment.pull_request_url) {
+                const m = p.comment.pull_request_url.match(/\/pulls\/(\d+)(?:$|[/?#])/);
+                if (m) issue = m[1];
+              }
+            }
+            if (!issue) {
+              core.setFailed("Cannot resolve issue/PR number for replying.");
+              return;
+            }
+
+            core.setOutput("body", body);
+            core.setOutput("issue", issue);
+
+            // 3) ACK 댓글
             await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: issue,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number(issue),
               body: `ack ✅ ${body}`
             });
 
+  # Windows에서 실제 실행 (+ 실패해도 tail은 보장)
   run:
     needs: ack
     runs-on: windows-latest
-    if: ${{ needs.gate.outputs.kind == 'ak' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -127,9 +152,8 @@ jobs:
         script: |
           const fs = require('fs');
           let tail='(no .ak-out.txt)'; try { tail = fs.readFileSync('.ak-out.txt','utf8').split('\n').slice(-100).join('\n'); } catch {}
-          const issue = Number("${{ needs.ack.outputs.issue }}");
           await github.rest.issues.createComment({
             owner: context.repo.owner, repo: context.repo.repo,
-            issue_number: issue,
+            issue_number: Number("${{ needs.ack.outputs.issue }}"),
             body: `✅ \`/ak\` done (${process.env.CMD} ${process.env.MODE})\n\n\`\`\`\n${tail}\n\`\`\``
           });
