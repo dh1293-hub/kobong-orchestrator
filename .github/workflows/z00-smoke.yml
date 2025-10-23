@@ -1,0 +1,20 @@
+name: z00-smoke
+on:
+  issue_comment:
+    types: [created]  # 이슈/PR 댓글 생성이면 무조건 런 시작
+permissions:
+  issues: write
+jobs:
+  say:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: 'smoke ✅ (issue_comment worked)'
+            });
