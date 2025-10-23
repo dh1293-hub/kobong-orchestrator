@@ -2,12 +2,17 @@ name: AK7 Run
 on:
   issue_comment:
     types: [created]
+  workflow_dispatch: {}
 
 permissions:
   contents: read
   issues: write
   pull-requests: write
   checks: write
+
+concurrency:
+  group: ak-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   run:
@@ -22,9 +27,9 @@ jobs:
         shell: pwsh
         run: |
           Set-StrictMode -Version Latest; $ErrorActionPreference='Stop'
-          $parts = "${{ github.event.comment.body }}".Trim().Split(' ',[System.StringSplitOptions]::RemoveEmptyEntries)
-          $cmd   = if ($parts.Length -ge 2) { $parts[1] } else { 'scan' }
-          $mode  = if ($parts.Length -ge 3) { $parts[2] } else { 'preview' }   # 기본 안전값
+          $p = "${{ github.event.comment.body }}".Trim().Split(' ',[System.StringSplitOptions]::RemoveEmptyEntries)
+          $cmd  = if ($p.Length -ge 2) { $p[1] } else { 'scan' }
+          $mode = if ($p.Length -ge 3) { $p[2] } else { 'preview' }
           "cmd=$cmd"  | Out-File $env:GITHUB_OUTPUT -Append
           "mode=$mode"| Out-File $env:GITHUB_OUTPUT -Append
           New-Item -ItemType File -Force .ak-out.txt | Out-Null
@@ -36,32 +41,25 @@ jobs:
         run: |
           Set-StrictMode -Version Latest; $ErrorActionPreference='Stop'
           $map = @{ scan='ak-scan.ps1'; rewrite='ak-rewrite.ps1'; fix='ak-fixloop.ps1'; test='ak-test.ps1'; fixloop='ak-fixloop.ps1' }
-          $cmd = '${{ steps.parse.outputs.cmd }}'
-          if (-not $map.ContainsKey($cmd)) { "Unknown /ak subcommand: $cmd" | Tee-Object -FilePath .ak-out.txt -Append; exit 10 }
+          $cmd='${{ steps.parse.outputs.cmd }}'
+          if(-not $map.ContainsKey($cmd)){ "Unknown /ak subcommand: $cmd" | Tee-Object .ak-out.txt -Append; exit 10 }
 
-          $candidates = @(
+          $cands = @(
             Join-Path 'scripts/g5' $map[$cmd],
             Join-Path 'scripts'    $map[$cmd],
             $map[$cmd]
           )
-          $script = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $script) { "Script not found: $($map[$cmd])" | Tee-Object -FilePath .ak-out.txt -Append; exit 11 }
+          $script = $cands | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if(-not $script){ "Script not found: $($map[$cmd])" | Tee-Object .ak-out.txt -Append; exit 11 }
 
-          # -Mode 지원 여부 확인 후 동적 인자 구성
           $supportsMode = try { (Get-Command $script -ErrorAction Stop).Parameters.ContainsKey('Mode') } catch { $false }
-          $args = @()
-          if ($supportsMode) { $args += @('-Mode', $env:AK_MODE) }
+          $args = @(); if($supportsMode){ $args += @('-Mode',$env:AK_MODE) }
 
-          ">> Running $script $args" | Tee-Object -FilePath .ak-out.txt -Append
-          try {
-            & pwsh -NoProfile -File $script @args 2>&1 | Tee-Object -FilePath .ak-out.txt -Append
-            $code = $LASTEXITCODE
-          } catch {
-            $_ | Out-String | Tee-Object -FilePath .ak-out.txt -Append | Out-Host
-            $code = 1
-          }
+          ">> Running $script $args" | Tee-Object .ak-out.txt -Append
+          try { & pwsh -NoProfile -File $script @args 2>&1 | Tee-Object .ak-out.txt -Append; $code=$LASTEXITCODE }
+          catch { $_ | Out-String | Tee-Object .ak-out.txt -Append; $code=1 }
           "exit_code=$code" | Out-File $env:GITHUB_OUTPUT -Append
-          if ($code -ne 0) { Write-Error "AK step failed with code $code" }
+          if($code -ne 0){ Write-Error "AK step failed with code $code" }
 
       - name: Upload logs
         if: always()
@@ -70,7 +68,6 @@ jobs:
           name: ak7-logs
           path: |
             .ak-out.txt
-            logs/ak7.jsonl
             logs/**/*.log
           if-no-files-found: ignore
 
@@ -81,10 +78,10 @@ jobs:
           github-token: ${{ github.token }}
           script: |
             const fs = require('fs');
-            const tail = fs.readFileSync('.ak-out.txt','utf8').split('\n').slice(-80).join('\n');
+            const tail = fs.readFileSync('.ak-out.txt','utf8').split('\n').slice(-100).join('\n');
             await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
+              owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.payload.issue.number,
-              body: "✅ `/ak` done (" + "${{ steps.parse.outputs.cmd }}" + " " + "${{ steps.parse.outputs.mode }}" + ").\n\n```\n"+ tail +"\n```"
+              body: "✅ `/ak` done ("+"${{ steps.parse.outputs.cmd }}"+" "+"${{ steps.parse.outputs.mode }}"+")\n\n```\n"+tail+"\n```"
             });
+
