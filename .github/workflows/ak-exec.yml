@@ -18,6 +18,23 @@ jobs:
   exec:
     runs-on: windows-latest
     steps:
+      # 항상 Summary에 기록(뜸/안뜸 진단용)
+      - name: exec gate summary
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const ev = context.eventName;
+            const body = ev==='workflow_dispatch'
+              ? core.getInput('body',{required:false})
+              : (context.payload.comment?.body ?? '');
+            core.summary.addHeading('exec gate');
+            core.summary.addTable([
+              [{data:'event',header:true},{data:ev}],
+              [{data:'body', header:true},{data:String(body).slice(0,200)}],
+            ]);
+            await core.summary.write();
+
       - uses: actions/checkout@v4
 
       - name: Gate (/ak only) + resolve target
@@ -27,20 +44,16 @@ jobs:
           github-token: ${{ github.token }}
           script: |
             const ev = context.eventName;
-            const body = (ev === 'workflow_dispatch')
-              ? core.getInput('body', {required:true})
+            const body = ev==='workflow_dispatch'
+              ? core.getInput('body',{required:true})
               : (context.payload.comment?.body ?? '');
-            const re = /(^|[\s`>])\/ak(\b|[\s`])/i;   // 여유 있는 매칭
+            const re = /(^|[\s`>])\/ak(\b|[\s`])/i;  // 여유 매칭
             const isAK = re.test(body);
-            let issue = (ev === 'workflow_dispatch')
-              ? Number(core.getInput('issue_number', {required:true}))
+            let issue = ev==='workflow_dispatch'
+              ? Number(core.getInput('issue_number',{required:true}))
               : (context.payload.issue?.number
-                ?? context.payload.pull_request?.number
-                ?? (() => {
-                     const u = context.payload.comment?.pull_request_url || '';
-                     const m = u.match(/\/pulls\/(\d+)(?:$|[/?#])/);
-                     return m ? Number(m[1]) : undefined;
-                   })());
+                 ?? context.payload.pull_request?.number
+                 ?? (()=>{ const u=context.payload.comment?.pull_request_url||''; const m=u.match(/\/pulls\/(\d+)/); return m?Number(m[1]):undefined; })());
             core.setOutput('isAK', isAK ? '1':'0');
             core.setOutput('issue', issue ?? '');
             core.setOutput('body', body);
