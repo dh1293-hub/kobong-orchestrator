@@ -1,78 +1,83 @@
 name: AK7 (always-on)
 
 on:
-  issue_comment:
-    types: [created, edited]   # 댓글 생성/수정 모두 잡음
+  # 이슈/PR/디스커션 댓글 "모두" 받는다 (created/edited 모두)
+  issue_comment:              { types: [created, edited] }
+  pull_request_review_comment:{ types: [created, edited] }
+  discussion_comment:         { types: [created, edited] }
   workflow_dispatch:
     inputs:
-      issue_number:
-        description: "Issue number to comment on"
-        required: true
-      body:
-        description: "Comment body to simulate"
-        required: true
+      issue_number: { description: "Issue/PR number", required: true }
+      body:         { description: "Comment body to simulate", required: true }
 
 permissions:
   contents: read
   issues: write
   pull-requests: write
+  discussions: write
   checks: write
 
 jobs:
-  # 0) 어떤 경우든 '항상' 뜨는 트리거 잡
+  # 어떤 코멘트든 "항상" 런이 보이게 먼저 받는다
   trigger:
     runs-on: ubuntu-latest
     outputs:
       body: ${{ steps.out.outputs.body }}
       kind: ${{ steps.out.outputs.kind }}
+      issue: ${{ steps.out.outputs.issue }}
     steps:
       - id: out
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            b="${{ inputs.body }}"
+            body="${{ inputs.body }}"
+            issue="${{ inputs.issue_number }}"
           else
-            b="${{ github.event.comment.body }}"
+            body="${{ github.event.comment.body }}"
+            # 이슈/PR/디스커션 케이스 모두 커버
+            issue="${{ github.event.issue.number || github.event.pull_request.number || github.event.discussion.number }}"
           fi
-          echo "body=$b"  >> $GITHUB_OUTPUT
-          if [[ "$b" == /ak* ]];   then echo "kind=ak"   >> $GITHUB_OUTPUT; fi
-          if [[ "$b" == /ping* ]]; then echo "kind=ping" >> $GITHUB_OUTPUT; fi
+          echo "body=$body"  >> $GITHUB_OUTPUT
+          echo "issue=$issue">> $GITHUB_OUTPUT
+          kind=""
+          [[ "$body" == /ping* ]] && kind="ping"
+          [[ "$body" == /ak*   ]] && kind="ak"
+          echo "kind=$kind" >> $GITHUB_OUTPUT
       - name: Note
-        run: echo "triggered with body='${{ steps.out.outputs.body }}' kind='${{ steps.out.outputs.kind }}'"
+        run: echo "triggered: kind='${{ steps.out.outputs.kind }}' body='${{ steps.out.outputs.body }}'"
 
-  # 1) ack 댓글(둘 다 공통)
+  # 즉시 확인 댓글(ACK) — /ping, /ak 둘 다
   ack:
     needs: trigger
-    if: ${{ needs.trigger.outputs.kind == 'ak' || needs.trigger.outputs.kind == 'ping' }}
+    if: ${{ needs.trigger.outputs.kind == 'ping' || needs.trigger.outputs.kind == 'ak' }}
     runs-on: ubuntu-latest
     outputs:
-      body: ${{ steps.capture.outputs.body }}
+      body:  ${{ steps.cap.outputs.body }}
+      issue: ${{ needs.trigger.outputs.issue }}
     steps:
-      - id: capture
+      - id: cap
         run: echo "body=${{ needs.trigger.outputs.body }}" >> $GITHUB_OUTPUT
       - uses: actions/github-script@v7
         with:
           github-token: ${{ github.token }}
           script: |
-            const body = `${{ toJson(needs.trigger.outputs.body) }}`.trim();
-            const issue = context.eventName === 'workflow_dispatch'
-              ? Number("${{ inputs.issue_number }}")
-              : context.payload.issue.number;
+            const body  = `${{ toJson(needs.trigger.outputs.body) }}`.trim();
+            const issue = Number(`${{ needs.trigger.outputs.issue }}`);
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: issue,
               body: `ack ✅ ${body} (event=${context.eventName})`
             });
 
-  # 2) /ping은 여기서 종료
+  # /ping은 여기서 종료
   done:
     needs: [trigger, ack]
     if: ${{ needs.trigger.outputs.kind == 'ping' }}
     runs-on: ubuntu-latest
     steps:
-      - run: echo "ping handled."
+      - run: echo "ping handled"
 
-  # 3) /ak이면 Windows에서 실제 실행(+ 실패해도 tail 댓글 보장)
+  # /ak 이면 Windows에서 실제 실행 (+ 실패해도 tail 댓글은 보장)
   run:
     needs: [trigger, ack]
     if: ${{ needs.trigger.outputs.kind == 'ak' }}
@@ -135,11 +140,8 @@ jobs:
           MODE: ${{ steps.parse.outputs.mode }}
         script: |
           const fs = require('fs');
-          let tail = '(no .ak-out.txt)';
-          try { tail = fs.readFileSync('.ak-out.txt','utf8').split('\n').slice(-100).join('\n'); } catch {}
-          const issue = context.eventName === 'workflow_dispatch'
-            ? Number("${{ inputs.issue_number }}")
-            : context.payload.issue.number;
+          let tail='(no .ak-out.txt)'; try { tail = fs.readFileSync('.ak-out.txt','utf8').split('\n').slice(-100).join('\n'); } catch {}
+          const issue = Number(`${{ needs.ack.outputs.issue }}`);
           await github.rest.issues.createComment({
             owner: context.repo.owner, repo: context.repo.repo,
             issue_number: issue,
