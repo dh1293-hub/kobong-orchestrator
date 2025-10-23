@@ -1,0 +1,62 @@
+name: AK7 Run
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      cmd: { description: 'scan|rewrite|fixloop|test', required: true }
+      mode: { description: 'preview or apply', required: false, default: 'apply' }
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  run:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       startsWith(github.event.comment.body, '/ak '))
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 2 }
+
+      - name: Parse command
+        id: parse
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest; $ErrorActionPreference='Stop'
+          if ("${{ github.event_name }}" -eq "issue_comment") {
+            $t = "${{ github.event.comment.body }}".Trim().Split(' ',[System.StringSplitOptions]::RemoveEmptyEntries)
+            $cmd = if ($t.Length -gt 1) { $t[1] } else { 'scan' }
+            $mode = if ($t.Length -gt 2) { $t[2] } else { 'apply' }
+          } else { $cmd='${{ inputs.cmd }}'; $mode='${{ inputs.mode }}' }
+          "cmd=$cmd"  | Out-File $env:GITHUB_OUTPUT -Append
+          "mode=$mode"| Out-File $env:GITHUB_OUTPUT -Append
+
+      - name: Run AK task
+        shell: pwsh
+        env: { AK_MODE: ${{ steps.parse.outputs.mode }} }
+        run: |
+          Set-StrictMode -Version Latest; $ErrorActionPreference='Stop'
+          $map = @{ scan='ak-scan.ps1'; rewrite='ak-rewrite.ps1'; fixloop='ak-fixloop.ps1'; test='ak-test.ps1' }
+          $cmd  = '${{ steps.parse.outputs.cmd }}'
+          if (-not $map.ContainsKey($cmd)) { throw "Unknown /ak command: $cmd" }
+          $script = Join-Path 'scripts' $map[$cmd]
+          if (-not (Test-Path $script)) { $script = $map[$cmd] } # fallback
+          Write-Host ">> Running $script (mode=$env:AK_MODE)"
+          & pwsh -NoProfile -File $script -Mode $env:AK_MODE
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ak7-logs
+          path: |
+            logs/ak7.jsonl
+            logs/**/*.log
