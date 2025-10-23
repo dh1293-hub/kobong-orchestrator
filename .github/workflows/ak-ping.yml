@@ -12,7 +12,6 @@ permissions:
   checks: write
 
 jobs:
-  # "/ak" 또는 "/ping" 댓글이면 항상 작동 (목록에서 절대 사라지지 않게)
   ack:
     if: ${{ startsWith(github.event.comment.body, '/ak') || startsWith(github.event.comment.body, '/ping') }}
     runs-on: ubuntu-latest
@@ -33,14 +32,12 @@ jobs:
               body: `ack ✅ ${body} (trigger ok)`
             });
 
-  # "/ak ..." 이면 실제 스크립트 실행 (Windows). 실패해도 tail은 무조건 댓글.
   run:
     needs: ack
     if: ${{ startsWith(needs.ack.outputs.body, '/ak') }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Parse
         id: parse
         shell: pwsh
@@ -49,7 +46,6 @@ jobs:
           "cmd=$($p[1] ?? 'scan')"     | Out-File $env:GITHUB_OUTPUT -Append
           "mode=$($p[2] ?? 'preview')" | Out-File $env:GITHUB_OUTPUT -Append
           New-Item -ItemType File -Force .ak-out.txt | Out-Null
-
       - name: Run AK task
         id: runstep
         shell: pwsh
@@ -59,23 +55,14 @@ jobs:
           $map=@{ scan='ak-scan.ps1'; rewrite='ak-rewrite.ps1'; fix='ak-fixloop.ps1'; test='ak-test.ps1'; fixloop='ak-fixloop.ps1' }
           $cmd='${{ steps.parse.outputs.cmd }}'
           if(-not $map.ContainsKey($cmd)){ "Unknown: $cmd" | Tee-Object .ak-out.txt -Append; exit 10 }
-
-          $cand=@(
-            Join-Path 'scripts/g5' $map[$cmd],
-            Join-Path 'scripts'    $map[$cmd],
-            $map[$cmd]
-          ) | ? { Test-Path $_ } | Select-Object -First 1
+          $cand=@( Join-Path 'scripts/g5' $map[$cmd], Join-Path 'scripts' $map[$cmd], $map[$cmd] ) | ? { Test-Path $_ } | Select-Object -First 1
           if(-not $cand){ "Script not found: $($map[$cmd])" | Tee-Object .ak-out.txt -Append; exit 11 }
-
           $supportsMode = try { (Get-Command $cand -ErrorAction Stop).Parameters.ContainsKey('Mode') } catch { $false }
           $args=@(); if($supportsMode){ $args += @('-Mode',$env:AK_MODE) }
-
           ">> Running $cand $args" | Tee-Object .ak-out.txt -Append
-          try { & pwsh -NoProfile -File $cand @args 2>&1 | Tee-Object .ak-out.txt -Append; $code=$LASTEXITCODE }
-          catch { $_ | Out-String | Tee-Object .ak-out.txt -Append; $code=1 }
+          try { & pwsh -NoProfile -File $cand @args 2>&1 | Tee-Object .ak-out.txt -Append; $code=$LASTEXITCODE } catch { $_ | Out-String | Tee-Object .ak-out.txt -Append; $code=1 }
           "exit_code=$code" | Out-File $env:GITHUB_OUTPUT -Append
           if($code -ne 0){ Write-Error "AK step failed with code $code" }
-
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -85,7 +72,6 @@ jobs:
             .ak-out.txt
             logs/**/*.log
           if-no-files-found: ignore
-
       - name: Reply with tail
         if: always()
         uses: actions/github-script@v7
