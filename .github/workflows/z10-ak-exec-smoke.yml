@@ -2,7 +2,15 @@ name: z10-ak-exec
 
 on:
   issue_comment:
-    types: [created]        # 댓글 달리면 항상 뜸 (PR 대화 댓글 포함)
+    types: [created]  # 댓글 달리면 항상 뜸 (PR 대화 댓글 포함)
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "Issue/PR number"
+        required: true
+      body:
+        description: "Comment body to simulate (e.g. '/ak scan')"
+        required: true
 
 permissions:
   contents: read
@@ -20,30 +28,35 @@ jobs:
       - id: gate
         shell: pwsh
         run: |
-          $body = @"
-          ${{ github.event.comment.body }}
-          "@.Trim()
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $body  = "${{ github.event.inputs.body }}"
+            $issue = "${{ github.event.inputs.issue_number }}"
+          } else {
+            $body = @"
+            ${{ github.event.comment.body }}
+            "@.Trim()
+            $issue = "${{ github.event.issue.number }}"
+          }
+
           if ($body -match '(?is)(^|[\s`>])/ak(\b|[\s`])') { $isAK='1' } else { $isAK='0' }
-          "isAK=$isAK"                              | Out-File $env:GITHUB_OUTPUT -Append
-          "issue=${{ github.event.issue.number }}"  | Out-File $env:GITHUB_OUTPUT -Append
-          "body=$body"                              | Out-File $env:GITHUB_OUTPUT -Append
+
+          "isAK=$isAK"            | Out-File $env:GITHUB_OUTPUT -Append
+          "issue=$issue"          | Out-File $env:GITHUB_OUTPUT -Append
+          "body=$body"            | Out-File $env:GITHUB_OUTPUT -Append
           New-Item -ItemType File -Force .ak-out.txt | Out-Null
 
-      # 2) ACK
+      # 2) ACK (본문은 toJson으로 안전 출력)
       - name: ack
         if: ${{ steps.gate.outputs.isAK == '1' && steps.gate.outputs.issue != '' }}
         uses: actions/github-script@v7
-        env:
-          ISSUE: ${{ steps.gate.outputs.issue }}
-          BODY:  ${{ steps.gate.outputs.body }}
         with:
           github-token: ${{ github.token }}
           script: |
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo:  context.repo.repo,
-              issue_number: Number(process.env.ISSUE),
-              body: `ack ✅ ${process.env.BODY}`
+              issue_number: Number("${{ steps.gate.outputs.issue }}"),
+              body: `ack ✅ ${{ toJson(steps.gate.outputs.body) }}`
             });
 
       # 3) /ak [cmd] [mode] 파싱
@@ -59,12 +72,14 @@ jobs:
       # 4) PowerShell 실행 (ak-scan.ps1 등)
       - name: run
         if: ${{ steps.gate.outputs.isAK == '1' }}
+        id: runstep
         shell: pwsh
         env:
           CMD:  ${{ steps.parse.outputs.cmd }}
           MODE: ${{ steps.parse.outputs.mode }}
         run: |
           Set-StrictMode -Version Latest; $ErrorActionPreference='Stop'
+
           $map=@{
             scan     = 'ak-scan.ps1'
             rewrite  = 'ak-rewrite.ps1'
@@ -73,22 +88,26 @@ jobs:
             dispatch = 'ak-dispatch.ps1'
           }
           if(-not $map.ContainsKey($env:CMD)){
-            "Unknown command: $env:CMD" | Tee-Object .ak-out.txt -Append; exit 10
+            "Unknown command: $env:CMD" | Tee-Object .ak-out.txt -Append
+            exit 10
           }
+
           $want=$map[$env:CMD]
 
-          # scripts/g5 → scripts → 루트 → 마지막 전체검색
+          # scripts/g5 → scripts → 루트 → (없으면) 전체 검색
           $cand=@(
             Join-Path 'scripts/g5' $want,
             Join-Path 'scripts'    $want,
             $want
           ) | Where-Object { Test-Path $_ }
+
           if(-not $cand){
-            $found = Get-ChildItem -Recurse -File -Filter $want | Select-Object -First 1 -Expand FullName
+            $found = Get-ChildItem -Recurse -File -Filter $want -ErrorAction SilentlyContinue | Select-Object -First 1 -Expand FullName
             if($found){ $cand=@($found) }
           }
           if(-not $cand){
-            "Script not found: $want" | Tee-Object .ak-out.txt -Append; exit 11
+            "Script not found: $want" | Tee-Object .ak-out.txt -Append
+            exit 11
           }
 
           $script = $cand[0]
@@ -97,4 +116,39 @@ jobs:
 
           ">> Running $script $args" | Tee-Object .ak-out.txt -Append
           try {
-            & pwsh -NoProfile -ExecutionPolicy Bypass -File $script @args 2>&1 | Tee-Object .ak-out
+            & pwsh -NoProfile -ExecutionPolicy Bypass -File $script @args 2>&1 | Tee-Object .ak-out.txt -Append
+            $code = $LASTEXITCODE
+          } catch {
+            $_ | Out-String | Tee-Object .ak-out.txt -Append
+            $code = 1
+          }
+
+          "exit_code=$code" | Out-File $env:GITHUB_OUTPUT -Append
+          if($code -ne 0){ throw "AK exec failed with exit code $code" }
+
+      # 5) 로그 아티팩트
+      - name: upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ak7-logs
+          path: |
+            .ak-out.txt
+            logs/**/*.log
+          if-no-files-found: ignore
+
+      # 6) tail 댓글 (성공/실패 모두)
+      - name: tail
+        if: always() && steps.gate.outputs.issue != ''
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ github.token }}
+        script: |
+          const fs = require('fs');
+          let tail='(no .ak-out.txt)';
+          try { tail = fs.readFileSync('.ak-out.txt','utf8').split('\n').slice(-120).join('\n'); } catch {}
+          await github.rest.issues.createComment({
+            owner: context.repo.owner, repo: context.repo.repo,
+            issue_number: Number("${{ steps.gate.outputs.issue }}"),
+            body: `✅ exec done (z10)\n\n\`\`\`\n${tail}\n\`\`\``
+          });
