@@ -25,7 +25,7 @@ jobs:
           Set-StrictMode -Version Latest; $ErrorActionPreference='Stop'
           $parts = "${{ github.event.comment.body }}".Trim().Split(' ',[System.StringSplitOptions]::RemoveEmptyEntries)
           $cmd   = if ($parts.Length -ge 2) { $parts[1] } else { 'scan' }
-          $mode  = if ($parts.Length -ge 3) { $parts[2] } else { 'preview' }  # 안전상 preview 기본
+          $mode  = if ($parts.Length -ge 3) { $parts[2] } else { 'preview' }
           "cmd=$cmd"  | Out-File $env:GITHUB_OUTPUT -Append
           "mode=$mode"| Out-File $env:GITHUB_OUTPUT -Append
 
@@ -64,7 +64,7 @@ jobs:
       - name: Reply with tail
         uses: actions/github-script@v7
         with:
-          github-token: ${{ github.token }}   # App 토큰 없이 기본 토큰으로 댓글
+          github-token: ${{ github.token }}
           script: |
             const fs = require('fs');
             const tail = fs.readFileSync('.ak-out.txt','utf8').split('\n').slice(-80).join('\n');
@@ -74,4 +74,3 @@ jobs:
               issue_number: context.payload.issue.number,
               body: "✅ `/ak` done (" + "${{ steps.parse.outputs.cmd }}" + " " + "${{ steps.parse.outputs.mode }}" + ").\n\n```\n"+ tail +"\n```"
             });
-
