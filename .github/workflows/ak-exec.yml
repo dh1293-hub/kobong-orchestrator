@@ -1,12 +1,21 @@
 name: AK7 exec (windows + tail)
 
 on:
+  # 1) 댓글 이벤트: 이슈/PR 대화 + PR 줄댓글 모두
   issue_comment:               { types: [created, edited] }
   pull_request_review_comment: { types: [created, edited] }
+
+  # 2) 수동 테스트(유지)
   workflow_dispatch:
     inputs:
       issue_number: { description: "Issue/PR number", required: true }
       body:         { description: "Comment body to simulate", required: true }
+
+  # 3) 재사용 워크플로(ak-run에서 직접 호출용, 이벤트 불안정 대비)
+  workflow_call:
+    inputs:
+      issue_number: { type: number, required: true }
+      body:         { type: string, required: true }
 
 permissions:
   contents: read
@@ -18,16 +27,17 @@ jobs:
   exec:
     runs-on: windows-latest
     steps:
-      # 항상 Summary에 기록(뜸/안뜸 진단용)
       - name: exec gate summary
         uses: actions/github-script@v7
         with:
           github-token: ${{ github.token }}
           script: |
             const ev = context.eventName;
-            const body = ev==='workflow_dispatch'
-              ? core.getInput('body',{required:false})
-              : (context.payload.comment?.body ?? '');
+            const inp = (n, req=false) => core.getInput(n, {required:req});
+            let body;
+            if      (ev === 'workflow_dispatch') body = inp('body');
+            else if (ev === 'workflow_call')     body = inp('body');
+            else                                  body = context.payload.comment?.body ?? '';
             core.summary.addHeading('exec gate');
             core.summary.addTable([
               [{data:'event',header:true},{data:ev}],
@@ -44,19 +54,31 @@ jobs:
           github-token: ${{ github.token }}
           script: |
             const ev = context.eventName;
-            const body = ev==='workflow_dispatch'
-              ? core.getInput('body',{required:true})
-              : (context.payload.comment?.body ?? '');
-            const re = /(^|[\s`>])\/ak(\b|[\s`])/i;  // 여유 매칭
+            const inp = (n, req=false, t) => core.getInput(n, {required:req});
+            // 본문
+            const body =
+              ev === 'workflow_dispatch' ? inp('body', true) :
+              ev === 'workflow_call'     ? inp('body', true) :
+              (context.payload.comment?.body ?? '');
+            // 느슨한 /ak 매칭
+            const re = /(^|[\s`>])\/ak(\b|[\s`])/i;
             const isAK = re.test(body);
-            let issue = ev==='workflow_dispatch'
-              ? Number(core.getInput('issue_number',{required:true}))
-              : (context.payload.issue?.number
-                 ?? context.payload.pull_request?.number
-                 ?? (()=>{ const u=context.payload.comment?.pull_request_url||''; const m=u.match(/\/pulls\/(\d+)/); return m?Number(m[1]):undefined; })());
-            core.setOutput('isAK', isAK ? '1':'0');
+
+            // 타깃 이슈/PR 번호
+            let issue =
+              ev === 'workflow_dispatch' ? Number(inp('issue_number', true)) :
+              ev === 'workflow_call'     ? Number(inp('issue_number', true)) :
+              (context.payload.issue?.number
+               ?? context.payload.pull_request?.number
+               ?? (() => {
+                    const u = context.payload.comment?.pull_request_url || '';
+                    const m = u.match(/\/pulls\/(\d+)(?:$|[/?#])/);
+                    return m ? Number(m[1]) : undefined;
+                  })());
+
+            core.setOutput('isAK', isAK ? '1' : '0');
             core.setOutput('issue', issue ?? '');
-            core.setOutput('body', body);
+            core.setOutput('body',  body);
 
       - name: Parse command
         if: ${{ steps.gate.outputs.isAK == '1' }}
@@ -116,3 +138,4 @@ jobs:
       - name: Not /ak (skip)
         if: ${{ steps.gate.outputs.isAK != '1' }}
         run: echo "not /ak — skip exec"
+
