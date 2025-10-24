@@ -9,82 +9,80 @@ permissions:
   issues: write
   pull-requests: write
 
+concurrency:
+  group: ak-exec-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+env:
+  SCRIPTS_DIR: scripts\g5
+
 jobs:
   exec:
+    # /ak 로 시작하는 댓글에만 반응
     if: startsWith(github.event.comment.body, '/ak ')
     runs-on: windows-latest
 
     steps:
-      - name: Gate
+      - name: Parse command & gate
         id: gate
-        shell: pwsh
-        run: |
-          $body='${{ github.event.comment.body }}'.Trim()
-          $parts=$body.Split(' ')
-          $cmd = if ($parts.Length -ge 2) { $parts[1].ToLower() } else { 'scan' }
-          $isPR = [int]([bool]${{ github.event.issue.pull_request != null }})
-          echo "body=$body" >> $env:GITHUB_OUTPUT
-          echo "cmd=$cmd"   >> $env:GITHUB_OUTPUT
-          echo "isPR=$isPR" >> $env:GITHUB_OUTPUT
-
-      - name: Ack
         uses: actions/github-script@v7
         with:
           script: |
-            const body = `${{ steps.gate.outputs.body }}`;
-            const isPR = `${{ steps.gate.outputs.isPR }}` === '1';
-            // 1) 코맨드 인식 확인
-            await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
-              body: `ack ✅ "${body}" (exec stable)`
-            });
-            // 2) PR이 아니면 안내 후 종료(실행은 스킵)
-            if (!isPR) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
-                body: 'ℹ️ **/ak** 실제 실행은 PR 대화에서만 수행합니다. 현재는 Issue라 git/스크립트 실행을 스킵했어요.'
-              });
-              return;
-            }
+            const body = context.payload.comment.body.trim()
+            const m = body.match(/^\/ak\s+(\w+)/i)
+            const cmd = (m && m[1]) ? m[1].toLowerCase() : 'scan'
+            const isPR = !!context.payload.issue.pull_request
+            core.setOutput('cmd', cmd)
+            core.setOutput('isPR', isPR ? '1' : '0')
 
-      - name: Checkout (PR only)
+      # PR이 아니면 실행 자체를 스킵 (성공으로 종료)
+      - name: Not a PR, skip
+        if: steps.gate.outputs.isPR != '1'
+        run: echo "skip"
+
+      - name: Checkout PR head
         if: steps.gate.outputs.isPR == '1'
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.issue.pull_request.head.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Resolve candidate
-        id: cand
-        shell: pwsh
-        run: |
-          $map = @{
-            'scan'     = 'scripts\g5\ak-scan.ps1'
-            'fix'      = 'scripts\g5\ak-fixloop.ps1'
-            'test'     = 'scripts\g5\ak-test.ps1'
-            'rewrite'  = 'scripts\g5\ak-rewrite.ps1'
-            'dispatch' = 'scripts\g5\ak-dispatch.ps1'
-          }
-          $cmd='${{ steps.gate.outputs.cmd }}'
-          $target = $map[$cmd]
-          if (-not $target) { $target = 'scripts\g5\ak-scan.ps1' }
-          echo "path=$target" >> $env:GITHUB_OUTPUT
-          Write-Host "Candidate(s): $target"
-
-      - name: Exec (PR only)
+      - name: Avoid git safe dir warning (best-effort)
         if: steps.gate.outputs.isPR == '1'
         shell: pwsh
         run: |
-          Write-Host "Running ${{ steps.cand.outputs.path }}"
-          & "$env:GITHUB_WORKSPACE\${{ steps.cand.outputs.path }}"
-        env:
-          GIT_TERMINAL_PROMPT: '0'
+          git config --global --add safe.directory "$Env:GITHUB_WORKSPACE" || echo "safe.dir warn"
 
-      - name: Exec done (tail)
-        if: always()
+      - name: Run AK script
+        if: steps.gate.outputs.isPR == '1'
+        id: run
+        shell: pwsh
+        run: |
+          $cmd = '${{ steps.gate.outputs.cmd }}'
+          $map = @{
+            "scan"     = "ak-scan.ps1"
+            "fix"      = "ak-fixloop.ps1"
+            "test"     = "ak-test.ps1"
+            "rewrite"  = "ak-rewrite.ps1"
+            "dispatch" = "ak-dispatch.ps1"
+          }
+          if (-not $map.ContainsKey($cmd)) { $cmd = 'scan' }
+          $file = Join-Path "${{ env.SCRIPTS_DIR }}" $map[$cmd]
+          if (-not (Test-Path $file)) { throw "AK script not found: $file" }
+
+          Write-Host "Candidate(s): $file"
+          Write-Host "Running $file"
+          & $file
+
+      - name: exec done
+        if: steps.gate.outputs.isPR == '1'
         uses: actions/github-script@v7
         with:
           script: |
             await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
-              body: '✅ exec done'
-            })
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: "✅ exec done"
+            });
