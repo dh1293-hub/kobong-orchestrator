@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  gates:
+    gates:
     name: Pre-release gates (optional AK scan/test)
     runs-on: windows-latest
     steps:
@@ -36,30 +36,40 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Prepare + run AK gates (neutralize all non-zero exits)
+      - name: Prime repo for git
+        env:
+          GIT_DIR: ${{ github.workspace }}/.git
+          GIT_WORK_TREE: ${{ github.workspace }}
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Continue'
+          $ErrorActionPreference='Stop'
+          git --version
           git config --global --add safe.directory "$Env:GITHUB_WORKSPACE"
-          git fetch --tags --force 2>$null
-          if (-not (git tag --list)) { git tag -a v0.0.0 -m "ci-dummy" }
-
-          function Run-Soft($p) {
-            if (Test-Path $p) {
-              Write-Host "==> $p"
-              & pwsh -NoProfile -File $p -WhatIf
-              if ($LASTEXITCODE -ne 0) {
-                Write-Warning "$p exit $LASTEXITCODE (soft-ignored)"
-                $global:LASTEXITCODE = 0
-              }
-            } else {
-              Write-Host "skip: $p (not found)"
-            }
+          git -C "$Env:GITHUB_WORKSPACE" fetch --tags --force
+          if (-not (git -C "$Env:GITHUB_WORKSPACE" tag --list)) {
+            git -C "$Env:GITHUB_WORKSPACE" tag -a v0.0.0 -m "ci-dummy"
           }
+          git -C "$Env:GITHUB_WORKSPACE" describe --tags --always
 
-          Run-Soft 'scripts/g5/ak-scan.ps1'
-          Run-Soft 'scripts/g5/ak-test.ps1'
-          exit 0
+      - name: Run pre-release AK gates
+        env:
+          GIT_DIR: ${{ github.workspace }}/.git
+          GIT_WORK_TREE: ${{ github.workspace }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Set-Location "$Env:GITHUB_WORKSPACE"
+
+          if (Test-Path 'scripts/g5/ak-scan.ps1') {
+            & pwsh -NoProfile -File 'scripts/g5/ak-scan.ps1' -WhatIf
+            if ($LASTEXITCODE -ne 0) { throw "ak-scan failed with $LASTEXITCODE" }
+          } else { Write-Host "skip: scripts/g5/ak-scan.ps1" }
+
+          if (Test-Path 'scripts/g5/ak-test.ps1') {
+            & pwsh -NoProfile -File 'scripts/g5/ak-test.ps1' -WhatIf
+            if ($LASTEXITCODE -ne 0) { throw "ak-test failed with $LASTEXITCODE" }
+          } else { Write-Host "skip: scripts/g5/ak-test.ps1" }
+
 
   release:
     name: Create tag and publish release (API only)
@@ -118,7 +128,7 @@ jobs:
           body: ${{ inputs.notes }}
           generate_release_notes: true
 
-  canary:
+   canary:
     name: Post-release canary
     needs: release
     if: ${{ inputs.canary == 'true' }}
@@ -129,26 +139,24 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Run canary test (neutralize all non-zero exits)
+      - name: Run canary test
+        env:
+          GIT_DIR: ${{ github.workspace }}/.git
+          GIT_WORK_TREE: ${{ github.workspace }}
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Continue'
+          $ErrorActionPreference='Stop'
+          Set-Location "$Env:GITHUB_WORKSPACE"
           git config --global --add safe.directory "$Env:GITHUB_WORKSPACE"
-          git fetch --tags --force 2>$null
-          if (-not (git tag --list)) { git tag -a v0.0.0 -m "ci-dummy" }
+          git -C "$Env:GITHUB_WORKSPACE" fetch --tags --force
 
           $p = 'scripts/g5/ak-test.ps1'
           if (Test-Path $p) {
             & pwsh -NoProfile -File $p 2>&1 | Tee-Object -FilePath .ak-canary.txt
-            if ($LASTEXITCODE -ne 0) {
-              Write-Warning "$p exit $LASTEXITCODE (soft-ignored)"
-              $global:LASTEXITCODE = 0
-            }
+            if ($LASTEXITCODE -ne 0) { throw "canary failed with $LASTEXITCODE" }
           } else {
             "Skip canary: $p not found" | Tee-Object -FilePath .ak-canary.txt
           }
-          exit 0
-
       - name: Upload canary logs
         if: always()
         uses: actions/upload-artifact@v4
