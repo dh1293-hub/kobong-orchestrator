@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-    gates:
+  gates:
     name: Pre-release gates (optional AK scan/test)
     runs-on: windows-latest
     steps:
@@ -40,31 +40,33 @@ jobs:
         shell: pwsh
         run: |
           $gitPath = (Get-Command git -CommandType Application).Source
-          function Invoke-Git { param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+          function Invoke-Git {
+            param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
             & $gitPath @Args
             $code = $LASTEXITCODE
             if ($code -eq 128) {
-              Write-Warning "git exited with 128 (neutralized) : git $($Args -join ' ')"
+              Write-Warning ("git exited with 128 (neutralized): git " + ($Args -join ' '))
               $global:LASTEXITCODE = 0
             }
           }
           Set-Alias -Name git -Value Invoke-Git -Scope Global
-          git --version | Out-Host
+          git --version
 
-      - name: Prepare git context (full tags; safe dir; dummy if none)
+      - name: Prepare git metadata
         shell: pwsh
         run: |
-          $ErrorActionPreference='Continue'
+          $ErrorActionPreference = 'Continue'
           git config --global --add safe.directory "$Env:GITHUB_WORKSPACE"
           git config --global user.email  "41898282+github-actions[bot]@users.noreply.github.com"
           git config --global user.name   "github-actions[bot]"
           git fetch --tags --force
           if (-not (git tag --list)) { git tag -a v0.0.0 -m "ci-dummy" }
+          git describe --tags --always
 
       - name: Run pre-release AK gates
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop'
+          $ErrorActionPreference = 'Stop'
           function Try-Run($p){
             if (Test-Path $p) {
               Write-Host "==> $p"
@@ -115,7 +117,9 @@ jobs:
             if (await tagExists(ver)) {
               if (!auto) { core.setFailed(`tag already exists: ${ver}`); return; }
               const m = ver.match(/^v(\d+)\.(\d+)\.(\d+)$/);
-              let maj = parseInt(m[1], 10), min = parseInt(m[2], 10), pat = parseInt(m[3], 10);
+              let maj = parseInt(m[1], 10);
+              let min = parseInt(m[2], 10);
+              let pat = parseInt(m[3], 10);
               while (true) {
                 pat = pat + 1;
                 const cand = `v${maj}.${min}.${pat}`;
@@ -137,7 +141,7 @@ jobs:
           body: ${{ inputs.notes }}
           generate_release_notes: true
 
-    canary:
+  canary:
     name: Post-release canary
     needs: release
     if: ${{ inputs.canary == 'true' }}
@@ -152,31 +156,33 @@ jobs:
         shell: pwsh
         run: |
           $gitPath = (Get-Command git -CommandType Application).Source
-          function Invoke-Git { param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+          function Invoke-Git {
+            param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
             & $gitPath @Args
             $code = $LASTEXITCODE
             if ($code -eq 128) {
-              Write-Warning "git exited with 128 (neutralized) : git $($Args -join ' ')"
+              Write-Warning ("git exited with 128 (neutralized): git " + ($Args -join ' '))
               $global:LASTEXITCODE = 0
             }
           }
           Set-Alias -Name git -Value Invoke-Git -Scope Global
-          git --version | Out-Host
+          git --version
 
-      - name: Prepare git context (full tags; safe dir; dummy if none)
+      - name: Prepare git metadata
         shell: pwsh
         run: |
-          $ErrorActionPreference='Continue'
+          $ErrorActionPreference = 'Continue'
           git config --global --add safe.directory "$Env:GITHUB_WORKSPACE"
           git config --global user.email  "41898282+github-actions[bot]@users.noreply.github.com"
           git config --global user.name   "github-actions[bot]"
           git fetch --tags --force
           if (-not (git tag --list)) { git tag -a v0.0.0 -m "ci-dummy" }
+          git describe --tags --always
 
       - name: Run ak-test.ps1 if present
         shell: pwsh
         run: |
-          $ErrorActionPreference='Continue'
+          $ErrorActionPreference = 'Continue'
           $p = 'scripts/g5/ak-test.ps1'
           if (Test-Path $p) {
             & pwsh -NoProfile -File $p 2>&1 | Tee-Object -FilePath .ak-canary.txt
