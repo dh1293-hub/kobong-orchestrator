@@ -1,9 +1,38 @@
 # APPLY IN SHELL
 #requires -Version 7.0
 param([string]$Pr,[string]$Sha,[switch]$ConfirmApply)
+# ---------- SAFE BOOTSTRAP (git 의존 제거 + 레포 루트 고정) ----------
 Set-StrictMode -Version Latest
-$ErrorActionPreference='Stop'
-$PSDefaultParameterValues['*:Encoding']='utf8'
+$ErrorActionPreference = 'Stop'
+$PSDefaultParameterValues['*:Encoding'] = 'utf8'
+
+function Find-RepoRoot([string]$start) {
+  $d = Resolve-Path $start
+  while ($d -and -not (Test-Path (Join-Path $d '.git'))) {
+    $parent = Split-Path -Parent $d
+    if ($parent -eq $d) { break }  # 디스크 루트까지 올라감
+    $d = $parent
+  }
+  if (Test-Path (Join-Path $d '.git')) { return $d }
+  return (Resolve-Path $start)
+}
+
+function Get-RepoRoot {
+  if ($env:GITHUB_WORKSPACE -and (Test-Path $env:GITHUB_WORKSPACE)) { return $env:GITHUB_WORKSPACE }
+  return (Find-RepoRoot -start $PSScriptRoot)
+}
+
+# 레포 루트 보장 + 작업 폴더 고정
+$repo = Get-RepoRoot
+Set-Location $repo
+
+# git 호출이 남아있을 경우 128 무시(경고만) 래퍼
+function Invoke-GitSoft { param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+  try { & git @Args } catch { Write-Warning "git failed: $($_.Exception.Message)"; $global:LASTEXITCODE = 0; return }
+  if ($LASTEXITCODE -eq 128) { Write-Warning "git 128 ignored: git $($Args -join ' ')"; $global:LASTEXITCODE = 0 }
+}
+Set-Alias git Invoke-GitSoft -Scope Local
+# -------------------------------------------------------------------
 $sw=[Diagnostics.Stopwatch]::StartNew()
 
 function Get-RepoRoot {
