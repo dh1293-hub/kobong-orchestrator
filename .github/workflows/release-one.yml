@@ -1,63 +1,38 @@
-name: Release One-Click
-
-on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'vX.Y.Z (e.g. v1.0.0)'
-        required: true
-      notes:
-        description: 'Release notes (optional)'
-        required: false
-        default: ''
-      auto_bump:
-        description: 'If tag exists, bump patch automatically'
-        required: false
-        default: 'false'
-      canary:
-        description: 'Run canary smoke after release'
-        required: false
-        default: 'false'
-
-permissions:
-  contents: write
-
-concurrency:
-  group: release-one-click
-  cancel-in-progress: false
+# (상단 on/permissions/concurrency는 그대로 유지)
 
 jobs:
-  gates:
-    name: Pre-release gates (ak-scan / ak-test DRYRUN)
+  gates:                               # ⬅ 추가
+    name: Pre-release gates (optional AK scan/test)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run ak-scan.ps1 if present
+      - name: Run pre-release AK gates
         shell: pwsh
         run: |
-          $ErrorActionPreference='Continue'
-          $p = 'scripts/g5/ak-scan.ps1'
-          if (Test-Path $p) { & pwsh -NoProfile -File $p -WhatIf 2>&1 | Tee-Object .ak-gates.txt }
-          else { "skip: $p not found" | Tee-Object .ak-gates.txt }
-      - name: Run ak-test.ps1 if present
-        shell: pwsh
-        run: |
-          $ErrorActionPreference='Continue'
-          $p = 'scripts/g5/ak-test.ps1'
-          if (Test-Path $p) { & pwsh -NoProfile -File $p -WhatIf 2>&1 | Tee-Object -Append .ak-gates.txt }
-          else { "skip: $p not found" | Tee-Object -Append .ak-gates.txt }
+          $ErrorActionPreference='Stop'
+          function Try-Run($p){
+            if (Test-Path $p) {
+              Write-Host "==> $p"
+              & pwsh -NoProfile -File $p -WhatIf
+              if ($LASTEXITCODE -ne 0) { throw "gate failed: $p ($LASTEXITCODE)" }
+            } else {
+              Write-Host "skip: $p (not found)"
+            }
+          }
+          Try-Run 'scripts/g5/ak-scan.ps1'
+          Try-Run 'scripts/g5/ak-test.ps1'
       - name: Upload gate logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: release-gates-logs
-          path: .ak-gates.txt
+          name: pre-gates
+          path: ./*.log
           if-no-files-found: ignore
 
   release:
     name: Create tag & publish release (API-only)
-    needs: gates
     runs-on: ubuntu-latest
+    needs: gates                    # ⬅ 이 한 줄만 추가
     outputs:
       version: ${{ steps.validate.outputs.version }}
     steps:
@@ -74,21 +49,20 @@ jobs:
             const auto = (process.env.AUTO_BUMP || '').toLowerCase() === 'true';
             if (!ver) { core.setFailed('version input missing'); return; }
             if (!/^v\d+\.\d+\.\d+$/.test(ver)) { core.setFailed(`bad version: ${ver}`); return; }
-            async function tagExists(tag) {
-              try {
-                await github.rest.git.getRef({ owner: context.repo.owner, repo: context.repo.repo, ref: `tags/${tag}` });
-                return true;
-              } catch (e) { if (e.status === 404) return false; throw e; }
+            async function tagExists(tag){
+              try{ await github.rest.git.getRef({owner:context.repo.owner,repo:context.repo.repo,ref:`tags/${tag}`}); return true; }
+              catch(e){ if(e.status===404) return false; throw e; }
             }
             if (await tagExists(ver)) {
               if (!auto) { core.setFailed(`tag already exists: ${ver}`); return; }
               const m = ver.match(/^v(\d+)\.(\d+)\.(\d+)$/);
-              let [maj,min,pat] = [parseInt(m[1]),parseInt(m[2]),parseInt(m[3])];
-              while (true) { pat++; const cand=`v${maj}.${min}.${pat}`; if (!(await tagExists(cand))) { ver=cand; break; } }
+              let [maj,min,pat]=[+m[1],+m[2],+m[3]];
+              while (await tagExists(`v${maj}.${min}.${++pat}`)) {}
+              ver = `v${maj}.${min}.${pat}`;
               core.notice(`auto-bump -> ${ver}`);
             }
             core.exportVariable('VERSION', ver);
-            core.setOutput('version', ver)
+            core.setOutput('version', ver);
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -106,13 +80,13 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run ak-test.ps1 (best-effort)
+      - name: Run ak-test.ps1 if present
         shell: pwsh
         run: |
           $ErrorActionPreference='Continue'
           $p = 'scripts/g5/ak-test.ps1'
           if (Test-Path $p) { & pwsh -NoProfile -File $p 2>&1 | Tee-Object .ak-canary.txt }
-          else { "skip: $p not found" | Tee-Object .ak-canary.txt }
+          else { "Skip canary: $p not found" | Tee-Object .ak-canary.txt }
       - name: Upload canary logs
         if: always()
         uses: actions/upload-artifact@v4
