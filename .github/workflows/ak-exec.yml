@@ -1,10 +1,10 @@
-name: AK7 exec (clean)
+name: AK7 exec (stable)
 
 on:
   issue_comment:
     types: [created, edited]          # PR 대화 댓글도 여기에 들어옴
   pull_request_review_comment:
-    types: [created, edited]          # (줄댓글까지 커버, 없으면 무시됨)
+    types: [created, edited]          # 줄댓글
 
 permissions:
   contents: read
@@ -16,23 +16,21 @@ jobs:
   exec:
     runs-on: windows-latest
     timeout-minutes: 30
-
     steps:
       - uses: actions/checkout@v4
 
-      # 1) 게이트 (/ak 인지 + 이슈/PR 번호 식별)
+      # 1) 게이트: /ak 인지 + 대상 번호
       - id: gate
         shell: pwsh
         env:
-          EV_BODY: ${{ github.event.comment.body }}
+          EV_BODY:  ${{ github.event.comment.body }}
           EV_ISSUE: ${{ github.event.issue.number }}
           EV_PRNUM: ${{ github.event.pull_request.number }}
         run: |
           $body  = @"
           $env:EV_BODY
           "@.Trim()
-          $issue = $env:EV_ISSUE
-          if (-not $issue) { $issue = $env:EV_PRNUM }
+          $issue = $env:EV_ISSUE; if (-not $issue) { $issue = $env:EV_PRNUM }
           $isAK  = if ($body -match '(?is)(^|[\s`>])/ak(\b|[\s`])') { '1' } else { '0' }
 
           "isAK=$isAK"   | Out-File $env:GITHUB_OUTPUT -Append
@@ -40,8 +38,8 @@ jobs:
           "body=$body"   | Out-File $env:GITHUB_OUTPUT -Append
           New-Item -ItemType File -Force .ak-out.txt | Out-Null
 
-      # 2) ACK (안전한 문자열 처리: env로 주고 JS에서 그대로 출력)
-      - name: ACK
+      # 2) ACK
+      - name: ack
         if: ${{ steps.gate.outputs.isAK == '1' && steps.gate.outputs.issue != '' }}
         uses: actions/github-script@v7
         env:
@@ -51,13 +49,12 @@ jobs:
           github-token: ${{ github.token }}
           script: |
             await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo:  context.repo.repo,
+              owner: context.repo.owner, repo: context.repo.repo,
               issue_number: Number(process.env.AK_ISSUE),
-              body: `ack ✅ "${process.env.AK_BODY}" (exec clean)`
+              body: `ack ✅ "${process.env.AK_BODY}" (exec stable)`
             });
 
-      # 3) PR 컨텍스트 감지(이슈면 isPR=0)
+      # 3) PR 탐지(이슈면 isPR=0)
       - name: detect PR
         id: pr
         uses: actions/github-script@v7
@@ -69,21 +66,17 @@ jobs:
             let isPR='0', headRepo='', headRef='', headSha='';
             try {
               const {data} = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo:  context.repo.repo,
+                owner: context.repo.owner, repo: context.repo.repo,
                 pull_number: Number(process.env.AK_ISSUE)
               });
-              isPR='1';
-              headRepo = data.head.repo.full_name;
-              headRef  = data.head.ref;
-              headSha  = data.head.sha;
+              isPR='1'; headRepo=data.head.repo.full_name; headRef=data.head.ref; headSha=data.head.sha;
             } catch {}
             core.setOutput('isPR', isPR);
             core.setOutput('headRepo', headRepo);
             core.setOutput('headRef',  headRef);
             core.setOutput('headSha',  headSha);
 
-      # 4) /ak [cmd] [mode] 파싱
+      # 4) 커맨드 파싱
       - name: parse
         if: ${{ steps.gate.outputs.isAK == '1' }}
         id: parse
@@ -95,7 +88,7 @@ jobs:
           "cmd=$($p[1] ?? 'scan')"     | Out-File $env:GITHUB_OUTPUT -Append
           "mode=$($p[2] ?? 'preview')" | Out-File $env:GITHUB_OUTPUT -Append
 
-      # 5) 이슈면 안내만(실행 스킵)
+      # 5) 이슈면 안내만
       - name: not PR notice
         if: ${{ steps.gate.outputs.isAK == '1' && steps.pr.outputs.isPR != '1' && steps.gate.outputs.issue != '' }}
         uses: actions/github-script@v7
@@ -107,10 +100,10 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: Number(process.env.AK_ISSUE),
-              body: "ℹ️ `/ak` 실행은 **PR 대화**에서 동작합니다. 현재는 Issue라 git 작업을 스킵했어요."
+              body: "ℹ️ `/ak` 실행은 PR 대화에서만 동작합니다. 현재는 Issue라 git 실행을 스킵했어요."
             });
 
-      # 6) 실제 실행(오직 PR에서만). 실패해도 다음 스텝 진행.
+      # 6) 실제 실행 (PR만)
       - name: run (PR only)
         if: ${{ steps.gate.outputs.isAK == '1' && steps.pr.outputs.isPR == '1' }}
         id: runstep
@@ -128,11 +121,15 @@ jobs:
           git config --global user.name  "github-actions[bot]"
 
           $map=@{ scan='ak-scan.ps1'; rewrite='ak-rewrite.ps1'; fix='ak-fixloop.ps1'; test='ak-test.ps1'; dispatch='ak-dispatch.ps1' }
-          if(-not $map.ContainsKey($env:CMD)){ "Unknown cmd: $env:CMD" | Tee-Object .ak-out.txt -Append; "exit_code=10" | Out-File $env:GITHUB_OUTPUT -Append; exit 10 }
+          if(-not $map.ContainsKey($env:CMD)){
+            "Unknown cmd: $env:CMD" | Tee-Object .ak-out.txt -Append
+            "exit_code=10"          | Out-File $env:GITHUB_OUTPUT -Append
+            exit 10
+          }
 
-          $want=$map[$env:CMD]
-          
-        # 항상 "배열"로 보관해서 문자열 슬라이싱/한 글자 실행(s) 사고 방지
+          $want = $map[$env:CMD]
+
+          # 후보 경로를 '반드시 배열'로 보관 (문자열 인덱싱 방지)
           $candidates = @(
             (Join-Path 'scripts/g5' $want)
             (Join-Path 'scripts'    $want)
@@ -152,20 +149,18 @@ jobs:
           }
 
           $script = $candidates | Select-Object -First 1
-          "Candidate(s): $($candidates -join ', ')" | Tee-Object .ak-out.txt -Append
-          ">> Running $script $args"                | Tee-Object .ak-out.txt -Append
-          
           $supportsMode = try { (Get-Command $script -ErrorAction Stop).Parameters.ContainsKey('Mode') } catch { $false }
-          $args=@(); if($supportsMode){ $args += @('-Mode',$env:MODE) }
+          $args = @(); if($supportsMode){ $args += @('-Mode',$env:MODE) }
 
           ">> PR head: $env:AK_HEAD_REPO@$env:AK_HEAD_REF ($env:AK_HEAD_SHA)" | Tee-Object .ak-out.txt -Append
-          ">> Running $script $args" | Tee-Object .ak-out.txt -Append
+          "Candidate(s): $($candidates -join ', ')"                            | Tee-Object .ak-out.txt -Append
+          ">> Running $script $args"                                           | Tee-Object .ak-out.txt -Append
 
           try { & pwsh -NoProfile -ExecutionPolicy Bypass -File $script @args 2>&1 | Tee-Object .ak-out.txt -Append; $code=$LASTEXITCODE }
           catch { $_ | Out-String | Tee-Object .ak-out.txt -Append; $code=1 }
           "exit_code=$code" | Out-File $env:GITHUB_OUTPUT -Append
 
-      # 7) 아티팩트 + tail (항상)
+      # 7) 로그/꼬리 (항상)
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -184,8 +179,7 @@ jobs:
           github-token: ${{ github.token }}
           script: |
             const fs = require('fs');
-            let tail='(no .ak-out.txt)';
-            try { tail = fs.readFileSync('.ak-out.txt','utf8').split('\n').slice(-120).join('\n'); } catch {}
+            let tail='(no .ak-out.txt)'; try { tail = fs.readFileSync('.ak-out.txt','utf8').split('\n').slice(-120).join('\n'); } catch {}
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: Number(process.env.AK_ISSUE),
