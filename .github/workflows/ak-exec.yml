@@ -2,208 +2,89 @@ name: AK7 exec (stable)
 
 on:
   issue_comment:
-    types: [created, edited]          # PR 대화 댓글
-  pull_request_review_comment:
-    types: [created, edited]          # 줄댓글
+    types: [created]
 
 permissions:
   contents: read
   issues: write
   pull-requests: write
-  checks: write
 
 jobs:
   exec:
+    if: startsWith(github.event.comment.body, '/ak ')
     runs-on: windows-latest
-    timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
-
-      # 1) 게이트: /ak 인지 + 대상 번호 + 원문
-      - id: gate
+      - name: Gate
+        id: gate
         shell: pwsh
-        env:
-          EV_BODY:  ${{ github.event.comment.body }}
-          EV_ISSUE: ${{ github.event.issue.number }}
-          EV_PRNUM: ${{ github.event.pull_request.number }}
         run: |
-          $body  = @"
-          $env:EV_BODY
-          "@.Trim()
-          $issue = $env:EV_ISSUE; if (-not $issue) { $issue = $env:EV_PRNUM }
-          $isAK  = if ($body -match '(?is)(^|[\s`>])/ak(\b|[\s`])') { '1' } else { '0' }
+          $body='${{ github.event.comment.body }}'.Trim()
+          $parts=$body.Split(' ')
+          $cmd = if ($parts.Length -ge 2) { $parts[1].ToLower() } else { 'scan' }
+          $isPR = [int]([bool]${{ github.event.issue.pull_request != null }})
+          echo "body=$body" >> $env:GITHUB_OUTPUT
+          echo "cmd=$cmd"   >> $env:GITHUB_OUTPUT
+          echo "isPR=$isPR" >> $env:GITHUB_OUTPUT
 
-          "isAK=$isAK"   | Out-File $env:GITHUB_OUTPUT -Append
-          "issue=$issue" | Out-File $env:GITHUB_OUTPUT -Append
-          "body=$body"   | Out-File $env:GITHUB_OUTPUT -Append
-
-          New-Item -ItemType File -Force .ak-out.txt | Out-Null
-
-      # 2) ACK (exec 라인)
-      - name: ack
-        if: ${{ steps.gate.outputs.isAK == '1' && steps.gate.outputs.issue != '' }}
+      - name: Ack
         uses: actions/github-script@v7
-        env:
-          AK_ISSUE: ${{ steps.gate.outputs.issue }}
-          AK_BODY:  ${{ steps.gate.outputs.body }}
         with:
-          github-token: ${{ github.token }}
           script: |
+            const body = `${{ steps.gate.outputs.body }}`;
+            const isPR = `${{ steps.gate.outputs.isPR }}` === '1';
+            // 1) 코맨드 인식 확인
             await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: Number(process.env.AK_ISSUE),
-              body: `ack ✅ "${process.env.AK_BODY}" (exec stable)`
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+              body: `ack ✅ "${body}" (exec stable)`
             });
-
-      # 3) PR 탐지 (Issue면 isPR=0)
-      - name: detect PR
-        id: pr
-        uses: actions/github-script@v7
-        env:
-          AK_ISSUE: ${{ steps.gate.outputs.issue }}
-        with:
-          github-token: ${{ github.token }}
-          script: |
-            let isPR='0', headRepo='', headRef='', headSha='';
-            try {
-              const {data} = await github.rest.pulls.get({
-                owner: context.repo.owner, repo: context.repo.repo,
-                pull_number: Number(process.env.AK_ISSUE)
+            // 2) PR이 아니면 안내 후 종료(실행은 스킵)
+            if (!isPR) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+                body: 'ℹ️ **/ak** 실제 실행은 PR 대화에서만 수행합니다. 현재는 Issue라 git/스크립트 실행을 스킵했어요.'
               });
-              isPR='1'; headRepo=data.head.repo.full_name; headRef=data.head.ref; headSha=data.head.sha;
-            } catch {}
-            core.setOutput('isPR', isPR);
-            core.setOutput('headRepo', headRepo);
-            core.setOutput('headRef',  headRef);
-            core.setOutput('headSha',  headSha);
+              return;
+            }
 
-      # 4) 커맨드 파싱 (/ak scan preview 형태)
-      - name: parse
-        if: ${{ steps.gate.outputs.isAK == '1' }}
-        id: parse
-        shell: pwsh
-        env:
-          AK_BODY: ${{ steps.gate.outputs.body }}
-        run: |
-          $p = $env:AK_BODY.Trim().Split(' ',[System.StringSplitOptions]::RemoveEmptyEntries)
-          "cmd=$($p[1] ?? 'scan')"     | Out-File $env:GITHUB_OUTPUT -Append
-          "mode=$($p[2] ?? 'preview')" | Out-File $env:GITHUB_OUTPUT -Append
-
-      # 5) Issue면 안내만 남기고 스킵
-      - name: not PR notice
-        if: ${{ steps.gate.outputs.isAK == '1' && steps.pr.outputs.isPR != '1' && steps.gate.outputs.issue != '' }}
-        uses: actions/github-script@v7
-        env:
-          AK_ISSUE: ${{ steps.gate.outputs.issue }}
+      - name: Checkout (PR only)
+        if: steps.gate.outputs.isPR == '1'
+        uses: actions/checkout@v4
         with:
-          github-token: ${{ github.token }}
-          script: |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: Number(process.env.AK_ISSUE),
-              body: "ℹ️ `/ak` 실행은 PR 대화에서만 동작합니다. 현재는 Issue라 git 실행을 스킵했어요."
-            });
+          fetch-depth: 0
 
-      # 6) 실제 실행 (PR에서만)
-      - name: run (PR only)
-        if: ${{ steps.gate.outputs.isAK == '1' && steps.pr.outputs.isPR == '1' }}
-        id: runstep
+      - name: Resolve candidate
+        id: cand
         shell: pwsh
-        continue-on-error: true
-        env:
-          CMD:          ${{ steps.parse.outputs.cmd }}
-          MODE:         ${{ steps.parse.outputs.mode }}
-          AK_HEAD_REPO: ${{ steps.pr.outputs.headRepo }}
-          AK_HEAD_REF:  ${{ steps.pr.outputs.headRef }}
-          AK_HEAD_SHA:  ${{ steps.pr.outputs.headSha }}
         run: |
-          Set-StrictMode -Version Latest; $ErrorActionPreference='Stop'
-
-          # git 경고(128) 방지: 레포 안일 때는 설정 생략
-          $inside = (& git rev-parse --is-inside-work-tree 2>$null); if ($LASTEXITCODE -ne 0) { $inside = $false }
-          if ($inside -eq $true) {
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
-            git config --global user.name  "github-actions[bot]"
+          $map = @{
+            'scan'     = 'scripts\g5\ak-scan.ps1'
+            'fix'      = 'scripts\g5\ak-fixloop.ps1'
+            'test'     = 'scripts\g5\ak-test.ps1'
+            'rewrite'  = 'scripts\g5\ak-rewrite.ps1'
+            'dispatch' = 'scripts\g5\ak-dispatch.ps1'
           }
+          $cmd='${{ steps.gate.outputs.cmd }}'
+          $target = $map[$cmd]
+          if (-not $target) { $target = 'scripts\g5\ak-scan.ps1' }
+          echo "path=$target" >> $env:GITHUB_OUTPUT
+          Write-Host "Candidate(s): $target"
 
-          # 명령 매핑
-          $map=@{
-            scan     = 'ak-scan.ps1'
-            rewrite  = 'ak-rewrite.ps1'
-            fix      = 'ak-fixloop.ps1'
-            test     = 'ak-test.ps1'
-            dispatch = 'ak-dispatch.ps1'
-          }
-          if(-not $map.ContainsKey($env:CMD)){
-            "Unknown cmd: $env:CMD" | Tee-Object .ak-out.txt -Append
-            "exit_code=10"          | Out-File $env:GITHUB_OUTPUT -Append
-            exit 10
-          }
+      - name: Exec (PR only)
+        if: steps.gate.outputs.isPR == '1'
+        shell: pwsh
+        run: |
+          Write-Host "Running ${{ steps.cand.outputs.path }}"
+          & "$env:GITHUB_WORKSPACE\${{ steps.cand.outputs.path }}"
+        env:
+          GIT_TERMINAL_PROMPT: '0'
 
-          $want = $map[$env:CMD]
-
-          # 후보 경로를 반드시 "배열"로 유지(문자열 인덱싱 사고 방지)
-          $candidates = @(
-            (Join-Path 'scripts/g5' $want)
-            (Join-Path 'scripts'    $want)
-            $want
-          ) | Where-Object { Test-Path $_ }
-
-          if (-not $candidates) {
-            $found = Get-ChildItem -Recurse -File -Filter $want -ErrorAction SilentlyContinue |
-                     Select-Object -First 1 -Expand FullName
-            if ($found) { $candidates = @($found) }
-          }
-
-          if (-not $candidates) {
-            "Script not found: $want" | Tee-Object .ak-out.txt -Append
-            "exit_code=11"            | Out-File $env:GITHUB_OUTPUT -Append
-            exit 11
-          }
-
-          $script = $candidates | Select-Object -First 1
-
-          $supportsMode = try { (Get-Command $script -ErrorAction Stop).Parameters.ContainsKey('Mode') } catch { $false }
-          $args = @(); if($supportsMode){ $args += @('-Mode',$env:MODE) }
-
-          ">> PR head: $env:AK_HEAD_REPO@$env:AK_HEAD_REF ($env:AK_HEAD_SHA)" | Tee-Object .ak-out.txt -Append
-          "Candidate(s): $($candidates -join ', ')"                            | Tee-Object .ak-out.txt -Append
-          ">> Running $script $args"                                           | Tee-Object .ak-out.txt -Append
-
-          try {
-            & pwsh -NoProfile -ExecutionPolicy Bypass -File $script @args 2>&1 |
-              Tee-Object .ak-out.txt -Append
-            $code = $LASTEXITCODE
-          } catch {
-            $_ | Out-String | Tee-Object .ak-out.txt -Append
-            $code = 1
-          }
-          "exit_code=$code" | Out-File $env:GITHUB_OUTPUT -Append
-
-      # 7) 로그/아티팩트/꼬리
-      - uses: actions/upload-artifact@v4
+      - name: Exec done (tail)
         if: always()
-        with:
-          name: ak7-logs
-          path: |
-            .ak-out.txt
-            logs/**/*.log
-          if-no-files-found: ignore
-
-      - name: tail
-        if: always() && steps.gate.outputs.issue != ''
         uses: actions/github-script@v7
-        env:
-          AK_ISSUE: ${{ steps.gate.outputs.issue }}
         with:
-          github-token: ${{ github.token }}
           script: |
-            const fs = require('fs');
-            let tail='(no .ak-out.txt)';
-            try { tail = fs.readFileSync('.ak-out.txt','utf8').split('\n').slice(-120).join('\n'); } catch {}
             await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: Number(process.env.AK_ISSUE),
-              body: `✅ exec done\n\n\`\`\`\n${tail}\n\`\`\``
-            });
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number,
+              body: '✅ exec done'
+            })
