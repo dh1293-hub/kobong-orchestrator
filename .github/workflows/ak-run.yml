@@ -1,84 +1,127 @@
 name: AK7 run (/ak only, robust)
 
 on:
+  # CHANGED: created만 사용해 중복 실행 완화
   issue_comment:
-    types: [created, edited]        # 이슈/PR 대화 댓글
+    types: [created]
   pull_request_review_comment:
-    types: [created, edited]        # PR "Files changed" 줄댓글
-  workflow_dispatch:
-    inputs:
-      issue_number:
-        description: "Issue/PR number"
-        required: true
-      body:
-        description: "Comment body to simulate"
-        required: true
+    types: [created]
 
+# CHANGED: 댓글을 쓰지 않으므로 최소 권한
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
   checks: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   ak:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
+    timeout-minutes: 10
+
     steps:
-      - name: Compute target + detect /ak
-        id: gate
+      - uses: actions/checkout@v4
+
+      # 게이트: /ak 인지 + 원문/대상 번호
+      - id: gate
+        shell: pwsh
+        env:
+          EV_BODY:  ${{ github.event.comment.body }}
+          EV_ISSUE: ${{ github.event.issue.number }}
+          EV_PRNUM: ${{ github.event.pull_request.number }}
+        run: |
+          $body  = @"
+          $env:EV_BODY
+          "@.Trim()
+          $issue = $env:EV_ISSUE; if (-not $issue) { $issue = $env:EV_PRNUM }
+          $isAK  = if ($body -match '(?is)(^|[\s`>])/ak(\b|[\s`])') { '1' } else { '0' }
+
+          "isAK=$isAK"   | Out-File $env:GITHUB_OUTPUT -Append
+          "issue=$issue" | Out-File $env:GITHUB_OUTPUT -Append
+          "body=$body"   | Out-File $env:GITHUB_OUTPUT -Append
+
+      # PR 여부/헤드 정보
+      - name: detect PR
+        id: pr
         uses: actions/github-script@v7
+        env:
+          AK_ISSUE: ${{ steps.gate.outputs.issue }}
         with:
           github-token: ${{ github.token }}
           script: |
-            const ev  = context.eventName;
-            const body = (ev === 'workflow_dispatch')
-              ? core.getInput('body', {required: true})
-              : (context.payload.comment?.body ?? '');
-            // 허용: 앞에 공백/백틱/인용문(>)가 있어도 매칭, 대소문자 무시
-            const re = /(^|[\s`>])\/ak(\b|[\s`])/i;
-            const isAK = re.test(body);
-            // 타깃 번호: 이슈/PR/줄댓글 모두 커버
-            let issue = (ev === 'workflow_dispatch')
-              ? Number(core.getInput('issue_number', {required: true}))
-              : (context.payload.issue?.number
-                  ?? context.payload.pull_request?.number
-                  ?? (() => {
-                       const u = context.payload.comment?.pull_request_url || '';
-                       const m = u.match(/\/pulls\/(\d+)(?:$|[/?#])/);
-                       return m ? Number(m[1]) : undefined;
-                     })());
+            let isPR='0', headRepo='', headRef='', headSha='';
+            try {
+              const {data} = await github.rest.pulls.get({
+                owner: context.repo.owner, repo: context.repo.repo,
+                pull_number: Number(process.env.AK_ISSUE)
+              });
+              isPR='1'; headRepo=data.head.repo.full_name; headRef=data.head.ref; headSha=data.head.sha;
+            } catch {}
+            core.setOutput('isPR', isPR);
+            core.setOutput('headRepo', headRepo);
+            core.setOutput('headRef',  headRef);
+            core.setOutput('headSha',  headSha);
 
-            core.setOutput('body', body);
-            core.setOutput('isAK', isAK ? '1' : '0');
-            core.setOutput('issue', issue ?? '');
+      # 요약 카드 (댓글 아님)
+      - name: summary
+        shell: pwsh
+        env:
+          ISAK:   ${{ steps.gate.outputs.isAK }}
+          ISSUE:  ${{ steps.gate.outputs.issue }}
+          BODY:   ${{ steps.gate.outputs.body }}
+          ISPR:   ${{ steps.pr.outputs.isPR }}
+          HREPO:  ${{ steps.pr.outputs.headRepo }}
+          HREF:   ${{ steps.pr.outputs.headRef }}
+          HSHA:   ${{ steps.pr.outputs.headSha }}
+        run: |
+          $lines = @()
+          $lines += "# gate"
+          $lines += ""
+          $lines += "| key   | value |"
+          $lines += "|-------|-------|"
+          $lines += "| event | issue_comment |"
+          $lines += "| isAK  | $env:ISAK |"
+          $lines += "| issue | $env:ISSUE |"
+          $lines += "| body  | `$env:BODY` |"
+          $lines += ""
+          $lines += "## pr"
+          $lines += ""
+          $lines += "| key   | value |"
+          $lines += "|-------|-------|"
+          $lines += "| isPR  | $env:ISPR |"
+          $lines += "| head  | $env:HREPO@$env:HREF ($env:HSHA) |"
+          $lines -join "`n" | Out-File -Encoding utf8 $env:GITHUB_STEP_SUMMARY
 
-            core.summary.addHeading('gate');
-            core.summary.addTable([
-              [{data:'event',header:true},{data:ev}],
-              [{data:'isAK',header:true},{data:String(isAK)}],
-              [{data:'issue',header:true},{data:String(issue)}],
-              [{data:'body',header:true},{data:body.slice(0,200)}],
-            ]);
-            await core.summary.write();
+      # 경량 아티팩트 유지(xp-summary 등 활용 가능)
+      - name: write xp-summary
+        shell: pwsh
+        env:
+          ISAK:   ${{ steps.gate.outputs.isAK }}
+          ISSUE:  ${{ steps.gate.outputs.issue }}
+          BODY:   ${{ steps.gate.outputs.body }}
+          ISPR:   ${{ steps.pr.outputs.isPR }}
+          HREPO:  ${{ steps.pr.outputs.headRepo }}
+          HREF:   ${{ steps.pr.outputs.headRef }}
+          HSHA:   ${{ steps.pr.outputs.headSha }}
+        run: |
+          $obj = [ordered]@{
+            workflow = "ak-run"
+            event    = "issue_comment"
+            isAK     = $env:ISAK
+            issue    = $env:ISSUE
+            body     = $env:BODY
+            pr       = [ordered]@{
+              isPR   = $env:ISPR
+              head   = "$env:HREPO@$env:HREF"
+              sha    = $env:HSHA
+            }
+          }
+          ($obj | ConvertTo-Json -Depth 5) | Out-File -Encoding utf8 xp-summary.json
 
-      - name: ACK comment (only when /ak)
-        if: ${{ steps.gate.outputs.isAK == '1' && steps.gate.outputs.issue != '' }}
-        uses: actions/github-script@v7
+      - uses: actions/upload-artifact@v4
         with:
-          github-token: ${{ github.token }}
-          script: |
-            const issue = Number('${{ steps.gate.outputs.issue }}');
-            const body  = `${{ toJson(steps.gate.outputs.body) }}`.trim();
-            await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: issue,
-              body: `ack ✅ ${body}`
-            });
-
-      - name: Skip note (when not /ak)
-        if: ${{ steps.gate.outputs.isAK != '1' }}
-        run: echo "not /ak — no op"
-
-      # 실제 실행은 Windows 러너에서 (여기선 트리거/회신만 책임)
-      - name: Done
-        run: echo "gate+ack complete"
+          name: xp-summary
+          path: xp-summary.json
+          if-no-files-found: error
