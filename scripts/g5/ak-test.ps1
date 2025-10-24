@@ -1,5 +1,19 @@
 # APPLY IN SHELL
 #requires -Version 7.0
+
+# --- GIT SAFE CONTEXT (put this at TOP of ak-*.ps1) ---
+$ErrorActionPreference = 'Continue'
+try { if (-not $env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE = (git rev-parse --show-toplevel) 2>$null } } catch {}
+if (-not $env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE = Split-Path -Parent $PSScriptRoot }
+if (Test-Path $env:GITHUB_WORKSPACE) { Set-Location $env:GITHUB_WORKSPACE }
+git config --global --add safe.directory "$env:GITHUB_WORKSPACE" 2>$null
+$gitExe = (Get-Command git -Type Application).Source
+function global:git { param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+  & $gitExe @Args
+  if ($LASTEXITCODE -eq 128) { Write-Warning "git 128 ignored: git $($Args -join ' ')"; $global:LASTEXITCODE = 0 }
+}
+# -------------------------------------------------------
+
 param([string]$Pr,[string]$Sha,[switch]$ConfirmApply)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
