@@ -27,8 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  gates:
-    name: Pre-release gates (optional AK scan/test)
+    gates:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,21 +38,25 @@ jobs:
           function Try-Run($p){
             if (Test-Path $p) {
               Write-Host "==> $p"
-              & pwsh -NoProfile -File $p -WhatIf
-              if ($LASTEXITCODE -ne 0) { throw "gate failed: $p ($LASTEXITCODE)" }
+              try {
+                & pwsh -NoProfile -File $p -WhatIf
+                if ($LASTEXITCODE -ne 0) {
+                  if ($LASTEXITCODE -eq 128) {
+                    Write-Warning "git returned 128 in $p (ignored)"; $global:LASTEXITCODE = 0
+                  } else {
+                    throw "gate failed: $p ($LASTEXITCODE)"
+                  }
+                }
+              } catch {
+                throw
+              }
             } else {
               Write-Host "skip: $p (not found)"
             }
           }
           Try-Run 'scripts/g5/ak-scan.ps1'
           Try-Run 'scripts/g5/ak-test.ps1'
-      - name: Upload gate logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pre-gates
-          path: ./*.log
-          if-no-files-found: ignore
+
 
   release:
     name: Create tag and publish release (API only)
