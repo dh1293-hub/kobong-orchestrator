@@ -6,77 +6,75 @@ on:
 
 permissions:
   contents: read
-  issues: write
   pull-requests: write
-
-concurrency:
-  group: ak-exec-${{ github.event.issue.number }}
-  cancel-in-progress: true
-
-env:
-  SCRIPTS_DIR: scripts\g5
 
 jobs:
   exec:
-    # /ak 로 시작하는 댓글에만 반응
-    if: startsWith(github.event.comment.body, '/ak ')
+    # PR 대화 + /ak 로 시작하는 댓글만 실행
+    if: >
+      github.event.issue.pull_request &&
+      github.event.comment.user.login != 'github-actions' &&
+      startsWith(github.event.comment.body, '/ak')
     runs-on: windows-latest
 
     steps:
-      - name: Parse command & gate
-        id: gate
+      - name: Resolve PR head
+        id: pr
         uses: actions/github-script@v7
         with:
           script: |
-            const body = context.payload.comment.body.trim()
-            const m = body.match(/^\/ak\s+(\w+)/i)
-            const cmd = (m && m[1]) ? m[1].toLowerCase() : 'scan'
-            const isPR = !!context.payload.issue.pull_request
-            core.setOutput('cmd', cmd)
-            core.setOutput('isPR', isPR ? '1' : '0')
-
-      # PR이 아니면 실행 자체를 스킵 (성공으로 종료)
-      - name: Not a PR, skip
-        if: steps.gate.outputs.isPR != '1'
-        run: echo "skip"
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.issue.number
+            });
+            core.setOutput('headSha', pr.data.head.sha);
+            core.setOutput('headLabel', pr.data.head.label);
 
       - name: Checkout PR head
-        if: steps.gate.outputs.isPR == '1'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.issue.pull_request.head.sha }}
-          fetch-depth: 0
+          ref: ${{ steps.pr.outputs.headSha }}
+          fetch-depth: 1
+          submodules: false
           persist-credentials: false
 
-      - name: Avoid git safe dir warning (best-effort)
-        if: steps.gate.outputs.isPR == '1'
+      - name: Exec loader (PowerShell)
+        id: exec
         shell: pwsh
+        continue-on-error: true   # git 경고를 실패로 보지 않음
         run: |
-          git config --global --add safe.directory "$Env:GITHUB_WORKSPACE" || echo "safe.dir warn"
+          $body = '${{ github.event.comment.body }}'.Trim()
+          # 명령어 추출: "/ak scan" -> "scan"
+          $cmd = ($body -replace '^/ak\s*', '').Trim().Split(' ')[0]
+          if ([string]::IsNullOrWhiteSpace($cmd)) { $cmd = 'scan' }
 
-      - name: Run AK script
-        if: steps.gate.outputs.isPR == '1'
-        id: run
-        shell: pwsh
-        run: |
-          $cmd = '${{ steps.gate.outputs.cmd }}'
-          $map = @{
-            "scan"     = "ak-scan.ps1"
-            "fix"      = "ak-fixloop.ps1"
-            "test"     = "ak-test.ps1"
-            "rewrite"  = "ak-rewrite.ps1"
-            "dispatch" = "ak-dispatch.ps1"
+          $candidates = @(
+            "scripts\g5\ak-$cmd.ps1",
+            "scripts\g5\ak-scan.ps1"   # 폴백
+          )
+          $found = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          $prHead = "${{ steps.pr.outputs.headLabel }} (${{ steps.pr.outputs.headSha }})"
+          $msg = @()
+          $msg += ">> PR head: $prHead"
+          $msg += ">> Candidate(s): " + ($candidates -join ', ')
+          if ($found) {
+            $msg += ">> Running $found"
+            Write-Host ($msg -join "`n")
+            try {
+              & $found
+            } catch {
+              Write-Host "script error: $($_.Exception.Message)"
+              exit 1
+            }
+          } else {
+            $msg += ">> No script found. Nothing to do."
+            Write-Host ($msg -join "`n")
           }
-          if (-not $map.ContainsKey($cmd)) { $cmd = 'scan' }
-          $file = Join-Path "${{ env.SCRIPTS_DIR }}" $map[$cmd]
-          if (-not (Test-Path $file)) { throw "AK script not found: $file" }
 
-          Write-Host "Candidate(s): $file"
-          Write-Host "Running $file"
-          & $file
-
-      - name: exec done
-        if: steps.gate.outputs.isPR == '1'
+      - name: Comment - exec done
+        if: always()
         uses: actions/github-script@v7
         with:
           script: |
@@ -85,4 +83,4 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.payload.issue.number,
               body: "✅ exec done"
-            });
+            })
