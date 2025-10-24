@@ -1,7 +1,33 @@
-# (상단 on/permissions/concurrency는 그대로 유지)
+name: Release One-Click
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'vX.Y.Z (e.g. v1.0.0)'
+        required: true
+      notes:
+        description: 'Release notes (optional)'
+        required: false
+        default: ''
+      auto_bump:
+        description: 'If tag exists, bump patch automatically'
+        required: false
+        default: 'false'
+      canary:
+        description: 'Run canary smoke after release'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-one-click
+  cancel-in-progress: false
 
 jobs:
-  gates:                               # ⬅ 추가
+  gates:
     name: Pre-release gates (optional AK scan/test)
     runs-on: windows-latest
     steps:
@@ -30,17 +56,17 @@ jobs:
           if-no-files-found: ignore
 
   release:
-    name: Create tag & publish release (API-only)
+    name: Create tag and publish release (API only)
     runs-on: ubuntu-latest
-    needs: gates                    # ⬅ 이 한 줄만 추가
+    needs: gates
     outputs:
       version: ${{ steps.validate.outputs.version }}
     steps:
-      - name: Validate version & uniqueness (API)
+      - name: Validate version and uniqueness (API)
         id: validate
         uses: actions/github-script@v7
         env:
-          VERSION:   ${{ inputs.version }}
+          VERSION: ${{ inputs.version }}
           AUTO_BUMP: ${{ inputs.auto_bump }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -49,28 +75,41 @@ jobs:
             const auto = (process.env.AUTO_BUMP || '').toLowerCase() === 'true';
             if (!ver) { core.setFailed('version input missing'); return; }
             if (!/^v\d+\.\d+\.\d+$/.test(ver)) { core.setFailed(`bad version: ${ver}`); return; }
-            async function tagExists(tag){
-              try{ await github.rest.git.getRef({owner:context.repo.owner,repo:context.repo.repo,ref:`tags/${tag}`}); return true; }
-              catch(e){ if(e.status===404) return false; throw e; }
+
+            async function tagExists(tag) {
+              try {
+                await github.rest.git.getRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `tags/${tag}`
+                });
+                return true;
+              } catch (e) {
+                if (e.status === 404) return false;
+                throw e;
+              }
             }
+
             if (await tagExists(ver)) {
               if (!auto) { core.setFailed(`tag already exists: ${ver}`); return; }
               const m = ver.match(/^v(\d+)\.(\d+)\.(\d+)$/);
-              let [maj,min,pat]=[+m[1],+m[2],+m[3]];
-              while (await tagExists(`v${maj}.${min}.${++pat}`)) {}
-              ver = `v${maj}.${min}.${pat}`;
+              let maj = parseInt(m[1],10), min = parseInt(m[2],10), pat = parseInt(m[3],10);
+              while (await tagExists(`v${maj}.${min}.${pat+1}`)) { pat++; }
+              ver = `v${maj}.${min}.${pat+1}`;
               core.notice(`auto-bump -> ${ver}`);
             }
+
             core.exportVariable('VERSION', ver);
             core.setOutput('version', ver);
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
-        env: { GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name:         ${{ env.VERSION }}
+          tag_name: ${{ env.VERSION }}
           target_commitish: ${{ github.sha }}
-          body:             ${{ inputs.notes }}
+          body: ${{ inputs.notes }}
           generate_release_notes: true
 
   canary:
@@ -85,8 +124,11 @@ jobs:
         run: |
           $ErrorActionPreference='Continue'
           $p = 'scripts/g5/ak-test.ps1'
-          if (Test-Path $p) { & pwsh -NoProfile -File $p 2>&1 | Tee-Object .ak-canary.txt }
-          else { "Skip canary: $p not found" | Tee-Object .ak-canary.txt }
+          if (Test-Path $p) {
+            & pwsh -NoProfile -File $p 2>&1 | Tee-Object -FilePath .ak-canary.txt
+          } else {
+            "Skip canary: $p not found" | Tee-Object -FilePath .ak-canary.txt
+          }
       - name: Upload canary logs
         if: always()
         uses: actions/upload-artifact@v4
