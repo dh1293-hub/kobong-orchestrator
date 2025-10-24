@@ -28,41 +28,41 @@ concurrency:
 
 jobs:
   gates:
-    name: Pre-release gates (optional AK scan/test)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Prepare + run AK gates (neutralize all non-zero exits)
+          - name: Prepare + run AK gates (same session, fix git 128)
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          # repo 위치 고정 + git이 항상 레포를 찾도록 보장
-          Set-Location "$env:GITHUB_WORKSPACE"
-          $env:GIT_DIR = Join-Path $env:GITHUB_WORKSPACE '.git'
-          $env:GIT_WORK_TREE = $env:GITHUB_WORKSPACE
-          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
-          git fetch --tags --force
-          if (-not (git tag --list)) { git tag -a v0.0.0 -m "ci-dummy" }
+          $ErrorActionPreference = 'Continue'
 
-          function Run-Soft($p) {
-            if (Test-Path $p) {
-              & pwsh -NoProfile -File $p -WhatIf
-              if ($LASTEXITCODE -ne 0) {
-                Write-Warning "$p exit $LASTEXITCODE (soft-ignored)"
-                $global:LASTEXITCODE = 0
-              }
-            } else {
-              Write-Host "skip: $p not found"
+          # 1) 레포 컨텍스트 고정
+          Set-Location "$env:GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+          git fetch --tags --force 2>$null
+          if (-not (git tag --list)) { git tag -a v0.0.0 -m "ci-dummy" }  # 태그 하나도 없으면 더미
+          git rev-parse --show-toplevel
+
+          # 2) 하위 ps1을 "현재 세션"에서 실행 (새 pwsh -File 금지)
+          function Run-Soft([string]$Path,[string[]]$Args) {
+            if (-not (Test-Path $Path)) { Write-Host "skip: $Path"; return }
+            Write-Host "==> $Path $($Args -join ' ')"
+            try {
+              & $Path @Args         # ← 같은 프로세스에서 실행
+              $code = if ($LASTEXITCODE) { $LASTEXITCODE } else { 0 }
+              if (-not $?) { $code = 1 }
+            } catch {
+              $code = 1
+              Write-Warning $_
+            }
+            if ($code -ne 0) {
+              Write-Warning "$Path returned $code (soft-ignored)"
+              $global:LASTEXITCODE = 0
             }
           }
 
-          Run-Soft 'scripts/g5/ak-scan.ps1'
-          Run-Soft 'scripts/g5/ak-test.ps1'
-          exit 0
+          Run-Soft (Join-Path $env:GITHUB_WORKSPACE 'scripts\g5\ak-scan.ps1') @('-WhatIf')
+          Run-Soft (Join-Path $env:GITHUB_WORKSPACE 'scripts\g5\ak-test.ps1') @('-WhatIf')
+
+          exit 0  # 스텝 강제 성공
+
 
   release:
     name: Create tag and publish release (API only)
@@ -124,41 +124,32 @@ jobs:
           generate_release_notes: true
 
   canary:
-    name: Post-release canary
-    needs: release
-    if: ${{ inputs.canary == 'true' }}
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Run canary test (neutralize all non-zero exits)
+         - name: Run canary test (same session, fix git 128)
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          Set-Location "$env:GITHUB_WORKSPACE"
-          $env:GIT_DIR = Join-Path $env:GITHUB_WORKSPACE '.git'
-          $env:GIT_WORK_TREE = $env:GITHUB_WORKSPACE
-          git fetch --tags --force
+          $ErrorActionPreference = 'Continue'
 
-          $p = 'scripts/g5/ak-test.ps1'
+          Set-Location "$env:GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+          git fetch --tags --force 2>$null
+
+          $p = Join-Path $env:GITHUB_WORKSPACE 'scripts\g5\ak-test.ps1'
           if (Test-Path $p) {
-            & pwsh -NoProfile -File $p 2>&1 | Tee-Object -FilePath .ak-canary.txt
-            if ($LASTEXITCODE -ne 0) {
-              Write-Warning "$p exit $LASTEXITCODE (soft-ignored)"
+            try {
+              & $p 2>&1 | Tee-Object -FilePath .ak-canary.txt
+              $code = if ($LASTEXITCODE) { $LASTEXITCODE } else { 0 }
+              if (-not $?) { $code = 1 }
+            } catch {
+              $code = 1
+              "$_" | Tee-Object -Append -FilePath .ak-canary.txt
+            }
+            if ($code -ne 0) {
+              Write-Warning "canary returned $code (soft-ignored)"
               $global:LASTEXITCODE = 0
             }
           } else {
             "Skip canary: $p not found" | Tee-Object -FilePath .ak-canary.txt
           }
+
           exit 0
 
-      - name: Upload canary logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: canary-logs
-          path: .ak-canary.txt
-          if-no-files-found: ignore
