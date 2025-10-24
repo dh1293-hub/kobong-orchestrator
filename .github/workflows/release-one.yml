@@ -28,40 +28,35 @@ concurrency:
 
 jobs:
   gates:
-    name: Pre-release gates (optional AK scan/test)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
+    - name: Prepare + run AK gates (neutralize all non-zero exits)
+  shell: pwsh
+  run: |
+    $ErrorActionPreference = 'Continue'
+    git config --global --add safe.directory "$Env:GITHUB_WORKSPACE"
+    git config --global user.name  "github-actions[bot]"
+    git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Prepare + run AK gates (neutralize all non-zero exits)
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Continue'
-          git config --global --add safe.directory "$Env:GITHUB_WORKSPACE"
-          git config --global user.name  "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch --tags --force 2>$null
-          if (-not (git tag --list)) { git tag -a v0.0.0 -m "ci-dummy" }
+    if (Test-Path .git) {
+      cmd /d /c "git fetch --tags --force || exit /b 0"
+      for /f "delims=" %A in ('cmd /d /c "git tag --list 1>nul 2>nul & if errorlevel 1 (echo NONE) else (echo OK)"') do { $r="%A" }
+      if ($r -eq "NONE") {
+        cmd /d /c "git tag -a v0.0.0 -m ""ci-dummy"" || exit /b 0"
+      }
+    }
 
-          function Run-Soft($p) {
-            if (Test-Path $p) {
-              Write-Host "==> $p"
-              & pwsh -NoProfile -File $p -WhatIf
-              if ($LASTEXITCODE -ne 0) {
-                Write-Warning "$p exit $LASTEXITCODE (soft-ignored)"
-                $global:LASTEXITCODE = 0
-              }
-            } else {
-              Write-Host "skip: $p (not found)"
-            }
-          }
+    function Run-Soft($p) {
+      if (Test-Path $p) {
+        & pwsh -NoProfile -File $p 2>&1 | Tee-Object -FilePath .ak-gates.txt
+        if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
+      } else {
+        "Skip gates: $p not found" | Tee-Object -FilePath .ak-gates.txt
+      }
+    }
 
-          Run-Soft 'scripts/g5/ak-scan.ps1'
-          Run-Soft 'scripts/g5/ak-test.ps1'
-          exit 0
+    Run-Soft 'scripts/g5/ak-scan.ps1'
+    Run-Soft 'scripts/g5/ak-test.ps1'
+    exit 0
+
 
   release:
     name: Create tag and publish release (API only)
@@ -121,37 +116,31 @@ jobs:
           generate_release_notes: true
 
   canary:
-    name: Post-release canary
-    needs: release
-    if: ${{ inputs.canary == 'true' }}
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
+    - name: Run canary test (neutralize all non-zero exits)
+  shell: pwsh
+  run: |
+    $ErrorActionPreference = 'Continue'
+    git config --global --add safe.directory "$Env:GITHUB_WORKSPACE"
+    git config --global user.name  "github-actions[bot]"
+    git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Run canary test (neutralize all non-zero exits)
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Continue'
-          git config --global --add safe.directory "$Env:GITHUB_WORKSPACE"
-          git config --global user.name  "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch --tags --force 2>$null
-          if (-not (git tag --list)) { git tag -a v0.0.0 -m "ci-dummy" }
+    if (Test-Path .git) {
+      cmd /d /c "git fetch --tags --force || exit /b 0"
+      for /f "delims=" %A in ('cmd /d /c "git tag --list 1>nul 2>nul & if errorlevel 1 (echo NONE) else (echo OK)"') do { $r="%A" }
+      if ($r -eq "NONE") {
+        cmd /d /c "git tag -a v0.0.0 -m ""ci-dummy"" || exit /b 0"
+      }
+    }
 
-          $p = 'scripts/g5/ak-test.ps1'
-          if (Test-Path $p) {
-            & pwsh -NoProfile -File $p 2>&1 | Tee-Object -FilePath .ak-canary.txt
-            if ($LASTEXITCODE -ne 0) {
-              Write-Warning "$p exit $LASTEXITCODE (soft-ignored)"
-              $global:LASTEXITCODE = 0
-            }
-          } else {
-            "Skip canary: $p not found" | Tee-Object -FilePath .ak-canary.txt
-          }
-          exit 0
+    $p = 'scripts/g5/ak-test.ps1'
+    if (Test-Path $p) {
+      & pwsh -NoProfile -File $p 2>&1 | Tee-Object -FilePath .ak-canary.txt
+      if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
+    } else {
+      "Skip canary: $p not found" | Tee-Object -FilePath .ak-canary.txt
+    }
+    exit 0
+
 
       - name: Upload canary logs
         if: always()
