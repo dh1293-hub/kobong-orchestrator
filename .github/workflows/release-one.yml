@@ -1,4 +1,3 @@
-# .github/workflows/release-one.yml
 name: Release One-Click
 
 on:
@@ -35,16 +34,13 @@ jobs:
           fi
           echo "VERSION=$V" >> $GITHUB_ENV
 
-      - name: Create tag
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$VERSION" -m "$VERSION"
-          git push origin "$VERSION"
-
-      - name: Publish GitHub Release
+      # 🔽 태그 푸시 단계 삭제하고, 릴리즈가 태그를 자동 생성하도록 처리
+      - name: Publish GitHub Release (auto-create tag)
         uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ env.VERSION }}
-          body: ${{ inputs.notes }}
+          tag_name:        ${{ env.VERSION }}          # 존재하지 않으면 API가 태그를 생성
+          target_commitish: ${{ github.sha }}          # 어느 커밋에 태그를 박을지
+          body:            ${{ inputs.notes }}
           generate_release_notes: true
