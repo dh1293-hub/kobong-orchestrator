@@ -1,127 +1,90 @@
 name: AK7 run (/ak only, robust)
 
 on:
-  # CHANGED: created만 사용해 중복 실행 완화
   issue_comment:
     types: [created]
-  pull_request_review_comment:
-    types: [created]
 
-# CHANGED: 댓글을 쓰지 않으므로 최소 권한
 permissions:
   contents: read
-  checks: write
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.issue.number || github.run_id }}
-  cancel-in-progress: true
+  issues: write
+  pull-requests: write
 
 jobs:
   ak:
+    # /ak 로 시작하는 댓글만 반응
+    if: startsWith(github.event.comment.body, '/ak ')
     runs-on: windows-latest
-    timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v4
-
-      # 게이트: /ak 인지 + 원문/대상 번호
-      - id: gate
+      - name: Gate – detect context
+        id: gate
         shell: pwsh
-        env:
-          EV_BODY:  ${{ github.event.comment.body }}
-          EV_ISSUE: ${{ github.event.issue.number }}
-          EV_PRNUM: ${{ github.event.pull_request.number }}
         run: |
-          $body  = @"
-          $env:EV_BODY
-          "@.Trim()
-          $issue = $env:EV_ISSUE; if (-not $issue) { $issue = $env:EV_PRNUM }
-          $isAK  = if ($body -match '(?is)(^|[\s`>])/ak(\b|[\s`])') { '1' } else { '0' }
+          $body = '${{ github.event.comment.body }}'.Trim()
+          $isAK = $body.StartsWith('/ak ')
+          $isPR = [int]([bool]${{ github.event.issue.pull_request != null }})
+          echo "body=$body" >> $env:GITHUB_OUTPUT
+          echo "isAK=$([int]$isAK)" >> $env:GITHUB_OUTPUT
+          echo "isPR=$isPR" >> $env:GITHUB_OUTPUT
 
-          "isAK=$isAK"   | Out-File $env:GITHUB_OUTPUT -Append
-          "issue=$issue" | Out-File $env:GITHUB_OUTPUT -Append
-          "body=$body"   | Out-File $env:GITHUB_OUTPUT -Append
-
-      # PR 여부/헤드 정보
-      - name: detect PR
-        id: pr
+      - name: Ack
+        if: steps.gate.outputs.isAK == '1'
         uses: actions/github-script@v7
-        env:
-          AK_ISSUE: ${{ steps.gate.outputs.issue }}
         with:
-          github-token: ${{ github.token }}
           script: |
-            let isPR='0', headRepo='', headRef='', headSha='';
-            try {
-              const {data} = await github.rest.pulls.get({
-                owner: context.repo.owner, repo: context.repo.repo,
-                pull_number: Number(process.env.AK_ISSUE)
-              });
-              isPR='1'; headRepo=data.head.repo.full_name; headRef=data.head.ref; headSha=data.head.sha;
-            } catch {}
-            core.setOutput('isPR', isPR);
-            core.setOutput('headRepo', headRepo);
-            core.setOutput('headRef',  headRef);
-            core.setOutput('headSha',  headSha);
+            const body = `${{ steps.gate.outputs.body }}`;
+            const isPR = `${{ steps.gate.outputs.isPR }}` === '1';
+            let msg = `ack ✅ "${body}"`;
+            if (!isPR) msg += `\n\nℹ️ **/ak** 실행은 PR 대화에서만 동작합니다. 현재는 Issue라 git 실행을 스킵했어요.`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: msg
+            });
 
-      # 요약 카드 (댓글 아님)
-      - name: summary
-        shell: pwsh
-        env:
-          ISAK:   ${{ steps.gate.outputs.isAK }}
-          ISSUE:  ${{ steps.gate.outputs.issue }}
-          BODY:   ${{ steps.gate.outputs.body }}
-          ISPR:   ${{ steps.pr.outputs.isPR }}
-          HREPO:  ${{ steps.pr.outputs.headRepo }}
-          HREF:   ${{ steps.pr.outputs.headRef }}
-          HSHA:   ${{ steps.pr.outputs.headSha }}
-        run: |
-          $lines = @()
-          $lines += "# gate"
-          $lines += ""
-          $lines += "| key   | value |"
-          $lines += "|-------|-------|"
-          $lines += "| event | issue_comment |"
-          $lines += "| isAK  | $env:ISAK |"
-          $lines += "| issue | $env:ISSUE |"
-          $lines += "| body  | `$env:BODY` |"
-          $lines += ""
-          $lines += "## pr"
-          $lines += ""
-          $lines += "| key   | value |"
-          $lines += "|-------|-------|"
-          $lines += "| isPR  | $env:ISPR |"
-          $lines += "| head  | $env:HREPO@$env:HREF ($env:HSHA) |"
-          $lines -join "`n" | Out-File -Encoding utf8 $env:GITHUB_STEP_SUMMARY
+      # PR일 때만 체크아웃 (Issue에서는 git 관련 경고를 원천 차단)
+      - name: Checkout (PR only)
+        if: steps.gate.outputs.isPR == '1'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      # 경량 아티팩트 유지(xp-summary 등 활용 가능)
-      - name: write xp-summary
+      # 요약 생성 (PR이 아니면 git 조회를 건너뜀)
+      - name: Build summary
+        id: sum
+        if: always()
         shell: pwsh
-        env:
-          ISAK:   ${{ steps.gate.outputs.isAK }}
-          ISSUE:  ${{ steps.gate.outputs.issue }}
-          BODY:   ${{ steps.gate.outputs.body }}
-          ISPR:   ${{ steps.pr.outputs.isPR }}
-          HREPO:  ${{ steps.pr.outputs.headRepo }}
-          HREF:   ${{ steps.pr.outputs.headRef }}
-          HSHA:   ${{ steps.pr.outputs.headSha }}
         run: |
-          $obj = [ordered]@{
-            workflow = "ak-run"
-            event    = "issue_comment"
-            isAK     = $env:ISAK
-            issue    = $env:ISSUE
-            body     = $env:BODY
-            pr       = [ordered]@{
-              isPR   = $env:ISPR
-              head   = "$env:HREPO@$env:HREF"
-              sha    = $env:HSHA
-            }
+          $isPR = '${{ steps.gate.outputs.isPR }}'
+          $head = '@ 0'
+          if ($isPR -eq '1') {
+            try { $head = (git rev-parse --short=8 HEAD) } catch {}
           }
-          ($obj | ConvertTo-Json -Depth 5) | Out-File -Encoding utf8 xp-summary.json
+          $summary = @"
+          ## gate
+          | key   | value |
+          |-------|------:|
+          | event | issue_comment |
+          | isAK  | ${{ steps.gate.outputs.isAK }} |
+          | issue | ${{ github.event.issue.number }} |
+          | body  | ${{ steps.gate.outputs.body }} |
 
-      - uses: actions/upload-artifact@v4
+          ## pr
+          | key  | value |
+          |------|------:|
+          | isPR | ${{ steps.gate.outputs.isPR }} |
+          | head | $head |
+          "@
+          $p = Join-Path $env:RUNNER_TEMP 'xp-summary.md'
+          $summary | Set-Content -LiteralPath $p -Encoding UTF8
+          echo "file=$p" >> $env:GITHUB_OUTPUT
+        env:
+          GIT_TERMINAL_PROMPT: '0'
+
+      - name: Upload summary
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: xp-summary
-          path: xp-summary.json
-          if-no-files-found: error
+          path: ${{ steps.sum.outputs.file }}
