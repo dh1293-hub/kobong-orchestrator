@@ -18,29 +18,36 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # 1) 버전 형식+중복 확인 (GitHub API 사용)
+      - name: Validate version & uniqueness (API)
+        id: chk
+        uses: actions/github-script@v7
         with:
-          fetch-depth: 0
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const ver = core.getInput('version', { required: true });
+            if (!/^v\d+\.\d+\.\d+$/.test(ver)) {
+              core.setFailed(`bad version: ${ver}`);
+              return;
+            }
+            try {
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${ver}`,
+              });
+              core.setFailed(`tag already exists: ${ver}`);
+              return;
+            } catch (e) {
+              // 404면 태그 없음 → 통과
+              if (e.status !== 404) throw e;
+            }
 
-      - name: Validate version and uniqueness
-        run: |
-          set -e
-          V="${{ inputs.version }}"
-          if ! [[ "$V" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "bad version: $V"; exit 1
-          fi
-          if git rev-parse -q --verify "refs/tags/$V" >/dev/null; then
-            echo "tag already exists: $V"; exit 1
-          fi
-          echo "VERSION=$V" >> $GITHUB_ENV
-
-      # 🔽 태그 푸시 단계 삭제하고, 릴리즈가 태그를 자동 생성하도록 처리
+      # 2) 릴리즈 생성(태그 자동 생성)
       - name: Publish GitHub Release (auto-create tag)
         uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name:        ${{ env.VERSION }}          # 존재하지 않으면 API가 태그를 생성
-          target_commitish: ${{ github.sha }}          # 어느 커밋에 태그를 박을지
-          body:            ${{ inputs.notes }}
+          tag_name: ${{ inputs.version }}         # 없으면 자동 생성
+          target_commitish: ${{ github.sha }}     # 현재 커밋에 태그
+          body: ${{ inputs.notes }}
           generate_release_notes: true
