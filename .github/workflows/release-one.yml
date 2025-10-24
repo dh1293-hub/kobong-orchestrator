@@ -1,0 +1,146 @@
+name: Release • One-Click (tag + notes + gates + canary)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:   { description: 'vX.Y.Z (예: v1.2.3)', required: true }
+      notes:     { description: '릴리즈 노트(선택)', required: false, default: '' }
+      canary:    { description: '릴리즈 후 카나리 실행', required: true, default: 'true' }
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: release-${{ github.ref }}-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare & Validate
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.out.outputs.version }}
+      prev_tag: ${{ steps.out.outputs.prev_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Validate version format & duplication
+        id: out
+        run: |
+          set -e
+          V="${{ inputs.version }}"
+          [[ "$V" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bad version: $V"; exit 2; }
+          if git rev-parse -q --verify "refs/tags/$V" >/dev/null; then
+            echo "tag $V already exists"; exit 3;
+          fi
+          # 직전 태그(없으면 빈값)
+          PREV=$(git tag --sort=-creatordate | head -n1)
+          echo "version=$V"   >> $GITHUB_OUTPUT
+          echo "prev_tag=$PREV" >> $GITHUB_OUTPUT
+          echo "::notice::version=$V prev_tag=$PREV"
+
+  gates:
+    name: Release Gates (contracts + health-smoke)
+    needs: prepare
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Contracts quick check (sentinel/ports)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $rules = @(
+            @{ File='GitHub-Monitoring/webui/GitHub-Monitoring-Min.html';  Key='GHMON';  Sentinel='__G5_SENTINEL:GHMON';  Port='5182' },
+            @{ File='Orchestrator-Monitoring/webui/Orchestrator-Monitoring-Su.html'; Key='ORCHMON'; Sentinel='KOBO-SENTINEL:orchmon-api-base'; Port='5183' },
+            @{ File='AUTO-Kobong-Monitoring/webui/AUTO-Kobong-Monitoring.html';     Key='AK7';    Sentinel='KOBO-SENTINEL:ak7-api-base';     Port='5181' }
+          )
+          foreach($r in $rules){
+            if(!(Test-Path $r.File)){ throw "missing $($r.File)" }
+            $t = Get-Content $r.File -Raw
+            if(([regex]::Matches($t, [regex]::Escape($r.Sentinel))).Count -ne 1){ throw "sentinel $($r.Sentinel) count != 1" }
+          }
+          "contracts ok" | Out-Host
+      - name: Health smoke (scripts/g5)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $base = 'scripts/g5'
+          foreach($f in 'ak-scan.ps1','ak-test.ps1'){ if(!(Test-Path (Join-Path $base $f))){ throw "missing $base/$f" } }
+          pwsh -NoProfile -File (Join-Path $base 'ak-scan.ps1') 2>&1 | Tee-Object -FilePath .ak-out.txt
+          pwsh -NoProfile -File (Join-Path $base 'ak-test.ps1') 2>&1 | Tee-Object -Append   .ak-out.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-gates-logs
+          path: |
+            .ak-out.txt
+            logs/ak7.jsonl
+          if-no-files-found: ignore
+
+  make_tag:
+    name: Create Tag (vX.Y.Z)
+    needs: [prepare, gates]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Create & push tag
+        env: { V: ${{ needs.prepare.outputs.version }} }
+        run: |
+          set -e
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$V" -m "$V"
+          git push origin "$V"
+
+  release:
+    name: Publish GitHub Release
+    needs: [prepare, make_tag]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Compute default notes (diff since previous)
+        id: notes
+        env: { PREV: ${{ needs.prepare.outputs.prev_tag }} , V: ${{ needs.prepare.outputs.version }} }
+        run: |
+          if [ -n "$PREV" ]; then
+            echo "## Changes since $PREV"         >  BODY.md
+            git log --oneline "$PREV"..HEAD     >> BODY.md
+          else
+            echo "## Initial release"            >  BODY.md
+            git log --oneline -n 50            >> BODY.md
+          fi
+          echo "BODY<<EOF"           >> $GITHUB_OUTPUT
+          cat BODY.md                >> $GITHUB_OUTPUT
+          echo "EOF"                 >> $GITHUB_OUTPUT
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare.outputs.version }}
+          body: |
+            ${{ inputs.notes }}
+            ---
+            ${{ steps.notes.outputs.BODY }}
+          generate_release_notes: true
+
+  canary:
+    name: Post-Release Canary
+    if: ${{ inputs.canary == 'true' }}
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Canary smoke (ak-test)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          & pwsh -NoProfile -File scripts/g5/ak-test.ps1 2>&1 | Tee-Object -FilePath .ak-canary.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: canary-logs
+          path: .ak-canary.txt
+          if-no-files-found: ignore
