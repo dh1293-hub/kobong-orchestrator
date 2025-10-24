@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-    gates:
+  gates:
     name: Pre-release gates (optional AK scan/test)
     runs-on: windows-latest
     steps:
@@ -39,20 +39,17 @@ jobs:
       - name: Prepare + run AK gates (neutralize all non-zero exits)
         shell: pwsh
         run: |
-          # --- git 메타 확보(히스토리/태그) ---
           $ErrorActionPreference = 'Continue'
           git config --global --add safe.directory "$Env:GITHUB_WORKSPACE"
           git fetch --tags --force 2>$null
-          if (-not (git tag --list)) { git tag -a v0.0.0 -m "ci-dummy" }  # 태그 하나도 없을 때
+          if (-not (git tag --list)) { git tag -a v0.0.0 -m "ci-dummy" }
 
-          # --- 하위 스크립트 실행(종료코드 무조건 중화) ---
           function Run-Soft($p) {
             if (Test-Path $p) {
               Write-Host "==> $p"
               & pwsh -NoProfile -File $p -WhatIf
-              $code = $LASTEXITCODE
-              if ($code -ne 0) {
-                Write-Warning "$p returned exit $code (soft-ignored)"
+              if ($LASTEXITCODE -ne 0) {
+                Write-Warning "$p exit $LASTEXITCODE (soft-ignored)"
                 $global:LASTEXITCODE = 0
               }
             } else {
@@ -62,8 +59,7 @@ jobs:
 
           Run-Soft 'scripts/g5/ak-scan.ps1'
           Run-Soft 'scripts/g5/ak-test.ps1'
-
-          exit 0   # ← 스텝 강제 성공
+          exit 0
 
   release:
     name: Create tag and publish release (API only)
@@ -103,14 +99,9 @@ jobs:
             if (await tagExists(ver)) {
               if (!auto) { core.setFailed(`tag already exists: ${ver}`); return; }
               const m = ver.match(/^v(\d+)\.(\d+)\.(\d+)$/);
-              let maj = parseInt(m[1], 10);
-              let min = parseInt(m[2], 10);
-              let pat = parseInt(m[3], 10);
-              while (true) {
-                pat = pat + 1;
-                const cand = `v${maj}.${min}.${pat}`;
-                if (!(await tagExists(cand))) { ver = cand; break; }
-              }
+              let maj = parseInt(m[1],10), min = parseInt(m[2],10), pat = parseInt(m[3],10);
+              do { pat += 1; } while (await tagExists(`v${maj}.${min}.${pat}`));
+              ver = `v${maj}.${min}.${pat}`;
               core.notice(`auto-bump -> ${ver}`);
             }
 
@@ -127,7 +118,7 @@ jobs:
           body: ${{ inputs.notes }}
           generate_release_notes: true
 
-    canary:
+  canary:
     name: Post-release canary
     needs: release
     if: ${{ inputs.canary == 'true' }}
@@ -150,13 +141,12 @@ jobs:
           if (Test-Path $p) {
             & pwsh -NoProfile -File $p 2>&1 | Tee-Object -FilePath .ak-canary.txt
             if ($LASTEXITCODE -ne 0) {
-              Write-Warning "$p returned exit $LASTEXITCODE (soft-ignored)"
+              Write-Warning "$p exit $LASTEXITCODE (soft-ignored)"
               $global:LASTEXITCODE = 0
             }
           } else {
             "Skip canary: $p not found" | Tee-Object -FilePath .ak-canary.txt
           }
-
           exit 0
 
       - name: Upload canary logs
