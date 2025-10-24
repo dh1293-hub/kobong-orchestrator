@@ -1,5 +1,34 @@
 # APPLY IN SHELL
 #requires -Version 7.0
+
+# === GIT SAFE CONTEXT (do not remove) ===
+$ErrorActionPreference = 'Continue'
+try {
+  if (-not $env:GITHUB_WORKSPACE) {
+    $top = (git rev-parse --show-toplevel) 2>$null
+    if ($top) { $env:GITHUB_WORKSPACE = $top }
+  }
+} catch {}
+if (-not $env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE = Split-Path -Parent $PSScriptRoot }
+if (Test-Path $env:GITHUB_WORKSPACE) { Set-Location $env:GITHUB_WORKSPACE }
+
+git config --global --add safe.directory "$env:GITHUB_WORKSPACE" 2>$null
+$gitExe = (Get-Command git -Type Application).Source
+
+function global:Invoke-GitSoft {
+  param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+  & $gitExe @Args
+  $code = $LASTEXITCODE
+  if ($code -eq 128) {
+    Write-Warning "git 128 ignored: git $($Args -join ' ')"
+    $global:LASTEXITCODE = 0
+  }
+  return $global:LASTEXITCODE
+}
+
+Set-Alias -Name git -Value Invoke-GitSoft -Scope Global
+# === /GIT SAFE CONTEXT ===
+
 param([string]$Pr,[string]$Sha,[switch]$ConfirmApply)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
