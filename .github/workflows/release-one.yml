@@ -27,7 +27,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-    gates:
+  gates:
+    name: Pre-release gates (optional AK scan/test)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,20 +44,13 @@ jobs:
                 if ($LASTEXITCODE -ne 0) {
                   if ($LASTEXITCODE -eq 128) {
                     Write-Warning "git returned 128 in $p (ignored)"; $global:LASTEXITCODE = 0
-                  } else {
-                    throw "gate failed: $p ($LASTEXITCODE)"
-                  }
+                  } else { throw "gate failed: $p ($LASTEXITCODE)" }
                 }
-              } catch {
-                throw
-              }
-            } else {
-              Write-Host "skip: $p (not found)"
-            }
+              } catch { throw }
+            } else { Write-Host "skip: $p (not found)" }
           }
           Try-Run 'scripts/g5/ak-scan.ps1'
           Try-Run 'scripts/g5/ak-test.ps1'
-
 
   release:
     name: Create tag and publish release (API only)
@@ -96,9 +90,12 @@ jobs:
             if (await tagExists(ver)) {
               if (!auto) { core.setFailed(`tag already exists: ${ver}`); return; }
               const m = ver.match(/^v(\d+)\.(\d+)\.(\d+)$/);
-              let maj = parseInt(m[1],10), min = parseInt(m[2],10), pat = parseInt(m[3],10);
-              while (await tagExists(`v${maj}.${min}.${pat+1}`)) { pat++; }
-              ver = `v${maj}.${min}.${pat+1}`;
+              let maj = parseInt(m[1], 10), min = parseInt(m[2], 10), pat = parseInt(m[3], 10);
+              while (true) {
+                pat = pat + 1;
+                const cand = `v${maj}.${min}.${pat}`;
+                if (!(await tagExists(cand))) { ver = cand; break; }
+              }
               core.notice(`auto-bump -> ${ver}`);
             }
 
