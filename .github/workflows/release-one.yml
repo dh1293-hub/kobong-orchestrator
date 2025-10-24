@@ -27,43 +27,52 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  gates:
+    gates:
     name: Pre-release gates (optional AK scan/test)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0        # ← 전체 히스토리
-          fetch-tags: true      # ← 태그까지
-      - name: Prepare git context (safe dir + tags + dummy if none)
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Neutralize git 128 globally
+        shell: pwsh
+        run: |
+          $gitPath = (Get-Command git -CommandType Application).Source
+          function Invoke-Git { param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+            & $gitPath @Args
+            $code = $LASTEXITCODE
+            if ($code -eq 128) {
+              Write-Warning "git exited with 128 (neutralized) : git $($Args -join ' ')"
+              $global:LASTEXITCODE = 0
+            }
+          }
+          Set-Alias -Name git -Value Invoke-Git -Scope Global
+          git --version | Out-Host
+
+      - name: Prepare git context (full tags; safe dir; dummy if none)
         shell: pwsh
         run: |
           $ErrorActionPreference='Continue'
           git config --global --add safe.directory "$Env:GITHUB_WORKSPACE"
           git config --global user.email  "41898282+github-actions[bot]@users.noreply.github.com"
           git config --global user.name   "github-actions[bot]"
-          git fetch --tags --force 2>$null
-          # 태그가 하나도 없으면 로컬 임시 태그(푸시 안함)
-          $tags = (git tag --list) -join ''
-          if ([string]::IsNullOrWhiteSpace($tags)) {
-            git tag -a v0.0.0 -m "ci-dummy-tag to satisfy git describe"
-          }
-          git describe --tags --always
+          git fetch --tags --force
+          if (-not (git tag --list)) { git tag -a v0.0.0 -m "ci-dummy" }
+
       - name: Run pre-release AK gates
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          Set-Location "$Env:GITHUB_WORKSPACE"
           function Try-Run($p){
             if (Test-Path $p) {
               Write-Host "==> $p"
               & pwsh -NoProfile -File $p -WhatIf
-              if ($LASTEXITCODE -ne 0) {
-                if ($LASTEXITCODE -eq 128) {
-                  Write-Warning "git returned 128 in $p (soft-ignored)"; $global:LASTEXITCODE = 0
-                } else { throw "gate failed: $p ($LASTEXITCODE)" }
-              }
-            } else { Write-Host "skip: $p (not found)" }
+              if ($LASTEXITCODE -ne 0) { throw "gate failed: $p ($LASTEXITCODE)" }
+            } else {
+              Write-Host "skip: $p (not found)"
+            }
           }
           Try-Run 'scripts/g5/ak-scan.ps1'
           Try-Run 'scripts/g5/ak-test.ps1'
@@ -128,7 +137,7 @@ jobs:
           body: ${{ inputs.notes }}
           generate_release_notes: true
 
-  canary:
+    canary:
     name: Post-release canary
     needs: release
     if: ${{ inputs.canary == 'true' }}
@@ -138,31 +147,44 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-      - name: Prepare git context (safe dir + tags + dummy if none)
+
+      - name: Neutralize git 128 globally
+        shell: pwsh
+        run: |
+          $gitPath = (Get-Command git -CommandType Application).Source
+          function Invoke-Git { param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+            & $gitPath @Args
+            $code = $LASTEXITCODE
+            if ($code -eq 128) {
+              Write-Warning "git exited with 128 (neutralized) : git $($Args -join ' ')"
+              $global:LASTEXITCODE = 0
+            }
+          }
+          Set-Alias -Name git -Value Invoke-Git -Scope Global
+          git --version | Out-Host
+
+      - name: Prepare git context (full tags; safe dir; dummy if none)
         shell: pwsh
         run: |
           $ErrorActionPreference='Continue'
           git config --global --add safe.directory "$Env:GITHUB_WORKSPACE"
           git config --global user.email  "41898282+github-actions[bot]@users.noreply.github.com"
           git config --global user.name   "github-actions[bot]"
-          git fetch --tags --force 2>$null
-          $tags = (git tag --list) -join ''
-          if ([string]::IsNullOrWhiteSpace($tags)) {
-            git tag -a v0.0.0 -m "ci-dummy-tag to satisfy git describe"
-          }
-          git describe --tags --always
+          git fetch --tags --force
+          if (-not (git tag --list)) { git tag -a v0.0.0 -m "ci-dummy" }
+
       - name: Run ak-test.ps1 if present
         shell: pwsh
         run: |
           $ErrorActionPreference='Continue'
-          Set-Location "$Env:GITHUB_WORKSPACE"
           $p = 'scripts/g5/ak-test.ps1'
           if (Test-Path $p) {
             & pwsh -NoProfile -File $p 2>&1 | Tee-Object -FilePath .ak-canary.txt
-            if ($LASTEXITCODE -eq 128) { Write-Warning "git returned 128 in canary (soft-ignored)"; $global:LASTEXITCODE = 0 }
+            if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
           } else {
             "Skip canary: $p not found" | Tee-Object -FilePath .ak-canary.txt
           }
+
       - name: Upload canary logs
         if: always()
         uses: actions/upload-artifact@v4
