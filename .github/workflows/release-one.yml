@@ -41,6 +41,8 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           git config --global --add safe.directory "$Env:GITHUB_WORKSPACE"
+    git config --global user.name  \"github-actions[bot]\"
+    git config --global user.email \"41898282+github-actions[bot]@users.noreply.github.com\"
           git fetch --tags --force 2>$null
           if (-not (git tag --list)) { git tag -a v0.0.0 -m "ci-dummy" }
 
@@ -134,6 +136,8 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           git config --global --add safe.directory "$Env:GITHUB_WORKSPACE"
+    git config --global user.name  \"github-actions[bot]\"
+    git config --global user.email \"41898282+github-actions[bot]@users.noreply.github.com\"
           git fetch --tags --force 2>$null
           if (-not (git tag --list)) { git tag -a v0.0.0 -m "ci-dummy" }
 
