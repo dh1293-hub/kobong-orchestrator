@@ -132,27 +132,28 @@ jobs:
 
           $want=$map[$env:CMD]
           
-         $candidates = @(
-  Join-Path 'scripts/g5' $want
-  Join-Path 'scripts'    $want
-  $want
-) | Where-Object { Test-Path $_ }
+        # 항상 "배열"로 보관해서 문자열 슬라이싱/한 글자 실행(s) 사고 방지
+          $candidates = @(
+            (Join-Path 'scripts/g5' $want)
+            (Join-Path 'scripts'    $want)
+            $want
+          ) | Where-Object { Test-Path $_ }
 
-if (-not $candidates) {
-  $found = Get-ChildItem -Recurse -File -Filter $want -ErrorAction SilentlyContinue |
-           Select-Object -First 1 -Expand FullName
-  if ($found) { $candidates = @($found) }   # <= 항상 배열로 보관
-}
+          if (-not $candidates) {
+            $found = Get-ChildItem -Recurse -File -Filter $want -ErrorAction SilentlyContinue |
+                     Select-Object -First 1 -Expand FullName
+            if ($found) { $candidates = @($found) }
+          }
 
-if (-not $candidates) {
-  "Script not found: $want" | Tee-Object .ak-out.txt -Append
-  "exit_code=11"            | Out-File $env:GITHUB_OUTPUT -Append
-  exit 11
-}
+          if (-not $candidates) {
+            "Script not found: $want" | Tee-Object .ak-out.txt -Append
+            "exit_code=11"            | Out-File $env:GITHUB_OUTPUT -Append
+            exit 11
+          }
 
-$script = $candidates | Select-Object -First 1   # <= 단일이어도 문자열 슬라이싱 안 됨
-"Candidate(s): $($candidates -join ', ')" | Tee-Object .ak-out.txt -Append
-">> Running $script $args"                  | Tee-Object .ak-out.txt -Append
+          $script = $candidates | Select-Object -First 1
+          "Candidate(s): $($candidates -join ', ')" | Tee-Object .ak-out.txt -Append
+          ">> Running $script $args"                | Tee-Object .ak-out.txt -Append
           
           $supportsMode = try { (Get-Command $script -ErrorAction Stop).Parameters.ContainsKey('Mode') } catch { $false }
           $args=@(); if($supportsMode){ $args += @('-Mode',$env:MODE) }
