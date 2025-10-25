@@ -28,40 +28,34 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - name: Pre-configure Git (safe dir & HOME)
-        shell: pwsh
-        run: |
-          $ErrorActionPreference='Stop'
-          if (-not $env:HOME -or -not (Test-Path $env:HOME)) { $env:HOME = $env:USERPROFILE }
-          git --version
-          git config --global --add safe.directory '*'
-          $ws = $env:GITHUB_WORKSPACE
-          if ($ws) {
-            git config --global --add safe.directory "$ws"
-            git config --global --add safe.directory ($ws -replace '\\','/')
-          }
-
-      - name: Manual checkout (no action/checkout warnings)
+      - name: Download source (zipball) to workspace
         shell: pwsh
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           SHA:  ${{ github.sha }}
         run: |
           $ErrorActionPreference='Stop'
-          $dst = $env:GITHUB_WORKSPACE
-          if (!(Test-Path $dst)) { New-Item -ItemType Directory -Force -Path $dst | Out-Null }
-          Push-Location $dst
-          if (!(Test-Path ".git")) { git init . }
-          # public repo라 토큰 없이 https clone/fetch 가능. (private면 토큰 URL로 교체)
-          if (-not (git remote | Select-String -SimpleMatch '^origin$')) {
-            git remote add origin "https://github.com/$env:REPO"
+          $zip = Join-Path $env:RUNNER_TEMP 'src.zip'
+          $tmp = Join-Path $env:RUNNER_TEMP 'src-unzip'
+          Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            "User-Agent"  = "actions"
+            "X-GitHub-Api-Version" = "2022-11-28"
           }
-          git -c protocol.version=2 fetch --no-tags --depth=0 origin "+$env:SHA:$env:SHA"
-          git checkout --force "$env:SHA"
-          # 서브모듈이 없으면 아래 두 줄은 조용히 통과
-          git submodule sync --recursive
-          git -c protocol.version=2 submodule update --init --force --depth=1 --recursive
-          Pop-Location
+          $uri = "https://api.github.com/repos/$env:REPO/zipball/$env:SHA"
+          Invoke-WebRequest -Uri $uri -Headers $headers -OutFile $zip -UseBasicParsing
+
+          Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force
+
+          # zipball은 최상위에 한 개 폴더(owner-repo-<sha>)가 생김 -> 그 안의 내용만 workspace로 이동
+          $root = Get-ChildItem $tmp | Where-Object { $_.PSIsContainer } | Select-Object -First 1
+          if (-not $root) { throw "zipball root not found" }
+          New-Item -ItemType Directory -Force -Path $env:GITHUB_WORKSPACE | Out-Null
+          Get-ChildItem -LiteralPath $root.FullName -Force | Move-Item -Destination $env:GITHUB_WORKSPACE -Force
 
       - name: Run gates (ak-scan + ak-test)
         shell: pwsh
@@ -122,38 +116,32 @@ jobs:
     needs: release
     timeout-minutes: 20
     steps:
-      - name: Pre-configure Git (safe dir & HOME)
-        shell: pwsh
-        run: |
-          $ErrorActionPreference='Stop'
-          if (-not $env:HOME -or -not (Test-Path $env:HOME)) { $env:HOME = $env:USERPROFILE }
-          git --version
-          git config --global --add safe.directory '*'
-          $ws = $env:GITHUB_WORKSPACE
-          if ($ws) {
-            git config --global --add safe.directory "$ws"
-            git config --global --add safe.directory ($ws -replace '\\','/')
-          }
-
-      - name: Manual checkout (no action/checkout warnings)
+      - name: Download source (zipball) to workspace
         shell: pwsh
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           SHA:  ${{ github.sha }}
         run: |
           $ErrorActionPreference='Stop'
-          $dst = $env:GITHUB_WORKSPACE
-          if (!(Test-Path $dst)) { New-Item -ItemType Directory -Force -Path $dst | Out-Null }
-          Push-Location $dst
-          if (!(Test-Path ".git")) { git init . }
-          if (-not (git remote | Select-String -SimpleMatch '^origin$')) {
-            git remote add origin "https://github.com/$env:REPO"
+          $zip = Join-Path $env:RUNNER_TEMP 'src2.zip'
+          $tmp = Join-Path $env:RUNNER_TEMP 'src2-unzip'
+          Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            "User-Agent"  = "actions"
+            "X-GitHub-Api-Version" = "2022-11-28"
           }
-          git -c protocol.version=2 fetch --no-tags --depth=0 origin "+$env:SHA:$env:SHA"
-          git checkout --force "$env:SHA"
-          git submodule sync --recursive
-          git -c protocol.version=2 submodule update --init --force --depth=1 --recursive
-          Pop-Location
+          $uri = "https://api.github.com/repos/$env:REPO/zipball/$env:SHA"
+          Invoke-WebRequest -Uri $uri -Headers $headers -OutFile $zip -UseBasicParsing
+
+          Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force
+          $root = Get-ChildItem $tmp | Where-Object { $_.PSIsContainer } | Select-Object -First 1
+          if (-not $root) { throw "zipball root not found" }
+          New-Item -ItemType Directory -Force -Path $env:GITHUB_WORKSPACE | Out-Null
+          Get-ChildItem -LiteralPath $root.FullName -Force | Move-Item -Destination $env:GITHUB_WORKSPACE -Force
 
       - name: Run canary (ak-test)
         shell: pwsh
