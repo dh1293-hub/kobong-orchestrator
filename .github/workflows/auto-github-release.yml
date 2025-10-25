@@ -2,7 +2,6 @@ name: Auto GitHub Release from CHANGELOG
 on:
   push:
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
 jobs:
   release:
     permissions:
@@ -19,7 +18,7 @@ jobs:
           if [[ -f CHANGELOG.md ]]; then
             awk -v tag="$TAG" '
               $0 ~ "^## "tag" " { flag=1; print; next }
-              /^## v[0-9]+\.[0-9]+\.[0-9]+/ && flag { exit }
+
               flag { print }
             ' CHANGELOG.md > _notes.md || true
           fi
@@ -38,4 +37,4 @@ jobs:
             echo "Release already exists: $TAG"
           else
             gh release create "$TAG" -t "kobong-orchestrator $TAG" -F _notes.md
-          fi
+
