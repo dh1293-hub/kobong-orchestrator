@@ -1,8 +1,7 @@
 name: Release One-Click
 
 on:
-  workflow_dispatch: 
-
+  workflow_dispatch:
     inputs:
       version:
         description: 'vX.Y.Z (e.g. v1.0.14)'
@@ -163,3 +162,4 @@ jobs:
         run: |
           & "scripts/g5/ak-test.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
           if ($LASTEXITCODE -ne 0) { throw "canary failed with code $LASTEXITCODE" }
+
