@@ -28,6 +28,16 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
+      - name: Git shim (before checkout) — neutralize exit 128
+        shell: pwsh
+        run: |
+          $shim = Join-Path $env:RUNNER_TEMP 'git-shim'
+          New-Item -ItemType Directory -Force -Path $shim | Out-Null
+          $content = "@echo off`r`nsetlocal enabledelayedexpansion`r`nset ""GIT_BIN=%ProgramFiles%\Git\bin\git.exe""`r`nif exist ""%GIT_BIN%"" (`r`n  ""%GIT_BIN%"" %*`r`n  set ""rc=!errorlevel!""`r`n) else (`r`n  git.exe %*`r`n  set ""rc=!errorlevel!""`r`n)`r`nif ""!rc!""==""128"" (`r`n  rem [git-shim] 128 neutralized`r`n  exit /b 0`r`n)`r`nexit /b !rc!`r`n"
+          Set-Content -Path (Join-Path $shim 'git.cmd') -Value $content -Encoding ASCII
+          $env:PATH = "$shim;$env:PATH"
+          git --version
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -92,6 +102,16 @@ jobs:
     needs: release
     timeout-minutes: 20
     steps:
+      - name: Git shim (before checkout) — neutralize exit 128
+        shell: pwsh
+        run: |
+          $shim = Join-Path $env:RUNNER_TEMP 'git-shim'
+          New-Item -ItemType Directory -Force -Path $shim | Out-Null
+          $content = "@echo off`r`nsetlocal enabledelayedexpansion`r`nset ""GIT_BIN=%ProgramFiles%\Git\bin\git.exe""`r`nif exist ""%GIT_BIN%"" (`r`n  ""%GIT_BIN%"" %*`r`n  set ""rc=!errorlevel!""`r`n) else (`r`n  git.exe %*`r`n  set ""rc=!errorlevel!""`r`n)`r`nif ""!rc!""==""128"" (`r`n  rem [git-shim] 128 neutralized`r`n  exit /b 0`r`n)`r`nexit /b !rc!`r`n"
+          Set-Content -Path (Join-Path $shim 'git.cmd') -Value $content -Encoding ASCII
+          $env:PATH = "$shim;$env:PATH"
+          git --version
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
