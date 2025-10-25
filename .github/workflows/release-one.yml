@@ -33,16 +33,15 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Pre-release gates (AK scan/test) — soft warnings
+        with: { fetch-depth: 0 }
+      - name: Pre-release gates (AK scan/test) — strict (no 128 allowed)
         shell: pwsh
         working-directory: ${{ github.workspace }}
-        continue-on-error: true
         run: |
           & "scripts/g5/ak-scan.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
+          if ($LASTEXITCODE -ne 0) { throw "ak-scan failed with $LASTEXITCODE" }
           & "scripts/g5/ak-test.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
+          if ($LASTEXITCODE -ne 0) { throw "ak-test failed with $LASTEXITCODE" }
 
   release:
     runs-on: ubuntu-latest
@@ -63,15 +62,9 @@ jobs:
 
             let ver = input;
             async function exists(tag) {
-              try {
-                await github.rest.git.getRef({ owner: context.repo.owner, repo: context.repo.repo, ref: `tags/${tag}` });
-                return true;
-              } catch (e) {
-                if (e.status === 404) return false;
-                throw e;
-              }
+              try { await github.rest.git.getRef({ owner: context.repo.owner, repo: context.repo.repo, ref: `tags/${tag}` }); return true; }
+              catch (e) { if (e.status === 404) return false; throw e; }
             }
-
             if (await exists(ver)) {
               if (!auto) { core.setFailed(`tag already exists: ${ver}`); return; }
               const mt = ver.match(/^v(\d+)\.(\d+)\.(\d+)$/);
@@ -80,13 +73,11 @@ jobs:
               ver = `v${major}.${minor}.${patch}`;
               core.notice(`auto-bump -> ${ver}`);
             }
-
             core.setOutput('version', ver);
 
       - name: Create tag & publish release (API-only)
         uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        env: { GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
         with:
           tag_name:         ${{ steps.v.outputs.version }}
           target_commitish: ${{ github.sha }}
@@ -100,12 +91,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Post-release canary — soft warnings
+        with: { fetch-depth: 0 }
+      - name: Post-release canary — strict (no 128 allowed)
         shell: pwsh
         working-directory: ${{ github.workspace }}
-        continue-on-error: true
         run: |
           & "scripts/g5/ak-test.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
+          if ($LASTEXITCODE -ne 0) { throw "canary failed with $LASTEXITCODE" }
