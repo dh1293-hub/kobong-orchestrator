@@ -1,7 +1,21 @@
 name: Release One-Click
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
+
+# 1) 동시 실행 금지(같은 브랜치 중복 방지)
+concurrency:
+  group: release-one-${{ github.ref }}
+  cancel-in-progress: true
+
+# 2) 최소 권한(gh-release에 필요한 contents:write)
+permissions:
+  contents: write
+
+# 3) 기본 env (전역)
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     inputs:
       version:
         description: 'vX.Y.Z (e.g. v1.0.14)'
