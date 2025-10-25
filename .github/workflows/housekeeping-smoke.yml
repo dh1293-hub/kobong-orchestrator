@@ -14,6 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Setup PowerShell 7
+
         with:
           version: "7.4.4"
       - name: Dry-run housekeeping weekly
@@ -50,3 +51,4 @@ jobs:
             } else {
               await github.rest.issues.createComment({owner, repo, issue_number, body: newBody});
             }
+

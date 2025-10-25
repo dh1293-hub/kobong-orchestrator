@@ -13,6 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+
       - name: Run PSScriptAnalyzer (errors only, non-blocking)
         id: pssa
         shell: pwsh
@@ -66,5 +67,4 @@ jobs:
       - name: Always succeed (non-blocking)
         if: always()
         shell: pwsh
-        run: echo "psanalyze is non-blocking by design."
 
