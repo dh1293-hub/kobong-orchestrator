@@ -41,6 +41,19 @@ jobs:
           Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 
+      - name: Mark stable tag (move)
+        if: ${{ success() }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner, repo = context.repo.repo;
+            const ref = 'refs/tags/stable';
+            try { await github.rest.git.getRef({owner, repo, ref: 'tags/stable'}); 
+                  await github.rest.git.updateRef({owner, repo, ref: 'tags/stable', sha: context.sha, force: true});
+            } catch {
+                  await github.rest.git.createRef({owner, repo, ref, sha: context.sha});
+            }
+
           $headers = @{
             Authorization = "Bearer $env:GH_TOKEN"
             "User-Agent"  = "actions"
