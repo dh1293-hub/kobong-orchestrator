@@ -1,5 +1,6 @@
 # Kobong-Orchestrator-VIP — 전수 인벤토리 수집 (PS7) v1.5 Minimal Safe
 # 목적: "파일명과 경로"만 수집 (콘텐츠 미접근, 파일 손상 위험 0)
+#inventory.ps1
 #requires -Version 7.0
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Continue'
