@@ -1,18 +1,13 @@
-#!/usr/bin/env bash
-set -euo pipefail
-changed=$(git diff --cached --name-only)
-if [ -z "$changed" ]; then exit 0; fi
-block_regex='(^|/|\\)logs(/|/)|\.log($|\.)|\.(out|err)\.log$|\.log\.jsonl$'
-bad=""
-while IFS= read -r f; do
-  if [[ "$f" =~ $block_regex ]]; then
-    bad="$bad\n  - $f"
-  fi
-done <<< "$changed"
-if [ -n "$bad" ]; then
-  echo "[BLOCK] The following paths look like logs and must not be committed:"
-  echo -e "$bad"
-  echo "Fix: add to .gitignore or remove from index (git rm --cached <path>)"
+#!/usr/bin/env sh
+# POSIX wrapper: call PowerShell hook logic
+# Detect pwsh
+if command -v pwsh >/dev/null 2>&1; then
+  PWSH="pwsh"
+elif [ -x "/c/Program Files/PowerShell/7/pwsh.exe" ]; then
+  PWSH="/c/Program Files/PowerShell/7/pwsh.exe"
+else
+  echo "[HOOK] pwsh not found" >&2
   exit 1
 fi
-exit 0
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+exec "$PWSH" -NoProfile -ExecutionPolicy Bypass -File "$SCRIPT_DIR/pre-commit.ps1" "$@"

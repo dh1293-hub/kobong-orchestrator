@@ -1,0 +1,9 @@
+{
+  "path": ".kobong/policy/klc-security.v1.yaml",
+  "label": "DATA",
+  "owner": "hanminsu",
+  "retention": "permanent",
+  "description": "KLC 보안/무결성/마스킹/보존/CI 검증 정책",
+  "source_of_truth": "local",
+  "created_at": "2025-10-21T00:00:00Z"
+}

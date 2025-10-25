@@ -1,0 +1,13 @@
+# PATCH START
+TARGET: Orchestrator-Moniteoling/webui/Orchestrator-Moniteoling-Su.html
+MODE: insert-after
+MULTI: false
+FIND <<'EOF'
+^(?![\s\S]*KOBO-SENTINEL:orchmon-api-base)[\s\S]*?</body>
+EOF
+REPLACE <<'EOF'
+<!-- KOBO-SENTINEL:orchmon-api-base -->
+<script>window.ORCHMON_API_BASE="http://localhost:5183/api/orchmon";</script>
+<script src="./orchmon-bridge.js" defer></script>
+EOF
+# PATCH END

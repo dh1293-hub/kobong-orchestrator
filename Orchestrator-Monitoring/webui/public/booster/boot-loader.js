@@ -1,0 +1,16 @@
+(()=>{ if(window.__orch_boot_loader_v1){return;} window.__orch_boot_loader_v1=1;
+const NEEDS=['public/booster/settings-pane.js',
+  "public/booster/messages-pane.js",
+  "public/booster/errkb-cards.js"
+  // 필요시 추가: "public/booster/overview-cards.js","public/booster/timeline-tools.js","public/booster/timeline-wiring.js"
+];
+function have(src){ return !!document.querySelector(`script[src*="${src}"]`); }
+NEEDS.forEach(src=>{
+  if(!have(src)){
+    const s=document.createElement("script"); s.defer=true; s.src = src + "?v=" + Date.now();
+    document.body.appendChild(s); console.log("[BOOT] load", src);
+  }
+});
+// 상태 리포트(지연)
+setTimeout(()=>{ console.log("ORCHBUS url:", window.ORCHBUS?.url, "subs:", window.ORCHBUS?.count?.()); }, 1500);
+})();

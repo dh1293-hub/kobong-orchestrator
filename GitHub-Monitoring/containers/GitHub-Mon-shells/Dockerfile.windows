@@ -1,0 +1,9 @@
+
+# Windows Server Core + Node LTS (권장: 호스트와 동일 ltsc 이미지)
+FROM mcr.microsoft.com/windows/node:lts-windowsservercore-ltsc2022
+WORKDIR C:\app
+COPY package.json .
+RUN npm ci --no-audit --no-fund
+COPY server.js .
+EXPOSE 5182
+CMD ["node","server.js"]

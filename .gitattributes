@@ -1,5 +1,39 @@
-* text=auto eol=lf
-*.ps1 text eol=lf
-*.cmd text eol=crlf
-*.sh text eol=lf
-.githooks/* text eol=lf
+*           text=auto eol=lf
+
+# PowerShell
+*.ps1       text eol=lf
+*.psm1      text eol=lf
+*.psd1      text eol=lf
+
+# Web
+*.html      text eol=lf
+*.css       text eol=lf
+*.js        text eol=lf
+*.mjs       text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+
+# Windows scripts (CRLF 필요)
+*.cmd       text eol=crlf
+*.bat       text eol=crlf
+
+# Binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.svg       text eol=lf* text=auto
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.html text eol=lf
+*.js   text eol=lf
+*.css  text eol=lf
+*.ps1  text eol=lf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+* text=auto
+*.ps1 text eol=crlf
+*.sh  text eol=lf

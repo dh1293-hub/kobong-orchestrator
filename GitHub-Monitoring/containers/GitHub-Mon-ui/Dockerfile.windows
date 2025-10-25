@@ -1,0 +1,11 @@
+
+FROM mcr.microsoft.com/windows/servercore:ltsc2019
+SHELL ["powershell","-NoLogo","-NoProfile","-Command","$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue';"]
+ENV NODE_VERSION=20.17.0
+RUN [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+RUN Invoke-WebRequest "https://nodejs.org/dist/v$env:NODE_VERSION/node-v$env:NODE_VERSION-x64.msi" -OutFile "C:/node.msi"
+RUN Start-Process msiexec.exe -ArgumentList "/i","C:\node.msi","/qn","/norestart" -Wait ; Remove-Item "C:\node.msi" -Force
+WORKDIR C:/app
+COPY server_ui.js .
+EXPOSE 5199
+CMD ["C:\\Program Files\\nodejs\\node.exe","server_ui.js"]

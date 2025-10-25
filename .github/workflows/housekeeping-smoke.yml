@@ -1,0 +1,52 @@
+# NO-SHELL
+name: housekeeping-smoke
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 18 * * 6"   # Sun 03:00 KST (Sat 18:00 UTC)
+  pull_request:
+    paths:
+      - "scripts/g5/**"
+      - ".github/workflows/housekeeping-smoke.yml"
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PowerShell 7
+        with:
+          version: "7.4.4"
+      - name: Dry-run housekeeping weekly
+        shell: pwsh
+        run: |
+          pwsh -NoLogo -NoProfile -File "scripts/g5/housekeeping-weekly.ps1" -Root . -TimeoutSec 60 -InactivitySec 20
+      - name: Summarize logs
+        shell: pwsh
+        run: |
+          pwsh -NoLogo -NoProfile -File "scripts/g5/housekeeping-summarize.ps1"
+      - name: Upload logs + summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: housekeeping-artifacts
+          path: |
+            logs/apply-log.jsonl
+            housekeeping-summary.md
+          if-no-files-found: warn
+      - name: PR comment (sticky)
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.existsSync('housekeeping-summary.md') ? fs.readFileSync('housekeeping-summary.md','utf8') : '_No summary file_';
+            const header = '<!-- hk-summary -->';
+            const newBody = header + '\n' + body;
+            const {owner, repo} = context.repo;
+            const issue_number = context.issue.number;
+            const existing = await github.rest.issues.listComments({owner, repo, issue_number});
+            const prev = existing.data.find(c => c.user.type !== 'Bot' ? false : (c.body||'').includes(header));
+            if (prev) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: prev.id, body: newBody});
+            } else {
+              await github.rest.issues.createComment({owner, repo, issue_number, body: newBody});
+            }

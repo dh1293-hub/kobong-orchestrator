@@ -1,0 +1,26 @@
+name: KLC Verify
+on:
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  klc-verify:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run KLC verify smoke
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference='Stop'
+          .\scripts\g5\klc-verify.ps1 -Out "_klc\klc-verify-$env:GITHUB_RUN_ID.log"
+
+      - name: Upload KLC artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: klc-verify-${{ github.run_id }}
+          path: _klc\*.log
+

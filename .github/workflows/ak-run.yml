@@ -1,0 +1,52 @@
+name: AK7 run (/ak only, robust)
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  ak:
+    if: startsWith(github.event.comment.body, '/ak')
+    runs-on: windows-latest
+
+    steps:
+      - name: ack
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = context.payload.comment.body.trim();
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `ack ✅ "${body}"`
+            });
+
+      - name: make summary
+        shell: pwsh
+        run: |
+          $BODY = "${{ github.event.comment.body }}".Trim()
+          $IS_PR = "${{ github.event.issue.pull_request.url || '' }}".Length -gt 0
+          $ISSUE = "${{ github.event.issue.number }}"
+          "# gate`n"                       | Out-File -FilePath xp-summary.md -Encoding utf8
+          "event | issue_comment"          | Out-File -Append xp-summary.md
+          "isAK  | 1"                      | Out-File -Append xp-summary.md
+          "issue | $ISSUE"                 | Out-File -Append xp-summary.md
+          "body  | $BODY"                  | Out-File -Append xp-summary.md
+          ""                               | Out-File -Append xp-summary.md
+          "# pr`n"                         | Out-File -Append xp-summary.md
+          "isPR | $([int]$IS_PR)"          | Out-File -Append xp-summary.md
+          echo "## gate"                   >> $env:GITHUB_STEP_SUMMARY
+          type xp-summary.md               >> $env:GITHUB_STEP_SUMMARY
+
+      - name: upload xp-summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: xp-summary
+          path: xp-summary.md

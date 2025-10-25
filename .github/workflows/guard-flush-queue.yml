@@ -1,0 +1,40 @@
+# NO-SHELL
+name: guard-flush-queue
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Block invalid "Flush-Queue" lines
+        shell: bash
+        run: |
+          set -euo pipefail
+          BAD="$(git grep -n -E '^[[:space:]]*=[[:space:]]*Flush-Queue\\b' -- '*.ps1' || true)"
+          if [ -n "$BAD" ]; then
+            echo "Found invalid lines:"
+            echo "$BAD"
+            echo "::error title=Invalid Flush-Queue usage::Use '\$null = Flush-Queue ...' instead"
+            exit 1
+          fi
+          echo "OK: no invalid Flush-Queue lines"
+
+      - name: Warn on missing PS7 header / StrictMode
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Recurse -Filter *.ps1 | Where-Object { $_.FullName -notmatch '\\.githooks\\' }
+          foreach ($f in $files) {
+            $t = Get-Content -Raw $f.FullName
+            if ($t -notmatch '#requires\s+-Version\s+7\.0') {
+              Write-Host "::warning file=$($f.FullName)::missing '#requires -Version 7.0'"
+            }
+            if ($t -notmatch 'Set-StrictMode\s+-Version\s+Latest') {
+              Write-Host "::warning file=$($f.FullName)::missing 'Set-StrictMode -Version Latest'"
+            }
+          }
