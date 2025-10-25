@@ -6,7 +6,7 @@ param([string]$Pr,[string]$Sha,[switch]$ConfirmApply)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $PSDefaultParameterValues['*:Encoding']='utf8'
-$sw=[Diagnostics.Stopwatch]::StartNew()
+$script:sw = [System.Diagnostics.Stopwatch]::StartNew()
 
 # --- git 없이 레포 루트 찾기 ---
 function Find-RepoRoot([string]$start) {
@@ -56,6 +56,8 @@ Set-Alias git Invoke-GitSoft -Scope Local
 
 
 function K($lvl,$act,$out,$msg,$exit=0){
+    if (-not $script:sw) { $script:sw = [System.Diagnostics.Stopwatch]::StartNew() }
+    $ms = if ($script:sw) { $script:sw.ElapsedMilliseconds } else { 0 }
   $rec=[ordered]@{
     timestamp=(Get-Date).ToString('o'); level=$lvl; traceId=[guid]::NewGuid().ToString();
     module='scripts'; action=$act; outcome=$out; message=$msg; durationMs=$sw.ElapsedMilliseconds
