@@ -1,9 +1,18 @@
-{
-  "path": ".kobong/policy/klc-security.v1.yaml",
-  "label": "DATA",
-  "owner": "hanminsu",
-  "retention": "permanent",
-  "description": "KLC 보안/무결성/마스킹/보존/CI 검증 정책",
-  "source_of_truth": "local",
-  "created_at": "2025-10-21T00:00:00Z"
-}
+[
+  {
+    "path": ".kobong/policy/klc-security.v1.yaml",
+    "label": "DATA",
+    "owner": "hanminsu",
+    "retention": "permanent",
+    "description": "KLC 보안/무결성/마스킹/보존/CI 검증 정책",
+    "source_of_truth": "local"
+  },
+  {
+    "path": "scripts/g5/inventory.ps1",
+    "label": "TOOL",
+    "owner": "hanminsu",
+    "retention": "permanent",
+    "description": "인벤토리 스캐너(해시/사이즈/변경감지)",
+    "source_of_truth": "repo"
+  }
+]
