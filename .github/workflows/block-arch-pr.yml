@@ -1,0 +1,22 @@
+$repo='D:\ChatGPT5_AI_Link\dosc\Kobong-Orchestrator-VIP'; cd $repo
+$wf='.github/workflows/block-arch-pr.yml'
+@'
+name: block-arch-pr
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+jobs:
+  block:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if PR comes from arch/*
+        run: |
+          if [[ "${GITHUB_HEAD_REF}" == arch/* ]]; then
+            echo "PRs from arch/* are not allowed."
+            exit 1
+          fi
+'@ | Set-Content -Encoding UTF8 $wf
+git switch -c ops/guard-arch-pr
+git add $wf
+git commit -m "guard: block PRs from arch/* branches"
+git push -u origin HEAD
