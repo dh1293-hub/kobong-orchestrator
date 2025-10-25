@@ -1,0 +1,1154 @@
+<!doctype html>
+<html lang="ko" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GH Console — GitHub Monitoring (Min)</title>
+  <link rel="stylesheet" href="./public/xterm/xterm.css">
+  <link rel="stylesheet" href="./public/css/GitHub-Mon.css">
+</head>
+<body>
+  <header class="topbar" role="banner">
+    <div class="brand">
+      <img src="./public/img/STS_LOGO-크림색.png" alt="" width="28" height="28" />
+      <span>GH Console</span>
+      <span class="badge-port" id="portBadge">GHMON · DEV · :5182</span>
+    </div>
+    <div class="kpis" aria-label="KPI 리본">
+      <div class="kpi"><span>오늘요청</span><strong data-kpi="today">0</strong></div>
+      <div class="kpi"><span>에러율</span><strong data-kpi="err">0%</strong></div>
+      <div class="kpi"><span>p95</span><strong data-kpi="p95">0ms</strong></div>
+      <div class="kpi"><span>GOOD</span><strong data-kpi="good">0</strong></div>
+      <span class="led ok" id="healthLED" title="health"></span>
+    </div>
+    <nav class="actions" aria-label="전역 액션">
+      <button class="btn" data-ghmon-action="next">다음</button>
+      <button class="btn warn" data-ghmon-action="stop">중지</button>
+      <button class="btn" data-ghmon-action="fix-preview">Fix 미리보기</button>
+      <button class="btn primary" data-ghmon-action="fix-apply">Fix 적용</button>
+      <button class="btn good" data-ghmon-action="good">Mark GOOD</button>
+      <button class="btn" data-ghmon-action="rollback">Rollback</button>
+      <button class="btn" data-ghmon-action="shell-open">Shell 오픈</button>
+      <button class="btn" data-ghmon-action="logs-export">Logs Export</button>
+      <button class="btn" id="readabilityBtn" aria-pressed="false">가독</button>
+      <button class="btn" id="themeBtn">테마</button>
+      <button class="btn" id="zoomBtn">줌 100%</button>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" role="navigation" aria-label="사이드바">
+      <button class="btn nav-btn" data-nav="overview">Overview</button>
+      <button class="btn nav-btn" data-nav="prs">PR 인박스</button>
+      <button class="btn nav-btn" data-nav="ci">CI / Actions</button>
+      <button class="btn nav-btn" data-nav="security">보안 센터</button>
+      <button class="btn nav-btn" data-nav="release">릴리즈 콘솔</button>
+      <button class="btn nav-btn" data-nav="shell">Shell Ops</button>
+      <button class="btn nav-btn" data-nav="settings">설정</button>
+<!-- 회사 로고: 중앙 하단 고정 -->
+<div class="sidebar-logo" aria-hidden="true">
+  <picture>
+    <!-- 다크 모드(또는 어두운 배경)일 때 크림색 버전 -->
+    <source srcset="public/img/STS_LOGO-크림색.png" media="(prefers-color-scheme: dark)">
+    <!-- 기본(라이트) -->
+    <img src="public/img/STS_LOGO-광택.png" alt="STS" />
+  </picture>
+</div>
+    </aside>
+
+    <main class="main" role="main">
+      <!-- Overview -->
+      <section class="section active" id="sec-overview">
+        <div class="cards">
+          <div class="card kpi-grid">
+            <div class="card">
+              <h3>오픈 PR</h3>
+              <div><span class="badge"><i class="dot info"></i> 총</span> <strong id="ov-open-prs">0</strong></div>
+            </div>
+            <div class="card">
+              <h3>PR 첫 응답(시간)</h3>
+              <div><strong id="ov-pr-first">0h</strong></div>
+            </div>
+            <div class="card">
+              <h3>Actions 성공률</h3>
+              <div><strong id="ov-actions-ok">0%</strong></div>
+            </div>
+            <div class="card">
+              <h3>보안 High+</h3>
+              <div><strong id="ov-sec-high">0</strong></div>
+            </div>
+          </div>
+
+          <div class="card" style="grid-column: span 6">
+            <h3>오늘 내 작업</h3>
+            <ul id="todayList"></ul>
+          </div>
+
+          <div class="card" style="grid-column: span 6">
+            <h3>실패 CI 상위</h3>
+            <div id="ciTop"></div>
+          </div>
+
+          <div class="card table" style="grid-column: span 12">
+            <h3>보안 High+ 목록</h3>
+            <table class="table" id="secHighTable">
+              <thead><tr><th>Repo</th><th>Rule/Package</th><th>Severity</th><th>State</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="messages" role="region" aria-live="polite"></div>
+      </section>
+
+      <!-- PR 인박스 -->
+<style>
+  /* PR 인박스 섹션에만 적용 */
+  #sec-prs .split{
+    display:grid;
+    grid-template-columns: 2fr 1fr; /* 2/3 : 1/3 */
+    gap:12px;
+    align-items:start;
+  }
+  #sec-prs .list{
+    max-height: calc(100vh - 280px);
+    overflow:auto;
+    border:1px solid var(--border,#333);
+    border-radius:8px;
+  }
+  #sec-prs .pr-item{ padding:8px 10px; border-bottom:1px solid rgba(255,255,255,.06); cursor:pointer; }
+  #sec-prs .pr-item:hover{ background: rgba(255,255,255,.04); }
+  #sec-prs .pr-item.active{ outline:2px solid #3b82f6; outline-offset:-2px; background:rgba(59,130,246,.10); }
+  #sec-prs .pr-title{ font-weight:600; margin-bottom:2px; }
+  #sec-prs .pr-meta{ opacity:.7; font-size:.9em; }
+  #sec-prs .detail .actions .btn[disabled]{ opacity:.5; pointer-events:none; }
+</style>
+      <section class="section" id="sec-prs">
+        <div class="split">
+          <div>
+            <div class="filters">
+              <button class="btn" data-filter="mine">내 리뷰 필요</button>
+              <button class="btn" data-filter="blocked">내가 막음</button>
+              <button class="btn" data-filter="waiting">머지 대기</button>
+            </div>
+            <div class="list" id="prList" role="listbox" aria-label="PR 목록"></div>
+          </div>
+          <div class="detail">
+            <div class="actions" style="margin-bottom:8px">
+              <button class="btn" data-pr-action="request_review">리뷰요청</button>
+              <button class="btn primary" data-pr-action="approve">승인</button>
+              <button class="btn warn" data-pr-action="request_changes">변경요청</button>
+              <button class="btn primary" data-pr-action="merge_or_queue">머지/머지큐</button>
+            </div>
+            <div class="tabbar">
+              <div class="tab active" data-tab="diff">Diff</div>
+              <div class="tab" data-tab="checks">Checks</div>
+              <div class="tab" data-tab="timeline">Timeline</div>
+              <div class="tab" data-tab="files">Files</div>
+            </div>
+            <div class="diff" id="prDiff"></div>
+            <div class="checks" id="prChecks" style="display:none"></div>
+            <div class="timeline" id="prTimeline" style="display:none"></div>
+            <div class="files" id="prFiles" style="display:none"></div>
+          </div>
+        </div>
+      </section>
+
+<script>
+(function(){
+  const BASE = (window.GHMON_BASE || "http://localhost:5182/api/ghmon").replace(/\/$/, "");
+  const sec      = document.getElementById('sec-prs');
+  if (!sec) return;
+  const listEl   = sec.querySelector('#prList');
+  const filters  = sec.querySelector('.filters');
+  const detail   = sec.querySelector('.detail');
+  const panes = {
+    diff:     sec.querySelector('#prDiff'),
+    checks:   sec.querySelector('#prChecks'),
+    timeline: sec.querySelector('#prTimeline'),
+    files:    sec.querySelector('#prFiles')
+  };
+  const tabsBar  = detail.querySelector('.tabbar');
+  const actions  = detail.querySelectorAll('[data-pr-action]');
+
+  let all = [], view = [], selected = null;
+
+  const esc = s => String(s||'').replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;' }[c]));
+  const get  = (u, opt) => fetch(u, opt||{cache:'no-store'}).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+  const fmtTime = s => { try{ return new Date(s).toISOString().replace('T',' ').replace('Z',''); }catch{ return s||''; } };
+
+  async function loadPRs(){
+    const j = await get(`${BASE}/prs?state=open&limit=50`);
+    all  = Array.isArray(j.items) ? j.items : (Array.isArray(j) ? j : []);
+    view = all;
+    renderList();
+  }
+
+  function renderList(){
+    listEl.innerHTML = '';
+    if (!view.length){ listEl.textContent = 'No PRs'; disableActions(true); return; }
+    const frag = document.createDocumentFragment();
+    view.forEach(pr=>{
+      const el = document.createElement('div');
+      el.className = 'pr-item';
+      el.setAttribute('role','option');
+      el.tabIndex = 0;
+      el.dataset.number = pr.number;
+      el.innerHTML = `
+        <div class="pr-title">#${pr.number} ${esc(pr.title)}</div>
+        <div class="pr-meta">
+          <span>${esc(pr.user?.login||'')}</span> ·
+          <span>${esc(pr.head?.ref||'')} → ${esc(pr.base?.ref||'')}</span> ·
+          <time>${esc(pr.updated_at||'')}</time>
+        </div>`;
+      el.addEventListener('click', ()=> select(pr.number));
+      el.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); select(pr.number); }});
+      frag.appendChild(el);
+    });
+    listEl.appendChild(frag);
+    select(view[0].number, true); // 첫 항목 프리뷰
+  }
+
+  const loaded = { checks:0, timeline:0, files:0, no:0 };
+
+  function select(no, silent){
+    selected = all.find(x=>x.number===no) || null;
+    listEl.querySelectorAll('.pr-item').forEach(x=> x.classList.toggle('active', Number(x.dataset.number)===no));
+    panes.diff.innerHTML = selected
+      ? `<p><a href="${selected.html_url}" target="_blank" rel="noopener">GitHub에서 열기</a></p><pre>${esc(selected.body||'')}</pre>`
+      : '';
+    panes.checks.textContent   = 'Checks: 준비 중';
+    panes.timeline.textContent = 'Timeline: 준비 중';
+    panes.files.textContent    = 'Files: 준비 중';
+    disableActions(!selected);
+    loaded.checks = loaded.timeline = loaded.files = 0; loaded.no = no;
+    if (!silent) switchTab('diff');
+  }
+
+  function switchTab(key){
+    tabsBar.querySelectorAll('.tab').forEach(t=> t.classList.toggle('active', t.dataset.tab===key));
+    ['diff','checks','timeline','files'].forEach(k=>{
+      const pane = sec.querySelector('.'+k);
+      if (pane) pane.style.display = (k===key)? '' : 'none';
+    });
+    if (!selected) return;
+    if (key==='checks'   && (!loaded.checks   || loaded.no!==selected.number)) { loaded.checks=1;   loadChecks(selected.number).catch(console.error); }
+    if (key==='timeline' && (!loaded.timeline || loaded.no!==selected.number)) { loaded.timeline=1; loadTimeline(selected.number).catch(console.error); }
+    if (key==='files'    && (!loaded.files    || loaded.no!==selected.number)) { loaded.files=1;    loadFiles(selected.number).catch(console.error); }
+  }
+
+  function disableActions(dis){ actions.forEach(b=> b.disabled = !!dis); }
+
+  // 필터: mine/blocked/waiting
+  filters?.addEventListener('click', ev=>{
+    const b = ev.target.closest('[data-filter]'); if(!b) return;
+    const kind = b.dataset.filter;
+    const me = window.GH_USER || ''; // 필요시 로그인 아이디 주입
+    if (kind==='mine') {
+      view = all.filter(x => (x.user?.login===me) ||
+                             (Array.isArray(x.requested_reviewers) && x.requested_reviewers.some(r=>r.login===me)));
+    } else if (kind==='blocked') {
+      view = all.filter(x => x.draft === true || x.mergeable_state === 'blocked');
+    } else if (kind==='waiting') {
+      view = all.filter(x => !x.draft && ((x.requested_reviewers?.length||0)===0));
+    } else {
+      view = all;
+    }
+    renderList();
+  });
+
+  // PR 액션 → 서버 자리표시자 호출
+  detail.addEventListener('click', async ev=>{
+    const b = ev.target.closest('[data-pr-action]'); if(!b || !selected) return;
+    const action = b.dataset.prAction; b.disabled = true;
+    try{
+      const url = `${BASE}/action/pr@${encodeURIComponent(action)}?number=${selected.number}`;
+      const r = await get(url, {method:'POST', headers:{'Content-Type':'application/json'}});
+      console.info('[PR action]', action, r);
+    } finally { b.disabled = false; }
+  });
+
+  // 탭 전환
+  tabsBar?.addEventListener('click', ev=>{
+    const t = ev.target.closest('.tab'); if(!t) return;
+    switchTab(t.dataset.tab);
+  });
+
+  // === 상세 로더 ===
+  async function loadChecks(no){
+    const j = await get(`${BASE}/pr/checks?number=${no}`);
+    const box = panes.checks; box.innerHTML = '';
+    const head = document.createElement('div');
+    head.innerHTML = `<div style="margin-bottom:6px">head_sha: <code>${esc(j.head_sha||'')}</code></div>`;
+    box.appendChild(head);
+    const t = document.createElement('table'); t.className='table';
+    t.innerHTML = `<thead><tr>
+      <th>Name</th><th>Status</th><th>Conclusion</th><th>Started</th><th>URL</th>
+    </tr></thead><tbody></tbody>`;
+    (j.checks||[]).forEach(r=>{
+      const tr = document.createElement('tr');
+      const a  = document.createElement('a'); a.href = r.html_url||r.details_url||'#'; a.target='_blank'; a.rel='noopener'; a.textContent = r.name||'run';
+      tr.innerHTML = `
+        <td></td>
+        <td>${esc(r.status||'')}</td>
+        <td>${esc(r.conclusion||'')}</td>
+        <td>${esc(fmtTime(r.started_at||r.created_at||''))}</td>
+        <td></td>`;
+      tr.children[0].appendChild(a);
+      const link = document.createElement('a'); link.href=a.href; link.target='_blank'; link.rel='noopener'; link.textContent='open';
+      tr.children[4].appendChild(link);
+      t.tBodies[0].appendChild(tr);
+    });
+    box.appendChild(t);
+  }
+
+  async function loadTimeline(no){
+    const j = await get(`${BASE}/pr/timeline?number=${no}`);
+    const box = panes.timeline; box.innerHTML='';
+    if (!Array.isArray(j.items) || !j.items.length){ box.textContent='No timeline'; return; }
+    const ul = document.createElement('ul'); ul.style.listStyle='none'; ul.style.padding='0';
+    j.items.forEach(ev=>{
+      const li = document.createElement('li'); li.style.padding='6px 8px'; li.style.borderBottom='1px solid rgba(255,255,255,.06)';
+      const who = esc(ev.actor?.login||ev.user?.login||'system');
+      const what= esc(ev.event||ev.state||ev.commit_id||ev.event_type||'');
+      const when= fmtTime(ev.created_at || ev.submitted_at || ev.updated_at || '');
+      li.innerHTML = `<strong>${who}</strong> · ${what} · <time>${when}</time>` +
+        (ev.body ? `<div style="opacity:.8;white-space:pre-wrap;margin-top:4px">${esc(ev.body)}</div>` : '');
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+
+  async function loadFiles(no){
+    const j = await get(`${BASE}/pr/files?number=${no}`);
+    const box = panes.files; box.innerHTML='';
+    const t = document.createElement('table'); t.className='table';
+    t.innerHTML = `<thead><tr>
+      <th>File</th><th>Status</th><th>+/-</th><th>Changes</th><th>Blob</th><th>Raw</th>
+    </tr></thead><tbody></tbody>`;
+    (j.items||[]).forEach(f=>{
+      const tr = document.createElement('tr');
+      const a1 = document.createElement('a'); a1.href=f.blob_url||'#'; a1.target='_blank'; a1.rel='noopener'; a1.textContent=f.filename;
+      const a2 = document.createElement('a'); a2.href=f.raw_url ||'#'; a2.target='_blank'; a2.rel='noopener'; a2.textContent='raw';
+      tr.innerHTML = `
+        <td></td>
+        <td>${esc(f.status||'')}</td>
+        <td>+${f.additions||0} / -${f.deletions||0}</td>
+        <td>${f.changes||0}</td>
+        <td></td>
+        <td></td>`;
+      tr.children[0].appendChild(a1);
+      tr.children[4].appendChild(a1.cloneNode(true));
+      tr.children[5].appendChild(a2);
+      t.tBodies[0].appendChild(tr);
+      if (f.patch){
+        const tr2 = document.createElement('tr');
+        const td  = document.createElement('td'); td.colSpan=6;
+        const pre = document.createElement('pre'); pre.style.whiteSpace='pre-wrap'; pre.style.opacity='.85';
+        pre.textContent = f.patch;
+        td.appendChild(pre); tr2.appendChild(td); t.tBodies[0].appendChild(tr2);
+      }
+    });
+    if (!t.tBodies[0].children.length){
+      const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan=6; td.textContent='No files';
+      tr.appendChild(td); t.tBodies[0].appendChild(tr);
+    }
+    box.appendChild(t);
+  }
+
+  // 부팅
+  loadPRs().catch(e=>console.error('[prs load error]', e));
+})();
+</script>
+
+      <!-- CI / Actions -->
+      <section class="section" id="sec-ci">
+        <div class="card table">
+          <h3>워크플로우 런</h3>
+          <table class="table table-actions" id="ciTable">
+            <thead><tr><th>Run</th><th>Workflow</th><th>결과</th><th>대기</th><th>실행</th><th>시작</th><th>Repo</th><th>명령</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 보안 센터 -->
+      <section class="section" id="sec-security">
+        <div class="tabbar" style="margin-bottom:8px">
+          <div class="tab active" data-sec="code">Code Scanning</div>
+          <div class="tab" data-sec="deps">Dependabot</div>
+          <div class="tab" data-sec="secret">Secret</div>
+        </div>
+        <div class="actions" style="margin-bottom:8px">
+          <button class="btn" data-sec-action="create_issues">이슈 생성</button>
+          <button class="btn" data-sec-action="assign">담당 지정</button>
+          <button class="btn" data-sec-action="label">라벨</button>
+          <button class="btn warn" data-sec-action="dismiss_with_reason">해제(사유)</button>
+        </div>
+        <div class="card table">
+          <table class="table" id="secTable"><thead><tr><th>Repo</th><th>Type</th><th>Item</th><th>Severity</th><th>State</th></tr></thead><tbody></tbody></table>
+        </div>
+      </section>
+
+      <!-- 릴리즈 콘솔 -->
+      <section class="section" id="sec-release">
+        <div class="card">
+          <h3>릴리즈 생성</h3>
+          <label>버전(semver): <input id="relVer" placeholder="v1.2.3"></label><br/>
+          <label>타깃 브랜치: <input id="relBranch" value="main"></label><br/>
+          <label>노트 미리보기</label>
+          <textarea id="relNotes" rows="6" style="width:100%"></textarea>
+          <div class="actions" style="margin-top:8px">
+            <button class="btn primary" data-release-action="create_release">릴리즈 생성</button>
+            <button class="btn" data-release-action="trigger_deploy">배포 트리거</button>
+            <button class="btn" data-release-action="create_backport">백포트 생성</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Shell Ops -->
+      <section class="section" id="sec-shell">
+        <div class="shell-grid">
+          <div class="terminal" id="term-1" aria-label="서버 Shell 1">
+            <div class="actions">
+              <button class="btn" data-shell="1" data-cmd="connect">연결</button>
+              <button class="btn" data-shell="1" data-cmd="stop">중단</button>
+              <button class="btn" data-shell="1" data-cmd="copy">복사</button>
+              <button class="btn" data-shell="1" data-cmd="clear">지우기</button>
+            </div>
+            <pre id="term-1-log"></pre>
+            <input class="term-input" id="term-1-in" placeholder="명령 입력 후 Enter">
+          </div>
+          <div class="terminal" id="term-2" aria-label="서버 Shell 2">
+            <div class="actions">
+              <button class="btn" data-shell="2" data-cmd="connect">연결</button>
+              <button class="btn" data-shell="2" data-cmd="stop">중단</button>
+              <button class="btn" data-shell="2" data-cmd="copy">복사</button>
+              <button class="btn" data-shell="2" data-cmd="clear">지우기</button>
+            </div>
+            <pre id="term-2-log"></pre>
+            <input class="term-input" id="term-2-in" placeholder="명령 입력 후 Enter">
+          </div>
+        </div>
+      </section>
+
+      <!-- 설정 -->
+      <section class="section" id="sec-settings">
+        <div class="card">
+          <h3>GitHub App / 권한</h3>
+          <p>App ID, Installation ID, 권한 요약… (샘플 필드)</p>
+          <label>App ID: <input id="appId"></label><br/>
+          <label>Install ID: <input id="instId"></label><br/>
+        </div>
+        <div class="card">
+          <h3>알림</h3>
+          <label><input type="checkbox" id="notifSlack"> Slack</label>
+          <label><input type="checkbox" id="notifEmail"> Email</label>
+          <label><input type="checkbox" id="notifWeb"> 웹 푸시</label>
+        </div>
+        <div class="card">
+          <h3>테마/단축키/가독</h3>
+          <p>[테마] 라이트/다크/고대비 · [행간/글자크기] 가독 버튼으로 제어 · 단축키: Ctrl+K, Ctrl+/, A/R/M/Q, E/L/C 등</p>
+        </div>
+        <div class="card">
+          <h3>API Base</h3>
+          <input id="apiBase" style="width:100%" placeholder="http://localhost:5182/api/ghmon">
+          <button class="btn" id="applyApi">적용</button>
+          <small>헬스 OK 확인 후 적용</small>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+<!-- 설정 카드: owner→repo 조회/연결 -->
+<script>
+(function(){
+  const BASE = (window.GHMON_BASE || "http://localhost:5182/api/ghmon").replace(/\/$/, "");
+  const card = (function(){
+    const app = document.getElementById('appId');
+    return app ? app.closest('.card') : null;
+  })();
+  if (!card) return;
+
+  const row = document.createElement('div'); row.style.marginTop = '8px';
+  row.innerHTML = [
+    '<label>주소: <input id="ghBase" value="https://github.com" style="width:240px" readonly></label> ',
+    '<label>ID: <input id="ghOwner" value="dh1293-hub" style="width:180px"></label> ',
+    '<label>프로젝트: <select id="ghRepoSel" style="min-width:220px"><option value="">(조회 필요)</option></select></label> ',
+    '<button id="ghFetch" class="btn">조회</button> ',
+    '<button id="ghConnect" class="btn btn-primary">연결</button> ',
+    '<small id="ghMsg" style="margin-left:8px;opacity:.8"></small>'
+  ].join('');
+  card.appendChild(row);
+
+  const ownerEl = row.querySelector('#ghOwner');
+  const repoSel = row.querySelector('#ghRepoSel');
+  const msg     = row.querySelector('#ghMsg');
+
+  async function fetchJSON(u, opt){
+    const r = await fetch(u, opt || { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  }
+  function setMsg(s, ok=true){
+    msg.textContent = s; msg.style.color = ok ? '#22c55e' : '#ef4444';
+  }
+
+  async function doFetchRepos(){
+    const owner = ownerEl.value.trim();
+    if (!owner) return setMsg('ID가 필요합니다', false);
+    setMsg('조회 중…', true);
+    try{
+      const j = await fetchJSON(`${BASE}/repos?owner=${encodeURIComponent(owner)}`);
+      const items = Array.isArray(j.items) ? j.items : (Array.isArray(j) ? j : []);
+      repoSel.innerHTML = '';
+      items.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.name; opt.textContent = r.name;
+        repoSel.appendChild(opt);
+      });
+      const wanted = 'gpt5-conductor';
+      const hit = Array.from(repoSel.options).find(o => o.value === wanted);
+      repoSel.value = hit ? wanted : (repoSel.options[0]?.value || '');
+      setMsg(`레포 ${items.length}개`, true);
+    }catch(e){
+      setMsg(`조회 실패: ${e.message||e}`, false);
+    }
+  }
+
+  async function doConnect(){
+    const owner = ownerEl.value.trim();
+    const repo  = repoSel.value.trim();
+    if (!owner || !repo) return setMsg('ID/프로젝트 선택 필요', false);
+    setMsg('연결 중…');
+    try{
+      const j = await fetchJSON(`${BASE}/action/set-repo?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`, { method:'POST' });
+      if (j && j.ok){
+        setMsg(`연결 완료 → ${j.repo}`, true);
+        try { localStorage.setItem('GH_OWNER', owner); localStorage.setItem('GH_REPO', repo); } catch(_){}
+      } else {
+        setMsg('연결 실패', false);
+      }
+    }catch(e){
+      setMsg(`연결 오류: ${e.message||e}`, false);
+    }
+  }
+
+  row.querySelector('#ghFetch').addEventListener('click', doFetchRepos);
+  row.querySelector('#ghConnect').addEventListener('click', doConnect);
+  doFetchRepos().catch(()=>{});
+})();
+</script>
+
+  <!-- 센티넬: API BASE + 브릿지 주입(멱등) -->
+  <!-- KOBO-SENTINEL:ghmon-boot-v1 -->
+  <script>
+    window.GHMON = Object.assign({API_BASE:'http://localhost:5182/api/ghmon', MODE:'DEV', FORCE_OFFLINE:false}, window.GHMON||{});
+  </script>
+  <script src="./public/xterm/xterm.js"></script>
+  <script src="./GitHub-Mon-bridge.js"></script>
+<!-- __G5_SENTINEL:GHMON_v1.1__ (삭제 금지 / 재주입시 중복 방지) -->
+<script>window.GHMON_MODE="DEV";window.GHMON_BASE="http://localhost:5182/api/ghmon";</script>
+<script src="./GitHub-Mon-bridge.js" data-ghmon-bridge defer></script>
+<script>
+/* Overview 카드 와이어링 전용 (멱등) */
+(() => {
+  if (window.__OV_CARD_WIRED__) return; window.__OV_CARD_WIRED__ = true;
+
+  const BASE = (window.GHMON_BASE || "http://localhost:5182/api/ghmon").replace(/\/$/,"");
+  const sec  = document.getElementById('sec-overview'); if (!sec) return;
+
+  // KPI 엘리먼트
+  const elOpenPRs   = document.getElementById('ov-open-prs');   // 오픈 PR
+  const elPRFirst   = document.getElementById('ov-pr-first');   // PR 첫 응답(시간) - 휴리스틱
+  const elActionsOk = document.getElementById('ov-actions-ok'); // Actions 성공률
+  const elSecHigh   = document.getElementById('ov-sec-high');   // 보안 High+
+
+  // 보안 High+ 테이블
+  const table = sec.querySelector('#secHighTable');
+  const thead = table?.querySelector('thead');
+  const tbody = table?.querySelector('tbody');
+
+  // 헤더가 엉켜 있는 경우(예: number/title 등) 이 카드 안에서만 정상 헤더로 교체
+  if (thead && /number\s*title\s*user\.login/i.test(thead.textContent)) {
+    thead.innerHTML = '<tr><th>Repo</th><th>Type</th><th>Item</th><th>Severity</th><th>State</th></tr>';
+  }
+
+  const jget = (u) => fetch(u, {cache:'no-store'}).then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+  const pct  = (a,b)=> b? Math.round(a/b*100)+'%':'0%';
+
+  async function refreshOnce(){
+    // 1) 핵심 데이터 동시 수집
+    const [ov, runs, alerts, prs] = await Promise.all([
+      jget(`${BASE}/overview`).catch(()=>({items:[]})),
+      jget(`${BASE}/actions/runs?limit=50`).catch(()=>({items:[]})),
+      jget(`${BASE}/alerts`).catch(()=>({items:[] })),     // 권한/에디션에 따라 빈 배열일 수 있음
+      jget(`${BASE}/prs?state=open&limit=50`).catch(()=>({items:[]}))
+    ]);
+
+    // 2) 오픈 PR
+    const ovItems = Array.isArray(ov?.items) ? ov.items : [];
+    const openPRs = Number(ovItems.find(x=>x.name==='open_prs')?.value ?? 0);
+    if (elOpenPRs) elOpenPRs.textContent = String(openPRs);
+
+    // 3) Actions 성공률
+    const runsArr = Array.isArray(runs?.items) ? runs.items : (Array.isArray(runs) ? runs : []);
+    const total   = runsArr.length;
+    const succ    = runsArr.filter(r => r.conclusion === 'success').length;
+    if (elActionsOk) elActionsOk.textContent = pct(succ, total);
+
+    // 4) 보안 High+
+    const alArr = Array.isArray(alerts?.items) ? alerts.items : (Array.isArray(alerts) ? alerts : []);
+    const highPlus = alArr.filter(a => ['high','critical'].includes(String(a.severity||'').toLowerCase()));
+    if (elSecHigh) elSecHigh.textContent = String(highPlus.length);
+
+    // 표 렌더(이 카드 안에서만)
+    if (tbody){
+      tbody.innerHTML = '';
+      if (highPlus.length === 0){
+        const tr = document.createElement('tr'); const td = document.createElement('td');
+        td.colSpan = 5; td.textContent = 'No high+ alerts'; tr.appendChild(td); tbody.appendChild(tr);
+      } else {
+        for (const al of highPlus){
+          const repo = al.repository?.full_name || al.repo?.name || '';
+          const type = al.rule ? 'Code' : 'Dependency';
+          const item = al.dependency?.package?.name || al.rule?.id || '';
+          const sev  = al.severity || '';
+          const st   = al.state || '';
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${repo}</td><td>${type}</td><td>${item}</td><td>${sev}</td><td>${st}</td>`;
+          tbody.appendChild(tr);
+        }
+      }
+    }
+
+    // 5) PR 첫 응답(시간) — 간단 휴리스틱: 열린 PR들의 "생성 후 경과 시간" 평균(시)
+    const prArr = Array.isArray(prs?.items) ? prs.items : (Array.isArray(prs) ? prs : []);
+    const hours = prArr
+      .map(p => { const t = Date.parse(p.created_at||''); return isFinite(t) ? (Date.now()-t)/36e5 : null; })
+      .filter(v => v!=null);
+    const avgH  = hours.length ? Math.round(hours.reduce((a,b)=>a+b)/hours.length) : 0;
+    if (elPRFirst) elPRFirst.textContent = `${avgH}h`;
+  }
+
+  // 최초 1회 + 30초마다 갱신
+  const run = () => refreshOnce().catch(e => console.error('[overview]', e));
+  run(); setInterval(run, 30000);
+})();
+</script>
+<script>
+/* Security 카드 와이어링 + 쓰기 액션 + 폴백(추적 이슈 렌더) */
+(()=>{ if (window.__SEC_CARD_WIRED__) console.warn('rebind SEC card'); window.__SEC_CARD_WIRED__=true;
+
+  const BASE=(window.GHMON_BASE||"http://localhost:5182/api/ghmon").replace(/\/$/,"");
+  const sec=document.getElementById("sec-security"); if(!sec) return;
+  const tabbar=sec.querySelector(".tabbar");
+  const tbody =sec.querySelector("#secTable tbody");
+  const thead =sec.querySelector("#secTable thead");
+  const actions=sec.querySelectorAll("[data-sec-action]");
+  let view="code";    // code | deps | secret
+  let rows=[];        // 현재 탭 데이터 (API or 폴백)
+  let sel=null;       // 선택 알림(또는 추적 이슈 기반 가짜 행)
+
+  const setHead=(cols)=>{ thead.innerHTML="<tr>"+cols.map(c=>`<th>${c}</th>`).join("")+"</tr>"; };
+  const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+  const fmt=(s)=>{ try{ return new Date(s).toISOString().replace("T"," ").replace("Z",""); }catch{ return s||""; } };
+  const jget=(u)=>fetch(u,{cache:"no-store"}).then(r=>{ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); });
+  const jpost=(u,body)=>fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})}).then(r=>r.json());
+
+  // ---- 폴백: /issues 에서 sec-alert-<type>-<num> 태그를 찾아 행으로 변환
+  async function fallbackFromIssues(typeKey){
+    const j = await jget(`${BASE}/issues?state=open&limit=100`).catch(()=>({items:[]}));
+    const arr = Array.isArray(j.items) ? j.items : (Array.isArray(j) ? j : []);
+    const rx = /sec-alert-(code|deps|secret)-(\d+)/i;
+    const out=[];
+    for(const it of arr){
+      const src = (it.title||"") + "\n" + (it.body||"");
+      const m = src.match(rx); if(!m) continue;
+      const typ = m[1].toLowerCase(), num = Number(m[2]);
+      if (typeKey && typ!==typeKey) continue;
+      if (typ==="deps"){
+        out.push({ number:num, state:"tracking-issue", severity:"", dependency:{package:{name:"(tracking)"}}, manifest:"", created_at:it.created_at, html_url:it.html_url, from:"issue" });
+      } else if (typ==="code"){
+        out.push({ number:num, state:"tracking-issue", rule:{id:"(tracking)", severity:""}, created_at:it.created_at, html_url:it.html_url, from:"issue" });
+      } else {
+        out.push({ number:num, secret_type:"(tracking)", state:"tracking-issue", created_at:it.created_at, html_url:it.html_url, from:"issue" });
+      }
+    }
+    return out;
+  }
+
+  function render(){
+    tbody.innerHTML=""; sel=null;
+    if(!rows.length){
+      const tr=document.createElement("tr"); const td=document.createElement("td");
+      td.colSpan=7; td.textContent="No data (알림 없음 — ‘이슈 생성’으로 테스트용 추적 이슈를 만든 뒤 새로고침하세요)"; tr.appendChild(td); tbody.appendChild(tr); return;
+    }
+    rows.forEach(x=>{
+      const tr=document.createElement("tr"); tr.tabIndex=0;
+      tr.addEventListener("click",()=>{ sel=x; tbody.querySelectorAll("tr").forEach(r=>r.classList.remove("active")); tr.classList.add("active"); });
+      if(view==="deps"){
+        const a=document.createElement("a"); a.href=x.html_url||"#"; a.target="_blank"; a.rel="noopener"; a.textContent="open";
+        tr.innerHTML=`<td>${esc(x.number||"")}</td><td>${esc(x.state||"")}</td><td>${esc(x.severity||"")}</td>
+                      <td>${esc(x.dependency?.package?.name||"")}</td><td>${esc(x.dependency?.manifest||"")}</td>
+                      <td>${esc(fmt(x.created_at||""))}</td><td></td>`;
+        tr.lastElementChild.appendChild(a);
+      }else if(view==="code"){
+        const a=document.createElement("a"); a.href=x.html_url||"#"; a.target="_blank"; a.rel="noopener"; a.textContent="open";
+        const ruleId = x.rule?.id || (x.from==="issue" ? "(tracking)" : "");
+        const sev    = x.rule?.severity || (x.from==="issue" ? "" : "");
+        tr.innerHTML=`<td>${esc(x.number||"")}</td><td>${esc(x.state||"")}</td>
+                      <td>${esc(ruleId)}</td><td>${esc(sev)}</td>
+                      <td>${esc(fmt(x.created_at||""))}</td><td></td>`;
+        tr.lastElementChild.appendChild(a);
+      }else{
+        const a=document.createElement("a"); a.href=x.html_url||"#"; a.target="_blank"; a.rel="noopener"; a.textContent="open";
+        const stype = x.secret_type || (x.from==="issue" ? "(tracking)" : "");
+        tr.innerHTML=`<td>${esc(x.number||"")}</td><td>${esc(stype)}</td>
+                      <td>${esc(x.state||"")}</td><td>${esc(fmt(x.created_at||""))}</td><td></td>`;
+        tr.lastElementChild.appendChild(a);
+      }
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function load(tab){
+    view=tab;
+    if(tab==="deps")      setHead(["number","state","severity","dependency","manifest","created_at","html_url"]);
+    else if(tab==="code") setHead(["number","state","rule_id","severity","created_at","html_url"]);
+    else                  setHead(["number","secret_type","state","created_at","html_url"]);
+
+    // 1차: 실제 보안 API
+    let j;
+    if(tab==="deps")      j=await jget(`${BASE}/security/deps`).catch(()=>({items:[]}));
+    else if(tab==="code") j=await jget(`${BASE}/security/code`).catch(()=>({items:[]}));
+    else                  j=await jget(`${BASE}/security/secret`).catch(()=>({items:[]}));
+    let arr = Array.isArray(j.items) ? j.items : (Array.isArray(j) ? j : []);
+
+    // 2차: 알림이 0개라면 폴백(추적 이슈)로 대체
+    if (!arr.length){
+      arr = await fallbackFromIssues(tab);
+    }
+
+    // 3차(옵션): 폴백도 없다면 데모 2행 주입해 UI/액션 테스트 가능
+    if (!arr.length && window.SEC_DEMO){
+      const now=new Date().toISOString();
+      if (tab==="code")   arr=[{number:101,state:"tracking-issue",rule:{id:"(demo)",severity:""},created_at:now,html_url:"#",from:"issue"}];
+      if (tab==="deps")   arr=[{number:201,state:"tracking-issue",severity:"",dependency:{package:{name:"(demo)"}},manifest:"",created_at:now,html_url:"#",from:"issue"}];
+      if (tab==="secret") arr=[{number:301,secret_type:"(demo)",state:"tracking-issue",created_at:now,html_url:"#",from:"issue"}];
+    }
+
+    rows = arr;
+    render();
+  }
+
+  tabbar.addEventListener("click",(ev)=>{
+    const t=ev.target.closest(".tab"); if(!t) return;
+    tabbar.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x===t));
+    load(t.dataset.sec).catch(e=>console.error("[sec load]", e));
+  });
+
+  // 액션: create_issues / assign / label / dismiss_with_reason
+  actions.forEach(b=>{
+    b.addEventListener("click", async ()=>{
+      const action=b.dataset.secAction;
+      if (!sel && action!=="create_issues"){ alert("행을 먼저 선택하세요."); return; }
+      const num = sel?.number || prompt("알림 번호(number)?"); if (!num) return;
+
+      let body={}, qs=`?type=${encodeURIComponent(view)}&number=${encodeURIComponent(num)}`;
+      if (action==="assign"){
+        const p = prompt("담당자(쉼표로 여러 명):", "");
+        if (!p) return; body.assignees = p.split(",").map(s=>s.trim()).filter(Boolean);
+      } else if (action==="label"){
+        const p = prompt("라벨(쉼표):", "security,triage");
+        if (!p) return; body.labels = p.split(",").map(s=>s.trim()).filter(Boolean);
+      } else if (action==="dismiss_with_reason"){
+        const reason  = prompt("사유(reason): 예) false_positive / won't fix / fix_started / tolerable_risk / revoked 등", "");
+        const comment = prompt("코멘트(optional):", "");
+        body.reason  = reason||""; body.comment = comment||"";
+      } else if (action==="create_issues"){
+        const pLab = prompt("라벨(쉼표, optional):", "security,sec/"+view); if (pLab) body.labels = pLab.split(",").map(s=>s.trim()).filter(Boolean);
+        const pAsg = prompt("담당자(쉼표, optional):", ""); if (pAsg) body.assignees = pAsg.split(",").map(s=>s.trim()).filter(Boolean);
+      }
+
+      b.disabled=true;
+      try{
+        const r = await jpost(`${BASE}/action/security@${encodeURIComponent(action)}${qs}`, body);
+        console.info("[SEC action]", action, r);
+        if (action==="dismiss_with_reason" && r?.error){ alert(`해제 실패: ${r.error} (존재하지 않는 알림번호일 수 있음)`); }
+        else alert(`${action} 완료: ${r?.ok ? "OK" : (r?.error||"실패")}`);
+        // 목록 갱신(이슈 생성/해제 후)
+        if (action==="create_issues" || action==="dismiss_with_reason") load(view).catch(()=>{});
+      } finally { b.disabled=false; }
+    });
+  });
+
+  // 부팅
+  const boot = tabbar.querySelector(".tab.active")?.dataset.sec || "code";
+  load(boot).catch(e=>console.error("[sec load]", e));
+})();
+</script>
+<script>
+/* Shell Ops 카드 전용 와이어링 (멱등) */
+(()=>{ if (window.__SHELL_CARD_WIRED__) return; window.__SHELL_CARD_WIRED__=true;
+
+  const BASE=(window.GHMON_BASE||"http://localhost:5182/api/ghmon").replace(/\/$/,"");
+  const sec=document.getElementById("sec-shell"); if(!sec) return;
+
+  function $(s,r=document){ return r.querySelector(s); }
+
+  function wireTerm(id){
+    const box   = $("#term-"+id);
+    const logEl = $("#term-"+id+"-log");
+    const inEl  = $("#term-"+id+"-in");
+    const btns  = sec.querySelectorAll(`[data-shell="${id}"]`);
+    if (!box || !logEl || !inEl) return;
+
+    const log = (s)=>{ logEl.textContent += (s.endsWith("\n")?s:s+"\n"); logEl.parentElement.scrollTop = logEl.parentElement.scrollHeight; };
+
+    async function jget(u,opt){ const r=await fetch(u,opt||{cache:"no-store"}); if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }
+    async function jpost(u,body){ const r=await fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})}); if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); }
+
+    // 버튼들
+    btns.forEach(b=>{
+      b.addEventListener("click", async ()=>{
+        const cmd=b.dataset.cmd;
+        if (cmd==="connect"){
+          const r = await jpost(`${BASE}/shell/connect?id=${id}`);
+          inEl.disabled=false; inEl.placeholder="명령 입력 후 Enter"; log(`[TERM ${id}] connected`);
+        }
+        else if (cmd==="stop"){
+          const r = await jpost(`${BASE}/shell/stop?id=${id}`);
+          log(`[TERM ${id}] stopped`);
+        }
+        else if (cmd==="copy"){
+          try{ await navigator.clipboard.writeText(logEl.textContent||""); log(`[TERM ${id}] copied`);}catch(e){ log(`[TERM ${id}] copy fail: ${e.message||e}`)}
+        }
+        else if (cmd==="clear"){
+          logEl.textContent=""; log(`[TERM ${id}] cleared`);
+        }
+      });
+    });
+
+    // Enter로 실행
+    inEl.addEventListener("keydown", async (e)=>{
+      if (e.key!=="Enter") return;
+      const cmd = inEl.value.trim(); if(!cmd) return;
+      inEl.value=""; inEl.disabled=true;
+      log(`> ${cmd}`);
+      try{
+        const r = await jpost(`${BASE}/shell/exec?id=${id}`, { cmd });
+        if (r.out) log(r.out);
+        if (r.err) log("[stderr] " + r.err);
+        log(`[exit ${r.code}]`);
+      }catch(e){
+        log(`[error] ${e.message||e}`);
+      }finally{
+        inEl.disabled=false; inEl.focus();
+      }
+    });
+  }
+
+  wireTerm("1");
+  wireTerm("2");
+
+  // 카드 진입 시 헬스 체크 한번
+  fetch(`${BASE}/shell/health`).then(r=>r.json()).then(j=>console.log("[shell health]", j)).catch(console.error);
+})();
+</script>
+<script>
+/* Release 카드 전용 와이어링 (멱등) */
+(()=>{ if (window.__REL_CARD_WIRED__) return; window.__REL_CARD_WIRED__=true;
+
+  const BASE=(window.GHMON_BASE||"http://localhost:5182/api/ghmon").replace(/\/$/,"");
+  const sec=document.querySelector("#sec-release"); if(!sec) return;
+
+  const $ = (s,r=sec)=>r.querySelector(s);
+  const $v = id => (sec.querySelector(id)?.value || "").trim();
+
+  const elTag   = $("#relVer");
+  const elBranch= $("#relBranch");
+  const elNotes = $("#relNotes");
+
+  function toast(msg, ok=true){ console[ok?"log":"warn"]("[release]", msg); alert(msg); }
+
+  async function jpost(u, payload){
+    const r = await fetch(u, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload||{}) });
+    const j = await r.json().catch(()=>({}));
+    if (!r.ok || j.ok===false) throw new Error(j.message || ("HTTP "+r.status));
+    return j;
+  }
+
+  // 버튼 핸들러
+  sec.addEventListener("click", async (ev)=>{
+    const b = ev.target.closest("[data-release-action]"); if (!b) return;
+    const act = b.dataset.releaseAction;
+
+    const tag = $v("#relVer") || prompt("버전 태그? (예: v1.2.3)", "");
+    const target = $v("#relBranch") || "main";
+    const notes = elNotes.value.trim();
+
+    try {
+      b.disabled = true;
+      if (act==="create_release"){
+        const j = await jpost(`${BASE}/release/create`, { tag, target, notes });
+        if (!notes && j?.release){ // 서버가 자동 생성했으면 에디터에 채워줌
+          try{ elNotes.value = (await (await fetch(`${BASE}/release/create`, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ tag, target, notes:"" }) })).json()).release?.body || elNotes.value; }catch(_){}
+        }
+        toast(`릴리즈 생성 완료: ${j.release?.html_url || tag}`);
+      }
+      else if (act==="trigger_deploy"){
+        const j = await jpost(`${BASE}/release/trigger-deploy`, { tag, target, notes });
+        toast(`배포 디스패치 완료: ${j.event_type} / ${target}`);
+      }
+      else if (act==="create_backport"){
+        const targetBack = prompt("백포트 타깃 브랜치(예: release/1.0)", target.startsWith("release")? target : "release/1.0") || target;
+        const j = await jpost(`${BASE}/release/backport`, { tag, target: targetBack });
+        toast(`백포트 이슈 생성: #${j.issue?.number}`);
+      }
+    } catch(e){
+      toast(`실패: ${e.message||e}`, false);
+    } finally {
+      b.disabled = false;
+    }
+  });
+})();
+</script>
+<script>
+/* 메시지1.txt 카드 전용 와이어링 (알림 + API Base) — 멱등 */
+(()=>{ if (window.__MSG1_CARD_WIRED__) return; window.__MSG1_CARD_WIRED__=true;
+
+  const $=(s,r=document)=>r.querySelector(s);
+  const BASE_DEFAULT='http://localhost:5182/api/ghmon';
+
+  // 요소 바인딩 (메시지1.txt 카드)
+  const cbSlack = $('#notifSlack');
+  const cbEmail = $('#notifEmail');
+  const cbWeb   = $('#notifWeb');
+  const baseInput = $('#apiBase');
+  const applyBtn  = $('#applyApi');
+
+  // 저장/로드 (로컬만)
+  const savePrefs = ()=> localStorage.setItem('GHMON_MSG_PREFS', JSON.stringify({
+    slack: !!cbSlack?.checked, email: !!cbEmail?.checked, web: !!cbWeb?.checked
+  }));
+  const loadPrefs = ()=> {
+    try{
+      const p = JSON.parse(localStorage.getItem('GHMON_MSG_PREFS')||'{}');
+      if (cbSlack) cbSlack.checked = !!p.slack;
+      if (cbEmail) cbEmail.checked = !!p.email;
+      if (cbWeb)   cbWeb.checked   = !!p.web;
+    }catch{}
+  };
+
+  const setBase = (b)=>{
+    const v = (b||BASE_DEFAULT).trim().replace(/\/$/,'');
+    window.GHMON_BASE = v;
+    localStorage.setItem('GHMON_BASE', v);
+  };
+
+  async function jget(u){ const r=await fetch(u,{cache:'no-store'}); return r.json(); }
+  async function jpost(u,body){ const r=await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}); return r.json(); }
+
+  // API Base 적용: 헬스 확인 후 저장/반영
+  applyBtn?.addEventListener('click', async ()=>{
+    const want=(baseInput?.value||BASE_DEFAULT).trim();
+    applyBtn.disabled=true;
+    try{
+      const h=await jget(want.replace(/\/$/,'')+'/health');
+      if (h?.ok){ setBase(want); console.log('[msg1] base applied', want); alert('API Base 적용됨'); }
+      else { alert('헬스 실패: '+JSON.stringify(h)); }
+    }catch(e){ alert('헬스 실패: '+(e.message||e)); }
+    finally{ applyBtn.disabled=false; }
+  });
+
+  // 알림 토글: 로컬 저장 + 서버에 선호 전송(기존 action 자리표시자 사용)
+  [cbSlack,cbEmail,cbWeb].forEach(cb=>cb&&cb.addEventListener('change', async ()=>{
+    savePrefs();
+    try{
+      const B=(window.GHMON_BASE||baseInput?.value||BASE_DEFAULT).replace(/\/$/,'');
+      const prefs={slack:!!cbSlack.checked,email:!!cbEmail.checked,web:!!cbWeb.checked};
+      await jpost(B+'/action/notif@prefs', { prefs });
+      console.log('[msg1] notif prefs sent', prefs);
+    }catch(e){ console.warn('[msg1] notif prefs send fail', e); }
+  }));
+
+  // 초기화: 저장된 값 로드 + 기본 BASE 주입
+  (()=>{
+    baseInput && (baseInput.value = localStorage.getItem('GHMON_BASE') || BASE_DEFAULT);
+    loadPrefs();
+  })();
+
+  // ✅ 테스트용 공개 함수(F12에서 호출)
+  window.__GHMON = window.__GHMON || {};
+  window.__GHMON.testNotify = async function(message='테스트 알림입니다'){
+    const B=(window.GHMON_BASE||baseInput?.value||BASE_DEFAULT).replace(/\/$/,'');
+    const prefs={slack:!!cbSlack?.checked,email:!!cbEmail?.checked,web:!!cbWeb?.checked};
+    const r = await jpost(B+'/action/notif@test', { message, prefs });
+    console.log('[msg1] testNotify', r);
+    alert('테스트 전송 요청 완료');
+  };
+})();
+</script>
+<style>
+  /* 사이드바 하단 로고 고정 */
+  .sidebar { position: relative; padding-bottom: 96px; } /* 마지막 버튼과 겹치지 않게 여백 */
+  .sidebar-logo {
+    position: absolute;
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
+    width: 128px;               /* 필요 시 96~144px로 조절 */
+    display: flex; align-items: center; justify-content: center;
+    opacity: .95;
+    pointer-events: none;        /* 버튼 클릭 방해 금지 */
+  }
+  .sidebar-logo img {
+    max-width: 100%; height: auto;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,.25));
+  }
+
+  /* 화면이 너무 낮은 경우 자동 숨김(선택사항) */
+  @media (max-height: 600px) {
+    .sidebar-logo { display: none; }
+  }
+
+  /* 수동 다크 테마를 쓰는 경우(예: body.theme-dark 클래스) 강제 전환 예시 */
+  body.theme-dark .sidebar-logo picture > img {
+    content: url("public/img/STS_LOGO-크림색.png");
+  }
+</style>
+<script>
+/* GitHub App / 권한 카드: App ID & Install ID 저장/복원 (멱등) */
+(()=>{ if (window.__APP_CARD_WIRED__) return; window.__APP_CARD_WIRED__=true;
+
+  const BASE=(window.GHMON_BASE||'http://localhost:5182/api/ghmon').replace(/\/$/,'');
+  const $ = (s,r=document)=>r.querySelector(s);
+  const appIdEl = $('#appId');
+  const instIdEl= $('#instId');
+  const msgEl   = $('#ghMsg');          // 카드에 이미 있는 작은 상태표시
+  const btnFetch= $('#ghFetch');
+  const btnConn = $('#ghConnect');
+
+  const LS_APP_ID   = 'GH_APP_ID';
+  const LS_INST_ID  = 'GH_INSTALL_ID';
+
+  function toast(text, ok=true){
+    if (!msgEl) return;
+    const old = msgEl.textContent;
+    msgEl.textContent = text;
+    msgEl.style.color = ok ? 'rgb(34,197,94)' : '#ef4444';
+    setTimeout(()=>{ msgEl.textContent = old; msgEl.style.color='rgb(34,197,94)'; }, 1800);
+  }
+
+  function load(){
+    try{
+      const a = localStorage.getItem(LS_APP_ID);
+      const i = localStorage.getItem(LS_INST_ID);
+      if (appIdEl && a) appIdEl.value = a;
+      if (instIdEl && i) instIdEl.value = i;
+    }catch{}
+  }
+
+  async function save(pushServer){
+    const appId = (appIdEl?.value||'').trim();
+    const instId= (instIdEl?.value||'').trim();
+    try{
+      if (appId)  localStorage.setItem(LS_APP_ID, appId); else localStorage.removeItem(LS_APP_ID);
+      if (instId) localStorage.setItem(LS_INST_ID, instId); else localStorage.removeItem(LS_INST_ID);
+      if (pushServer){
+        // 서버에는 자리표시자 액션으로 전송(서버 변경 없이 OK 응답)
+        await fetch(BASE + '/action/set-app', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ appId, installationId: instId })
+        }).catch(()=>{});
+      }
+      toast('저장됨');
+    }catch(e){
+      toast('저장 실패: ' + (e.message||e), false);
+    }
+  }
+
+  // 입력 변화 시 자동 저장(디바운스)
+  let t=null;
+  [appIdEl, instIdEl].forEach(el=>el && el.addEventListener('input', ()=>{
+    clearTimeout(t); t=setTimeout(()=>save(false), 300);
+  }));
+  [appIdEl, instIdEl].forEach(el=>el && el.addEventListener('blur', ()=>save(false)));
+
+  // 기존 버튼에 훅 걸어서 저장 + 서버 전달
+  btnFetch && btnFetch.addEventListener('click', ()=>save(true));
+  btnConn  && btnConn .addEventListener('click', ()=>save(true));
+
+  // 초기 로드
+  load();
+
+  // F12 테스트용 헬퍼
+  window.__GHMON = window.__GHMON || {};
+  window.__GHMON.getAppInfo = ()=>({
+    appId: localStorage.getItem(LS_APP_ID)||'',
+    installationId: localStorage.getItem(LS_INST_ID)||''
+  });
+})();
+</script>
+<script>
+(()=>{ if (window.__REPO_CARD_WIRED__) return; window.__REPO_CARD_WIRED__=true;
+  const $=(s,r=document)=>r.querySelector(s);
+  const BASE=(window.GHMON_BASE||'http://localhost:5182/api/ghmon').replace(/\/$/,'');
+  const ownerEl = $('#ghOwner');
+  const selEl   = $('#ghRepoSel');
+  const msgEl   = $('#ghMsg');
+  const btnFetch= $('#ghFetch');
+  const btnConn = $('#ghConnect');
+
+  async function jget(u){ const r=await fetch(u,{cache:'no-store'}); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+  async function jpost(u){ const r=await fetch(u,{method:'POST'}); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+
+  async function loadRepos(){
+    const owner=(ownerEl?.value||'').trim(); if(!owner) return;
+    btnFetch && (btnFetch.disabled=true); msg('조회중…');
+    try{
+      const j = await jget(`${BASE}/repos?owner=${encodeURIComponent(owner)}`);
+      const items = Array.isArray(j.items)? j.items : (Array.isArray(j)? j: []);
+      // 선택 박스 갱신
+      selEl.innerHTML='';
+      items.forEach(r=>{
+        const opt=document.createElement('option');
+        opt.value=r.name; opt.textContent=r.name+(r.private?' (private)':'');
+        selEl.appendChild(opt);
+      });
+      msg(`레포 ${items.length}개`);
+      // kobong-orchestrator 자동 선택(있다면)
+      const want='kobong-orchestrator';
+      const hit=[...selEl.options].find(o=>o.value===want);
+      if (hit) selEl.value=want;
+    }catch(e){ msg('조회 실패', true); console.warn(e); }
+    finally{ btnFetch && (btnFetch.disabled=false); }
+  }
+  function msg(s,err=false){ if(!msgEl) return; msgEl.textContent=s; msgEl.style.color=err?'#ef4444':'rgb(34,197,94)'; }
+
+  btnFetch && btnFetch.addEventListener('click', (ev)=>{ ev.preventDefault(); loadRepos(); });
+  btnConn  && btnConn .addEventListener('click', async ()=>{
+    const owner=(ownerEl?.value||'').trim(); const repo=selEl?.value;
+    if(!owner || !repo) return msg('owner/repo 확인', true);
+    try{
+      btnConn.disabled=true; msg('연결중…');
+      const j = await jpost(`${BASE}/action/set-repo?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`);
+      msg('연결 OK');
+    }catch(e){ msg('연결 실패', true); }
+    finally{ btnConn.disabled=false; }
+  });
+
+  // F12 테스트용
+  window.__GHMON = window.__GHMON || {};
+  window.__GHMON.fetchRepos = loadRepos;
+})();
+</script>
+
+<!-- __G5_SENTINEL:GHMON_v1.1__ (삭제 금지 / 멱등) -->
+<script>window.GHMON_API_BASE="http://localhost:5182";window.GHMON_MODE="DEV";</script>
+<script src="./ghmon-bridge.js" defer></script>
+</body>
+</html>
+

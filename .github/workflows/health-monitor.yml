@@ -1,0 +1,58 @@
+# NO-SHELL
+name: Health Monitor
+
+on:
+  workflow_dispatch:
+    inputs:
+      port:
+        description: "health-server port"
+        required: false
+        default: "8080"
+  schedule:
+    # Thu 00:00 UTC == Thu 09:00 KST
+    - cron: "0 0 * * THU"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: health-monitor
+  cancel-in-progress: false
+
+jobs:
+  smoke-health:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Start health-server
+        run: |
+          set -euo pipefail
+          PORT="${{ github.event.inputs.port || '8080' }}"
+          node -v
+          PORT="$PORT" nohup node scripts/health-server.mjs >/tmp/health.out 2>/tmp/health.err & echo $! > /tmp/health.pid
+          echo "PORT=$PORT" >> "$GITHUB_ENV"
+          for i in $(seq 1 30); do
+            if curl -fsS "http://localhost:$PORT/health" >/dev/null 2>&1; then
+              echo "health up after $i tries"; break
+            fi
+            sleep 1
+          done
+
+      - name: Check /health
+        run: |
+          set -euo pipefail
+          curl -fsS "http://localhost:$PORT/health" | tee /tmp/health.json
+          echo "### Health JSON" >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/health.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stop server
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f /tmp/health.pid ]; then
+            kill "$(cat /tmp/health.pid)" || true
+          fi

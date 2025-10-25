@@ -1,0 +1,7 @@
+{
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "powershell.powerShellDefaultVersion": "PowerShell (x64)",
+  "powershell.codeFormatting.useCorrectCasing": true,
+  "powershell.codeFormatting.addWhitespaceAroundPipe": true
+}

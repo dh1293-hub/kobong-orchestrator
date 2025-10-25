@@ -1,0 +1,192 @@
+<# 
+Install-OrchMon-AutoStart.ps1
+- 부팅(Startup)마다 MOCK 서버 자동 기동(5193) + 헬스 확인
+- 로그온(Logon)마다 브라우저로 UI/헬스/API 자동 오픈
+- 수동 실행도 가능(-Run Server | UI)
+#>
+
+[CmdletBinding()]
+param(
+  [switch]$Install,
+  [switch]$Remove,
+  [ValidateSet('Server','UI')]
+  [string]$Run,
+  [switch]$Now
+)
+
+# --- 경로/설정 ---
+$RepoRoot = 'D:\ChatGPT5_AI_Link\dosc\Kobong-Orchestrator-VIP'
+$SrvDir   = Join-Path $RepoRoot 'containers\orch-shells'
+$ServerJs = Join-Path $SrvDir 'server.js'
+$WebHtml  = Join-Path $RepoRoot 'Orchestrator-Monitoring\webui\Orchestrator-Monitoring-Su.html'
+$LogsDir  = Join-Path $RepoRoot 'logs'
+$Port     = 5193
+$Health   = "http://localhost:$Port/health"
+$ApiInfo  = "http://localhost:$Port/api/orchmon"
+$TaskSrv  = 'OrchMon_Server_AutoStart'
+$TaskUI   = 'OrchMon_UI_AutoOpen'
+$SelfPath = $MyInvocation.MyCommand.Path
+
+New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
+
+# --- 유틸 ---
+function Write-Log($msg){
+  $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $msg
+  $line | Tee-Object -FilePath (Join-Path $LogsDir "autostart.log") -Append | Out-Null
+}
+
+function Get-NodePath{
+  $cands = @(
+    'D:\tools\node18\node.exe',
+    (Join-Path $env:ProgramFiles 'nodejs\node.exe'),
+    (Join-Path ${env:ProgramFiles(x86)} 'nodejs\node.exe'),
+    'node.exe','node'
+  )
+  foreach($p in $cands){ if(Get-Command $p -ErrorAction SilentlyContinue){ return (Get-Command $p).Source } }
+  return $null
+}
+
+function Test-PortUsed($Port){
+  (Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -eq $Port -and $_.State -in 'Listen','Established' }).Count -gt 0
+}
+
+function Stop-ByPort($Port){
+  $pids = (Get-NetTCPConnection -ErrorAction SilentlyContinue | Where-Object LocalPort -eq $Port | Select-Object -Expand OwningProcess -Unique) | Sort-Object -Unique
+  foreach($procId in $pids){ try{ Stop-Process -Id $procId -Force -ErrorAction Stop; Write-Log "Killed PID=$procId using :$Port" }catch{} }
+}
+
+function Wait-HttpOK($Url, [int]$TimeoutSec=90){
+  $t0 = Get-Date
+  do{
+    try{
+      $r = Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 5
+      if($r.StatusCode -ge 200 -and $r.StatusCode -lt 300){ return $true }
+    }catch{}
+    Start-Sleep -Milliseconds 800
+  } while((Get-Date) - $t0 -lt [TimeSpan]::FromSeconds($TimeoutSec))
+  return $false
+}
+
+function Open-Default($Url){
+  Start-Process cmd "/c start `"$Url`""
+}
+
+# --- 런타임 절차 ---
+function Run-Server{
+  Write-Log "=== SERVER RUN @ :$Port ==="
+  if(!(Test-Path $ServerJs)){ Write-Log "server.js not found: $ServerJs"; return }
+  $node = Get-NodePath
+  if(!$node){ Write-Log "Node.exe not found"; return }
+
+  # 포트 선점 정리(재부팅 직후엔 비어있을 가능성 높음)
+  if(Test-PortUsed $Port){ Stop-ByPort $Port }
+
+  Push-Location $SrvDir
+  try{
+    $env:PORT = "$Port"
+    $env:MODE = "MOCK"
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $node
+    $psi.Arguments = "`"$ServerJs`""
+    $psi.WorkingDirectory = $SrvDir
+    $psi.CreateNoWindow = $true
+    $psi.UseShellExecute = $false
+    $p = [System.Diagnostics.Process]::Start($psi)
+    Write-Log "Started mock server PID=$($p.Id) → $Health"
+  }catch{
+    Write-Log "Start failed: $($_.Exception.Message)"
+  }finally{
+    Pop-Location
+  }
+
+  if(Wait-HttpOK $Health 90){
+    Write-Log "HEALTH OK: $Health"
+    try{
+      $s = Invoke-WebRequest -UseBasicParsing $ApiInfo -TimeoutSec 5 | Select-Object -Expand Content
+      Write-Log "API INFO: $s"
+    }catch{
+      Write-Log "API INFO fail: $($_.Exception.Message)"
+    }
+  }else{
+    Write-Log "HEALTH TIMEOUT: $Health"
+  }
+}
+
+function Run-UI{
+  Write-Log "=== UI OPEN ==="
+  # 서버가 준비될 때까지 잠깐 대기(최대 90s)
+  if(Wait-HttpOK $Health 90){
+    Write-Log "Health OK, opening browser"
+  }else{
+    Write-Log "Health not ready, opening anyway"
+  }
+
+  # 1) 헬스, 2) API, 3) 로컬 HTML (file://) 탭으로 오픈
+  Open-Default $Health
+  Open-Default $ApiInfo
+  $htmlUrl = 'file:///' + ($WebHtml -replace '\\','/')
+  Open-Default $htmlUrl
+  Write-Log "Opened: $htmlUrl"
+}
+
+# --- 태스크 등록/삭제 ---
+function Install-Tasks{
+  Write-Log "Installing tasks: $TaskSrv, $TaskUI"
+
+  # (A) 서버 태스크: SYSTEM, Startup 트리거
+  $actSrv = New-ScheduledTaskAction -Execute 'pwsh.exe' -Argument "-NoProfile -File `"$SelfPath`" -Run Server"
+  $trgSrv = New-ScheduledTaskTrigger -AtStartup
+  $priSrv = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
+  $setSrv = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopOnIdleEnd -MultipleInstances IgnoreNew -RestartInterval (New-TimeSpan -Minutes 1) -RestartCount 3
+
+  try{
+    if(Get-ScheduledTask -TaskName $TaskSrv -ErrorAction SilentlyContinue){ Unregister-ScheduledTask -TaskName $TaskSrv -Confirm:$false | Out-Null }
+    Register-ScheduledTask -TaskName $TaskSrv -Action $actSrv -Trigger $trgSrv -Principal $priSrv -Settings $setSrv | Out-Null
+    Write-Log "Installed: $TaskSrv (SYSTEM @ Startup)"
+  }catch{ Write-Log "Failed install ${TaskSrv}: $($_.Exception.Message)" }
+
+  # (B) UI 태스크: 현재 사용자, Logon 트리거
+  $me = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+  $actUI = New-ScheduledTaskAction -Execute 'pwsh.exe' -Argument "-NoProfile -File `"$SelfPath`" -Run UI"
+  $trgUI = New-ScheduledTaskTrigger -AtLogOn
+  $priUI = New-ScheduledTaskPrincipal -UserId $me -RunLevel Highest
+  $setUI = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopOnIdleEnd -MultipleInstances IgnoreNew
+
+  try{
+    if(Get-ScheduledTask -TaskName $TaskUI -ErrorAction SilentlyContinue){ Unregister-ScheduledTask -TaskName $TaskUI -Confirm:$false | Out-Null }
+    Register-ScheduledTask -TaskName $TaskUI -Action $actUI -Trigger $trgUI -Principal $priUI -Settings $setUI | Out-Null
+    Write-Log "Installed: $TaskUI ($me @ Logon)"
+  }catch{ Write-Log "Failed install ${TaskUI}: $($_.Exception.Message)" }
+}
+
+function Remove-Tasks{
+  foreach($t in @($TaskSrv,$TaskUI)){
+    try{ Unregister-ScheduledTask -TaskName $t -Confirm:$false | Out-Null; Write-Log "Removed: $t" }catch{}
+  }
+}
+
+# --- 메인 ---
+if($Install){ Install-Tasks }
+if($Remove){ Remove-Tasks }
+
+switch($Run){
+  'Server' { Run-Server }
+  'UI'     { Run-UI     }
+}
+
+if($Install -and $Now){
+  Run-Server
+  Start-Sleep -Seconds 2
+  Run-UI
+}
+
+if(-not $Install -and -not $Remove -and -not $Run){
+  Write-Host "Usage:"
+  Write-Host "  - 설치:   pwsh -File `"$SelfPath`" -Install [-Now]"
+  Write-Host "  - 제거:   pwsh -File `"$SelfPath`" -Remove"
+  Write-Host "  - 수동실행: Server 또는 UI"
+  Write-Host "             pwsh -File `"$SelfPath`" -Run Server"
+  Write-Host "             pwsh -File `"$SelfPath`" -Run UI"
+}
+
+

@@ -1,0 +1,40 @@
+name: KLC Append to Release
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  append:
+    runs-on: windows-latest
+    permissions:
+      contents: write  # release body 업데이트 권한
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate KLC line (pwsh)
+        id: klc
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $stamp = Get-Date -Format 'yyyyMMddHHmmss'
+          $trace = "g5-$stamp-" + [guid]::NewGuid().ToString('N').Substring(0,6)
+          $msg   = "release-note append"
+          $sha   = [System.Security.Cryptography.SHA256]::Create()
+          $hex   = foreach($b in $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($msg))){ '{0:x2}' -f $b }
+          $anchor= (-join $hex).Substring(0,12)
+          $line  = "KLC | $trace | 0 | 0 | $anchor | $msg"
+          echo "KLC_LINE=$line" >> $env:GITHUB_ENV
+          Write-Host $line
+
+      - name: Append to release notes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { context, github, core } = require('@actions/github');
+            const id = context.payload?.release?.id;
+            if (!id) { core.setFailed('No release in context'); return; }
+            const KLC = process.env.KLC_LINE || 'KLC | g5-NA | 0 | 0 | NA | release-note append';
+            const rel = await github.rest.repos.getRelease({ owner: context.repo.owner, repo: context.repo.repo, release_id: id });
+            const body = (rel.data.body || '') + `\n\n${KLC}\n`;
+            await github.rest.repos.updateRelease({ owner: context.repo.owner, repo: context.repo.repo, release_id: id, body });

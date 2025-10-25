@@ -8,3 +8,29 @@ logs/
 *.log.jsonl
 
 .githooks/*.bak
+.gpt5.lock# kobong internal
+.kobong/
+.rollbacks/
+# node_modules (root/webui)
+node_modules/
+webui/node_modules/
+# local env
+webui/.env.local
+webui/.env.*.local
+
+AUTO-Kobong-Monitoring/
+_deploy/
+
+
+*.env
+
+
+# GHMON env
+GitHub-Monitoring/containers/ghmon-shells/*.env
+
+GitHub-Monitoring/containers/ghmon-shells/*.env
+GitHub-Monitoring/logs/**
+AUTO-Kobong-Monitoring/logs/**
+
+
+.backup/

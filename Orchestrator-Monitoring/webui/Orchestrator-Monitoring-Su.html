@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="ko" data-theme="dark" data-readable="0">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="x-ua-compatible" content="ie=edge" />
+  <title>Orchestrator‑Monitoring — UI</title>
+  <!-- xterm 정적 자산(있으면 사용). 없으면 UI만 표시되고 Shell은 안내 메시지로 대체됩니다. -->
+  <link rel="stylesheet" href="./public/xterm/xterm.css">
+  <style>
+    /* ====== Design Tokens / Theme ====== */
+    :root{
+      --gap:16px;
+      --radius:12px;
+      --pane-h:320px;
+      --focus:#60a5fa;
+      --kpi-h:36px;
+      --aside-w:260px;
+      --font:14px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Noto Sans KR, Apple SD Gothic Neo, sans-serif;
+    }
+    html,body{height:100%}
+    body{margin:0; font:var(--font); -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;}
+    *{box-sizing:border-box}
+
+    /* Theme palettes (OKLCH-ish approximations) */
+    [data-theme="dark"]{
+      --bg:#0b1220; --surface:#0f172a; --panel:#0b1220;
+      --fg:#e5e7eb; --muted:#94a3b8;
+      --border:#20304a;
+      --primary:#2563eb; --primary-border:#1e40af;
+      --warn:#f59e0b; --good:#22c55e; --err:#ef4444;
+    }
+    [data-theme="light"]{
+      --bg:#ffffff; --surface:#ffffff; --panel:#f8fafc;
+      --fg:#111827; --muted:#4b5563;
+      --border:#d1d5db;
+      --primary:#2563eb; --primary-border:#1e40af;
+      --warn:#b45309; --good:#15803d; --err:#b91c1c;
+    }
+    [data-theme="hc"]{
+      --bg:#000000; --surface:#000000; --panel:#000000;
+      --fg:#ffffff; --muted:#d1d5db;
+      --border:#ffffff;
+      --primary:#00ffff; --primary-border:#00ffff;
+      --warn:#ffff00; --good:#00ff6a; --err:#ff375f;
+    }
+    [data-readable="1"] body, [data-readable="1"] main{ font-size:16px; line-height:1.7; }
+    body{background:var(--bg); color:var(--fg)}
+
+    /* Focus & accessibility */
+    :focus-visible{ outline:3px solid var(--focus); outline-offset:2px }
+    a.skip{ position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden }
+    a.skip:focus{ left:8px; top:8px; width:auto; height:auto; background:#000; color:#fff; padding:8px 12px; border-radius:8px; z-index:100000 }
+
+    /* ====== Layout ====== */
+    .app{ display:grid; grid-template-columns: var(--aside-w) 1fr; grid-template-rows:auto 1fr; min-height:100vh }
+    .topbar{ grid-column:1/3; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 12px; border-bottom:1px solid var(--border); background:var(--panel) }
+    .topbar-left{ display:flex; align-items:center; gap:8px }
+    .topbar-right{ display:flex; align-items:center; gap:8px; flex-wrap:wrap }
+
+    .kpi{ display:flex; gap:8px; align-items:center }
+    .kpi-pill{ display:flex; align-items:center; gap:6px; height:var(--kpi-h); padding:0 10px; border:1px solid var(--border); border-radius:999px; background:transparent; color:var(--fg); font-weight:600 }
+    .kpi-pill b{ min-width:58px; text-align:right; font-variant-numeric:tabular-nums }
+
+    .led{ width:12px; height:12px; border-radius:50%; border:2px solid #0000; box-shadow:0 0 0 2px #0003 inset; margin-left:4px }
+    .led[data-state="ok"]{ background:var(--good); box-shadow:0 0 10px var(--good) }
+    .led[data-state="warn"]{ background:var(--warn); box-shadow:0 0 10px var(--warn) }
+    .led[data-state="err"]{ background:var(--err); box-shadow:0 0 10px var(--err) }
+
+    aside.aside{ border-right:1px solid var(--border); background:var(--surface); padding:12px; display:flex; flex-direction:column; gap:8px }
+    .project{ font-weight:700; margin:4px 0 8px 2px }
+
+    .navbtn{ width:100%; height:46px; border:1px solid var(--border); background:transparent; color:var(--fg); border-radius:10px; padding:8px 12px; text-align:left; display:flex; justify-content:space-between; align-items:center }
+    .navbtn[aria-selected="true"]{ outline:2px solid var(--primary) }
+
+    main.content{ padding:0; }
+    .tabs{ padding:0; }
+    .tabpanel{ display:none; padding:16px }
+    .tabpanel.active{ display:block }
+
+    /* Buttons */
+    .btn{ min-height:44px; padding:8px 12px; border-radius:10px; border:1px solid var(--border); background:transparent; color:var(--fg); cursor:pointer }
+    .btn-primary{ background:var(--primary); color:#fff; border-color:var(--primary-border) }
+    .btn-warn{ background:var(--warn); color:#000; border-color:var(--warn) }
+    .btn-good{ background:var(--good); color:#000; border-color:var(--good) }
+    .btn-ghost{ background:transparent; border-color:var(--border) }
+
+    .switch{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--border); border-radius:999px; height:44px; }
+    .switch input{ width:18px; height:18px }
+
+    /* Shells grid */
+    .shells-grid{ display:grid; grid-template-columns:1fr 1fr; gap:var(--gap); }
+    .pane-left{ grid-column:1 / span 1; height:calc(var(--pane-h)*2 + var(--gap)); }
+    .pane-right{ grid-column:2 / span 1; display:grid; grid-template-columns:1fr 1fr; grid-auto-rows:var(--pane-h); gap:var(--gap); }
+    .pane{ border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); padding:8px; box-shadow:0 2px 8px rgba(0,0,0,.1) }
+    .pane h3,.pane h4{ margin:6px 6px 8px; font-size:14px; color:var(--muted) }
+    .term{ height:100%; border:1px dashed var(--border); border-radius:8px; background:#000; color:#fff; padding:4px }
+
+    @media (max-width: 1280px){
+      .app{ grid-template-columns:1fr; grid-template-rows:auto auto 1fr }
+      aside.aside{ grid-column:1; order:2 }
+      main.content{ order:3 }
+      .shells-grid{ grid-template-columns:1fr; }
+      .pane-left{ height:var(--pane-h); }
+      .pane-right{ grid-column:1; }
+      .topbar{ order:1 }
+    }
+
+    /* Messages / aria-live */
+    .messages{ margin-top:12px; border:1px dashed var(--border); padding:10px; border-radius:8px; min-height:44px; background:rgba(0,0,0,.02) }
+
+    /* Brand corner */
+    /* [sentinel] ORCHMON_BRAND_CORNER_CSS_V1 */
+    .brand-fixed{ position:fixed; left:16px; bottom:16px; width:120px; opacity:.9; pointer-events:none; z-index:999998; filter: drop-shadow(0 2px 4px rgba(0,0,0,.25)); }
+    [data-theme="dark"] .brand-fixed img{ content:url("./public/img/STS_LOGO-크림색.png"); }
+    [data-theme="light"] .brand-fixed img{ content:url("./public/img/STS_LOGO-광택.png"); }
+    [data-theme="hc"] .brand-fixed{ opacity:1; }
+
+    /* Table-ish cards & overview */
+    .cards{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px }
+    .card{ border:1px solid var(--border); border-radius:12px; background:var(--surface); padding:12px; min-height:120px }
+    .card h5{ margin:0 0 8px; font-size:14px; color:var(--muted) }
+  </style>
+</head>
+<body>
+  <a href="#main" class="skip">본문으로 건너뛰기</a>
+
+  <div class="app">
+    <!-- ===== Topbar ===== -->
+    <header class="topbar" role="banner">
+      <div class="topbar-left">
+        <div class="kpi" aria-label="KPI 리본">
+          <div class="kpi-pill" title="오늘 요청 수"><span>요청</span><b data-orchmon-kpi="req">0000</b></div>
+          <div class="kpi-pill" title="에러율(%)"><span>에러%</span><b data-orchmon-kpi="err">0.00</b></div>
+          <div class="kpi-pill" title="p95(ms)"><span>p95</span><b data-orchmon-kpi="p95">0000</b></div>
+          <div class="kpi-pill" title="GOOD 슬롯 수"><span>GOOD</span><b data-orchmon-kpi="good">00</b></div>
+        </div>
+        <span class="led" data-orchmon-led data-state="warn" aria-label="상태 LED" title="status"></span>
+      </div>
+
+      <nav class="topbar-right" aria-label="주요 동작">
+        <!-- **** 우측 순서 고정 (지침) **** -->
+        <button class="btn" data-orchmon-action="next" title="다음 단계">다음</button>
+        <button class="btn btn-warn" data-orchmon-action="stop" title="중지">중지</button>
+        <button class="btn" data-orchmon-action="fix-preview" title="Fix 미리보기">Fix 미리보기</button>
+        <button class="btn btn-primary" data-orchmon-action="fix-apply" title="Fix 적용">Fix 적용</button>
+        <button class="btn btn-good" data-orchmon-action="good" title="Mark GOOD">Mark GOOD</button>
+        <button class="btn" data-orchmon-action="rollback" title="Rollback">Rollback</button>
+        <button class="btn" data-orchmon-action="shell-open" title="Shells 열기">Shell 오픈</button>
+        <button class="btn" data-orchmon-action="logs-export" title="로그 묶음 내보내기">Logs Export</button>
+        <button class="btn btn-ghost" id="readabilityBtn" title="가독 모드 토글(서체/행간)">AA+</button>
+        <button class="btn btn-ghost" id="themeBtn" title="테마 토글(라이트/다크/고대비)">테마</button>
+      </nav>
+    </header>
+
+    <!-- ===== Aside ===== -->
+    <aside class="aside" role="navigation" aria-label="기능 탭">
+      <div class="project">Orchestrator‑Monitoring</div>
+      <button class="navbtn" data-orchmon-tab="overview" aria-selected="true">Overview<span>⟶</span></button>
+      <button class="navbtn" data-orchmon-tab="timeline">Timeline<span>⟶</span></button>
+      <button class="navbtn" data-orchmon-tab="messages">Messages<span>⟶</span></button>
+      <button class="navbtn" data-orchmon-tab="shells">Shells<span>⟶</span></button>
+      <button class="navbtn" data-orchmon-tab="errkb">Error‑KB<span>⟶</span></button>
+      <button class="navbtn" data-orchmon-tab="settings">Settings<span>⟶</span></button>
+    </aside>
+
+    <!-- ===== Content ===== -->
+    <main id="main" class="content" role="main">
+      <div class="tabs" role="tablist" aria-label="콘텐츠 탭"></div>
+
+      <!-- Overview -->
+      <section id="tab-overview" class="tabpanel active" role="tabpanel" aria-labelledby="tab-overview-btn">
+        <div class="cards">
+          <article class="card">
+            <h5>작업 요약</h5>
+            <p>FixLoop/GOOD/롤백과 주요 이벤트를 요약합니다.</p>
+          </article>
+          <article class="card">
+            <h5>상태 요약</h5>
+            <p>컨테이너(DEV/5183 · MOCK/5193) 헬스, Peers 상태고침 버튼 제공.</p>
+            <p><button class="btn" id="healthBtn">/health 점검</button></p>
+          </article>
+          <article class="card">
+            <h5>연결 상태</h5>
+            <!-- § 연결 상태 패널 주입 위치 -->
+            <!-- [sentinel] ORCHMON_OVERVIEW_CONN_CARD_V1 -->
+            <p>WS 연결 수, 최근 토스트, API Base 표시.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- Timeline -->
+      <section id="tab-timeline" class="tabpanel" role="tabpanel" aria-labelledby="tab-timeline-btn">
+        <div class="card">
+          <h5>실행/로그 타임라인</h5>
+          <p>필터·검색은 차후 확장(SSE 연동 포인트).</p>
+        </div>
+      </section>
+
+      <!-- Messages -->
+      <section id="tab-messages" class="tabpanel" role="tabpanel" aria-labelledby="tab-messages-btn">
+        <div class="card">
+          <h5>시스템/고객체 알림</h5>
+          <section data-orchmon-messages class="messages" aria-live="polite"></section>
+        </div>
+      </section>
+
+      <!-- Shells (핵심) -->
+      <section id="tab-shells" class="tabpanel" role="tabpanel" aria-labelledby="tab-shells-btn">
+        <div class="shells-grid">
+          <article class="pane pane-left">
+            <h3>입력(Input)</h3>
+            <div class="term" data-orchmon-shell="input" aria-label="입력 셸"></div>
+          </article>
+          <div class="pane-right">
+            <article class="pane q1"><h4>서버(Server)</h4><div class="term" data-orchmon-shell="server" aria-label="서버 셸"></div></article>
+            <article class="pane q2"><h4>가상서버(VServer)</h4><div class="term" data-orchmon-shell="vserver" aria-label="가상서버 셸"></div></article>
+            <article class="pane q3"><h4>보조(Aux)</h4><div class="term" data-orchmon-shell="aux" aria-label="보조 셸"></div></article>
+            <article class="pane q4"><h4>보조(Extra)</h4><div class="term" data-orchmon-shell="extra" aria-label="보조 추가 셸"></div></article>
+          </div>
+        </div>
+        <section data-orchmon-messages class="messages" aria-live="polite"></section>
+      </section>
+
+      <!-- Error-KB -->
+      <section id="tab-errkb" class="tabpanel" role="tabpanel" aria-labelledby="tab-errkb-btn">
+        <div class="card">
+          <h5>Error‑KB</h5>
+          <p>오류 지문/해결책 카드를 노출합니다. (향후 KLC 연동)</p>
+        </div>
+      </section>
+
+      <!-- Settings -->
+      <section id="tab-settings" class="tabpanel" role="tabpanel" aria-labelledby="tab-settings-btn">
+        <div class="card">
+          <h5>설정</h5>
+          <p>API Base / 모드(OFFLINE|MOCK|DEV|APPLY), 단축키, 로그 export 설정.</p>
+          <p><code id="apiBaseEcho"></code></p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 브랜드(좌하단 고정) -->
+  <!-- [sentinel] ORCHMON_BRAND_CORNER_V1 -->
+  <div class="brand-fixed" aria-hidden="true"><img alt=""></div>
+
+  <!-- ===== 센티넬: API BASE + 브릿지 주입 위치 (멱등) ===== -->
+<!-- KOBO-SENTINEL:orchmon-api-base -->
+<script src="./messages-wiring.js"></script>
+<script>
+  /* API Base 규칙
+     1) messages-wiring.js 의 window.__G5_ENDPOINTS.ORCHMON_BASE 우선
+     2) 없으면 DEV 기본값(5183)
+     3) OFFLINE은 기본 true → 서버 준비되면 false */
+  (function(){
+    try{
+      var ep = (window.__G5_ENDPOINTS && window.__G5_ENDPOINTS.ORCHMON_BASE) || "";
+      if(ep){
+        window.ORCHMON_API_BASE = ep.replace(/\/$/,'') + "/api/orchmon";
+        window.ORCHMON_FORCE_OFFLINE = false;
+      }else{
+        window.ORCHMON_API_BASE = window.ORCHMON_API_BASE || "http://localhost:5183/api/orchmon";
+        window.ORCHMON_FORCE_OFFLINE = (window.ORCHMON_FORCE_OFFLINE ?? true);
+      }
+    }catch(e){
+      window.ORCHMON_API_BASE = "http://localhost:5183/api/orchmon";
+      window.ORCHMON_FORCE_OFFLINE = true;
+    }
+  })();
+</script>
+
+
+
+  <!-- xterm.js (있을 때만 실제 터미널 활성) -->
+  <script src="./public/xterm/xterm.js"></script>
+
+  <!-- 내장 브릿지(지침의 orchmon-bridge.js 동등 기능 최소본) -->
+  <script>
+  (function(){
+    const API = (window.ORCHMON_API_BASE || '').replace(/\/$/, '');
+    const elMsgs = Array.from(document.querySelectorAll('[data-orchmon-messages]'));
+    const led = document.querySelector('[data-orchmon-led]') || document.querySelector('.led');
+    const apiEcho = document.getElementById('apiBaseEcho');
+
+    function toast(t){
+      const line = `[${new Date().toLocaleTimeString()}] ${t}`;
+      elMsgs.forEach(m => (m.textContent = line));
+      console.log('[ORCHMON]', t);
+    }
+    function setLED(state){ if(led) led.setAttribute('data-state', state); }
+
+    // KPI quick update
+    function setKPI(key, val){
+      const el = document.querySelector(`[data-orchmon-kpi="${key}"]`);
+      if (el) el.textContent = val;
+    }
+
+    // Tabs
+    const tabMap = new Map([
+      ['overview','tab-overview'],
+      ['timeline','tab-timeline'],
+      ['messages','tab-messages'],
+      ['shells','tab-shells'],
+      ['errkb','tab-errkb'],
+      ['settings','tab-settings'],
+    ]);
+    function activateTab(key){
+      document.querySelectorAll('.navbtn').forEach(b=>b.setAttribute('aria-selected','false'));
+      const btn = document.querySelector(`.navbtn[data-orchmon-tab="${key}"]`);
+      if (btn) btn.setAttribute('aria-selected','true');
+      document.querySelectorAll('.tabpanel').forEach(p=>p.classList.remove('active'));
+      const id = tabMap.get(key);
+      const panel = id && document.getElementById(id);
+      if(panel) panel.classList.add('active');
+    }
+    document.querySelectorAll('.navbtn').forEach(btn=>{
+      btn.addEventListener('click', ()=> activateTab(btn.getAttribute('data-orchmon-tab')));
+    });
+
+    // Theme / Readability toggle
+    const themeSeq = ['dark','light','hc'];
+    document.getElementById('themeBtn')?.addEventListener('click', ()=>{
+      const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+      const idx = (themeSeq.indexOf(cur)+1) % themeSeq.length;
+      document.documentElement.setAttribute('data-theme', themeSeq[idx]);
+    });
+    document.getElementById('readabilityBtn')?.addEventListener('click', ()=>{
+      const cur = document.documentElement.getAttribute('data-readable') || '0';
+      document.documentElement.setAttribute('data-readable', cur==='1' ? '0' : '1');
+    });
+
+    // Actions (8개 공통 + shell-open 특수 처리)
+    async function postAction(action){
+      try{
+        setLED('warn');
+        if (window.ORCHMON_FORCE_OFFLINE){
+          // OFFLINE: 가짜 응답
+          await new Promise(r=>setTimeout(r, 200));
+          toast(`${action}: OK (offline demo)`);
+          setLED('ok');
+          if (action === 'shell-open') activateTab('shells');
+          return;
+        }
+        const r = await fetch(`${API}/action/${action}`, { method:'POST' });
+        const j = await r.json().catch(()=>({ok:false, code:1, message:'JSON parse error'}));
+        toast(`${action}: ${j.ok?'OK':'NG'} (code=${j.code}, ${j.message||''})`);
+        setLED(j.ok ? 'ok' : 'err');
+        if (action === 'shell-open') activateTab('shells');
+      }catch(e){
+        setLED('err'); toast(`${action}: ERROR ${e.message}`);
+      }
+    }
+    document.querySelectorAll('[data-orchmon-action]').forEach(btn=>{
+      btn.addEventListener('click', ()=> postAction(btn.getAttribute('data-orchmon-action')));
+    });
+
+    // Health check / KPI sampling
+    apiEcho && (apiEcho.textContent = `API Base: ${API}`);
+    async function health(){
+      try{
+        if (window.ORCHMON_FORCE_OFFLINE){
+          setLED('ok');
+          setKPI('req', String(120 + Math.floor(Math.random()*30)).padStart(3,'0'));
+          setKPI('err', (Math.random()*2).toFixed(2));
+          setKPI('p95', String(200 + Math.floor(Math.random()*100)));
+          setKPI('good', '03');
+          toast('health: OK (offline)');
+          return;
+        }
+        const url = new URL(API); url.pathname = '/health';
+        const r = await fetch(url.toString(), {method:'GET'});
+        if(!r.ok) throw new Error(`HTTP ${r.status}`);
+        const j = await r.json();
+        setLED(j.ok ? 'ok':'err');
+        setKPI('req', String( j.req || 123 ).padStart(3,'0'));
+        setKPI('err', ( j.errPct ?? 0.42 ).toFixed(2));
+        setKPI('p95', String( j.p95 ?? 250 ));
+        setKPI('good', String( j.good ?? 3 ).padStart(2,'0'));
+        toast('health: OK');
+      }catch(e){
+        setLED('err'); toast('health: ERROR ' + e.message);
+      }
+    }
+    document.getElementById('healthBtn')?.addEventListener('click', health);
+    health(); setInterval(health, 15000);
+
+    // xterm + WebSocket attach (5개 셸)
+    const XTerm = window.Terminal;
+    const shells = Array.from(document.querySelectorAll('[data-orchmon-shell]'));
+    function wsURLFor(role){
+      try{
+        const u = new URL(API);
+        const proto = (u.protocol === 'https:') ? 'wss:' : 'ws:';
+        return `${proto}//${u.host}/api/orchmon/shell?role=${encodeURIComponent(role)}`;
+      }catch{ // fallback (정적 파일에서 열었을 때)
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = location.host || `${location.hostname}:${(location.port||'5183')}`;
+        return `${proto}//${host}/api/orchmon/shell?role=${encodeURIComponent(role)}`;
+      }
+    }
+    function attachTerm(el, role){
+      if(!XTerm){
+        el.innerHTML = '<pre style="margin:0;color:#9ca3af">xterm.js가 없어 데모 모드로 표시됩니다.\n`public/xterm/xterm.js`를 배치하면 실제 셸이 연결됩니다.</pre>';
+        return;
+      }
+      const term = new XTerm({ fontFamily:'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', cursorBlink:true });
+      term.open(el);
+      if (window.ORCHMON_FORCE_OFFLINE){
+        term.write(`\r\n[offline:${role}] PowerShell$ `);
+        term.onData(d => term.write(d));
+        return;
+      }
+      const ws = new WebSocket(wsURLFor(role));
+      ws.onopen   = () => { term.write(`\r\n[connected:${role}] PowerShell$ `); };
+      ws.onmessage= (ev) => { term.write(ev.data); };
+      ws.onclose  = () => { term.write(`\r\n[disconnected:${role}]`); };
+      term.onData((data)=> ws.readyState===1 ? ws.send(data) : null);
+    }
+    shells.forEach(el => attachTerm(el, el.getAttribute('data-orchmon-shell')));
+
+    // 빠른 진입: Shells 탭 단축
+    document.querySelector('[data-orchmon-action="shell-open"]')?.addEventListener('click', ()=>activateTab('shells'));
+  })();
+  </script>
+<!-- KOBO-SENTINEL:timeline-sse -->
+<script>
+(()=>{ try{
+  const API=(window.ORCHMON_API_BASE||'').replace(/\/$/,'');
+  const url = API + '/timeline';               // ★ 핵심 수정
+  if(window.ORCHBUS){console.log("[ORCHBUS] builtin SSE skipped"); return;} if(window.ORCHBUS){console.log("[ORCHBUS] builtin SSE skipped"); return;} if(window.ORCHBUS){console.log("[ORCHBUS] builtin SSE skipped"); return;} if(window.ORCHBUS){console.log("[ORCHBUS] builtin SSE skipped"); return;} if(window.ORCHBUS){console.log("[ORCHBUS] builtin SSE skipped"); return;} if(window.ORCHBUS){console.log("[ORCHBUS] builtin SSE skipped"); return;} const es = new EventSource(url);
+  const host=document.querySelector('#tab-timeline .card')||document.getElementById('tab-timeline');
+  const ul=document.createElement('ul'); ul.style.marginTop='8px'; ul.style.listStyle='none'; ul.style.padding='0';
+  host.appendChild(ul);
+  function add(obj){ const li=document.createElement('li'); const t=new Date(obj.ts).toLocaleTimeString();
+    li.textContent = `[${t}] ${obj.type}${obj.action?(' · '+obj.action):''}${obj.role?(' · '+obj.role):''}`;
+    ul.prepend(li); if(ul.children.length>50) ul.removeChild(ul.lastChild);
+  }
+  es.onmessage=(e)=>{ try{ add(JSON.parse(e.data)) }catch{} };
+}catch(e){ console.warn('SSE init failed',e) }})();
+</script>
+<!-- KOBO-SENTINEL:fetch-redirect-5183 -->
+<script>
+(()=>{ try{
+  // 기준 API_BASE에서 origin 계산 (예: http://localhost:5193)
+  const API = (window.ORCHMON_API_BASE||"").replace(/\/$/,"");
+  const ORIGIN = (API.replace(/\/api\/orchmon$/,"")) || (location.origin);
+
+  // 헬스 URL도 강제 동기화 (필요한 코드에서 참조 가능)
+  window.ORCHMON_HEALTH_URL = ORIGIN + "/health";
+
+  // fetch 프록시: 5183 하드코드 요청은 ORIGIN으로 리다이렉트
+  const _fetch = window.fetch.bind(window);
+  window.fetch = (input, init)=>{
+    try{
+      let url = (typeof input === "string") ? input : (input && input.url) || "";
+      if (typeof url === "string" && url.startsWith("http://localhost:5183/")){
+        url = url.replace("http://localhost:5183", ORIGIN);
+        if (typeof input === "string"){ return _fetch(url, init); }
+        // Request 객체였을 경우 재작성
+        const req = new Request(url, input);
+        return _fetch(req, init);
+      }
+    }catch(e){}
+    return _fetch(input, init);
+  };
+
+  // 콘솔 힌트
+  console.log("[ORCHMON] fetch-redirect active →", ORIGIN);
+}catch(e){ console.warn("fetch-redirect init failed", e); }})();
+</script>
+<!-- KOBO-BOOSTER-INSTALL v1 -->
+<script defer src="public/booster/orch-bus-auto.js"></script>
+<script defer src="public/booster/overview-cards.js"></script>
+<script defer src="public/booster/timeline-tools.js"></script>
+<script defer src="public/booster/timeline-wiring.js"></script>
+<script defer src="public/booster/messages-pane.js"></script>
+<script defer src="public/booster/errkb-cards.js"></script>
+<script defer src="public/booster/settings-pane.js"></script>
+<script defer src="public/booster/boot-loader.js"></script>
+
+<!-- __G5_SENTINEL:ORCHMON_v1.1__ (삭제 금지 / 멱등) -->
+<script>window.ORCHMON_API_BASE="http://localhost:5183";window.ORCHMON_MODE="DEV";</script>
+<script src="./orchmon-bridge.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+name: Protect Manual
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, edited]
+    paths:
+      - 'AUTO-Kobong/**'
+      - '.github/workflows/protect-manual.yml'
+      - '.github/workflows/ak-commands.yml'
+      - '.github/workflows/ak-auto.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate manual not deleted or edited by non-owner
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = context.payload.pull_request.number;
+            const senderAssoc = context.payload.pull_request.author_association; // OWNER/MEMBER/COLLABORATOR/...
+            const {data: files} = await github.rest.pulls.listFiles({owner, repo, pull_number: pr, per_page: 300});
+            const manualPath = 'AUTO-Kobong/AUTO-Kobong-메뉴얼.md';
+            const changed = files.find(f => f.filename === manualPath);
+            if (!changed) {
+              core.info('Manual not touched in this PR. OK.');
+              return;
+            }
+            // allow if OWNER or label doc:allow-edit is present
+            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
+            const allow = labels.some(l => l.name.toLowerCase()==='doc:allow-edit');
+            if (senderAssoc === 'OWNER' || allow) {
+              core.info('Owner or allow label present. OK.');
+              return;
+            }
+            // block deletion or edits by non-owner
+            await github.rest.issues.createComment({
+              owner, repo, issue_number: pr,
+              body: '⛔ 이 PR은 **메뉴얼**을 변경하거나 삭제하려 합니다. OWNER 또는 `doc:allow-edit` 라벨이 필요합니다.'
+            });
+            core.setFailed('Manual change blocked: require OWNER or doc:allow-edit');
+

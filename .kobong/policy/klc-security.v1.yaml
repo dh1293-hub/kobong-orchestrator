@@ -1,0 +1,105 @@
+# FDH v1.2 __DO_NOT_REMOVE__
+# PATH=.kobong/policy/klc-security.v1.yaml
+# ROLE=SAVE_ONLY
+# LABEL=DATA
+# REGISTER=DocsManifest+Inventory
+# GIT_PLAN=add+commit
+# URS=snapshot-before-apply
+# KLC=min-1log
+
+
+policy: klc-security
+policy_version: "1.0"
+description: >
+  kobong_logger_cli(KLC) 보안/무결성/마스킹/보존/검증 정책.
+  KLC v1.3 스키마와 URS(스냅샷/GOOD) 원칙을 준수.
+
+klc:
+  schema_version: "1.3"     # 기대하는 로그 스키마 버전 (strict)
+  ui_fixed_fields: [traceId, durationMs, exitCode, anchorHash]  # UI 고정 4종
+
+hmac:
+  algo: HMAC-SHA256          # KLC 스펙 고정 알고리즘
+  canonical: JCS-2025        # Canonical JSON 규약
+  active_kid: K1
+  keys:
+    - kid: K1
+      source: env
+      name: KOBONG_KLC_SECRET
+      created_at: "2025-10-21"
+      rotate_after_days: 90
+    - kid: K0
+      source: env
+      name: KOBONG_KLC_SECRET_OLD
+      expires_at: "2025-11-30"
+
+chain:
+  require: true              # prevHash → hash 연속성 강제
+  anchor:
+    schedule: daily
+    time: "00:05"
+    action: emit             # 일일 앵커 레코드 생성
+  verify_on_ci: true         # PR에서 체인 검증
+
+fields:
+  required_core:
+    # 스키마 기준 필수 + 보안 핵심
+    - version
+    - timestamp
+    - traceId
+    - message
+    - outcome
+    - hash
+    - prevHash
+    - hashAlgo
+    - canonAlgo
+    - env
+    - mode
+    - service
+  failure_requires: [exitCode, errorCode, durationMs]
+
+redaction:
+  enabled: true
+  mask: "[REDACTED]"
+  rules:
+    - name: bearer-token
+      pattern: "(?i)bearer\\s+[A-Za-z0-9._-]{10,}"
+    - name: email
+      pattern: "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+    - name: ipv4
+      pattern: "\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b"
+    - name: secret-key
+      pattern: "(?i)(secret|token|apikey|password)\\s*[:=]\\s*[^\\s\"']+"
+
+retention:
+  logs:
+    rotate: daily
+    max_days: 30
+    max_files: 200
+    max_total_mb: 1024
+  queue:
+    max_mb: 256
+    alert_threshold_mb: 128
+    drop_policy: deny        # deny | truncate-oldest
+    backoff: { base_ms: 500, factor: 2, max_ms: 30000 }
+
+sinks:
+  - type: file
+    path: ".kobong/logs/klc-%DATE%.jsonl.gz"
+  - type: stdout
+    when: DEV                # 개발 환경에만 표준출력 허용
+
+ci:
+  validate_schema: ".kobong/schema/klc-log-v1.3.schema.json"
+  watch_paths:
+    - ".kobong/policy/**"
+    - ".kobong/schema/**"
+  env_secrets:
+    - KOBONG_KLC_SECRET
+    - KOBONG_KLC_SECRET_OLD
+
+enforcement:
+  ps7_only: true             # PowerShell7 전용
+  dryrun_apply_gate: true    # DRYRUN → APPLY 게이트
+  health_gate_required: true # /health OK일 때만 위험액션
+  min_one_log: true          # 실행 후 최소 1행 KLC 로그
