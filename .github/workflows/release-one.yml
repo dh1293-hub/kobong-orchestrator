@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'vX.Y.Z (e.g. v1.0.1)'
+        description: 'vX.Y.Z (e.g. v1.0.5)'
         required: true
       notes:
         description: 'Release notes (optional)'
@@ -15,7 +15,7 @@ on:
         required: false
         default: 'false'
       run_gates:
-        description: 'Run Windows gates/canary'
+        description: 'Run Windows gates/canary (ak-scan/test)'
         required: false
         default: 'true'
 
@@ -33,33 +33,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Git shim (neutralize exit 128) and env
-        shell: pwsh
-        run: |
-          $shim = Join-Path $env:RUNNER_TEMP 'git-shim'
-          New-Item -ItemType Directory -Force -Path $shim | Out-Null
-          $content = "@echo off`r`nsetlocal enabledelayedexpansion`r`nset ""GIT_BIN=%ProgramFiles%\Git\bin\git.exe""`r`nif exist ""%GIT_BIN%"" (`r`n  ""%GIT_BIN%"" %*`r`n  set ""rc=!errorlevel!""`r`n) else (`r`n  git.exe %*`r`n  set ""rc=!errorlevel!""`r`n)`r`nif ""!rc!""==""128"" (`r`n  echo [git-shim] 128 neutralized 1>&2`r`n  exit /b 0`r`n)`r`nexit /b !rc!`r`n"
-          Set-Content -Path (Join-Path $shim 'git.cmd') -Value $content -Encoding ASCII
-          $env:PATH = "$shim;$env:PATH"
-          $repo = "$env:GITHUB_WORKSPACE"
-          $env:GIT_DIR = Join-Path $repo '.git'
-          $env:GIT_WORK_TREE = $repo
-          git --version
-
-      - name: Run gates
+      - name: Run gates (ak-scan + ak-test)
         shell: pwsh
         working-directory: ${{ github.workspace }}
         run: |
           & "scripts/g5/ak-scan.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
-          if ($LASTEXITCODE -ne 0) { throw "ak-scan failed with $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw "ak-scan failed with code $LASTEXITCODE" }
           & "scripts/g5/ak-test.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
-          if ($LASTEXITCODE -ne 0) { throw "ak-test failed with $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw "ak-test failed with code $LASTEXITCODE" }
 
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Validate version (API)
+      - name: Compute version (validate / optional auto bump)
         id: v
         uses: actions/github-script@v7
         env:
@@ -80,15 +67,16 @@ jobs:
             }
             if (await exists(ver)) {
               if (!auto) { core.setFailed(`tag already exists: ${ver}`); return; }
-              const mt = ver.match(/^v(\d+)\.(\d+)\.(\d+)$/);
-              let major = Number(mt[1]); let minor = Number(mt[2]); let patch = Number(mt[3]);
+              const m = ver.match(/^v(\d+)\.(\d+)\.(\d+)$/);
+              let [_, maj, min, pat] = m;
+              let major = Number(maj), minor = Number(min), patch = Number(pat);
               do { patch += 1; } while (await exists(`v${major}.${minor}.${patch}`));
               ver = `v${major}.${minor}.${patch}`;
               core.notice(`auto-bump -> ${ver}`);
             }
             core.setOutput('version', ver);
 
-      - name: Publish release (API-only)
+      - name: Publish release (API only)
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -101,6 +89,7 @@ jobs:
   canary:
     if: ${{ inputs.run_gates == 'true' }}
     runs-on: windows-latest
+    needs: release
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -108,22 +97,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Git shim (neutralize exit 128) and env
-        shell: pwsh
-        run: |
-          $shim = Join-Path $env:RUNNER_TEMP 'git-shim'
-          New-Item -ItemType Directory -Force -Path $shim | Out-Null
-          $content = "@echo off`r`nsetlocal enabledelayedexpansion`r`nset ""GIT_BIN=%ProgramFiles%\Git\bin\git.exe""`r`nif exist ""%GIT_BIN%"" (`r`n  ""%GIT_BIN%"" %*`r`n  set ""rc=!errorlevel!""`r`n) else (`r`n  git.exe %*`r`n  set ""rc=!errorlevel!""`r`n)`r`nif ""!rc!""==""128"" (`r`n  echo [git-shim] 128 neutralized 1>&2`r`n  exit /b 0`r`n)`r`nexit /b !rc!`r`n"
-          Set-Content -Path (Join-Path $shim 'git.cmd') -Value $content -Encoding ASCII
-          $env:PATH = "$shim;$env:PATH"
-          $repo = "$env:GITHUB_WORKSPACE"
-          $env:GIT_DIR = Join-Path $repo '.git'
-          $env:GIT_WORK_TREE = $repo
-          git --version
-
-      - name: Run canary
+      - name: Run canary (ak-test)
         shell: pwsh
         working-directory: ${{ github.workspace }}
         run: |
           & "scripts/g5/ak-test.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
-          if ($LASTEXITCODE -ne 0) { throw "canary failed with $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw "canary failed with code $LASTEXITCODE" }
