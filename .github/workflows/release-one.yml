@@ -28,39 +28,40 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - name: Pre-configure Git (kill exit 128)
+      - name: Pre-configure Git (safe dir & HOME)
         shell: pwsh
         run: |
-          # 홈 디렉터리를 명시적으로 잡아주면 전역 설정 읽기 실패를 방지
+          $ErrorActionPreference='Stop'
           if (-not $env:HOME -or -not (Test-Path $env:HOME)) { $env:HOME = $env:USERPROFILE }
           git --version
-          # 안전 디렉터리 전역 허용 + 워크스페이스 경로(정/역슬래시 둘 다, 실경로) 모두 등록
           git config --global --add safe.directory '*'
           $ws = $env:GITHUB_WORKSPACE
           if ($ws) {
             git config --global --add safe.directory "$ws"
             git config --global --add safe.directory ($ws -replace '\\','/')
-            try {
-              $rp = (Resolve-Path $ws -ErrorAction Stop).Path
-              git config --global --add safe.directory "$rp"
-              git config --global --add safe.directory ($rp -replace '\\','/')
-            } catch {}
           }
-          git config --global --list
-          # 사전 검증: 빈 레포 폴더 만들어서 git 동작 체크(실패면 바로 비정상 환경)
-          $tmp = Join-Path $env:RUNNER_TEMP 'g0'
-          Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-          pushd $tmp
-          git init .
-          if ($LASTEXITCODE -ne 0) { throw "pre-check git init failed: $LASTEXITCODE" }
-          popd
 
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          lfs: false
+      - name: Manual checkout (no action/checkout warnings)
+        shell: pwsh
+        env:
+          REPO: ${{ github.repository }}
+          SHA:  ${{ github.sha }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $dst = $env:GITHUB_WORKSPACE
+          if (!(Test-Path $dst)) { New-Item -ItemType Directory -Force -Path $dst | Out-Null }
+          Push-Location $dst
+          if (!(Test-Path ".git")) { git init . }
+          # public repo라 토큰 없이 https clone/fetch 가능. (private면 토큰 URL로 교체)
+          if (-not (git remote | Select-String -SimpleMatch '^origin$')) {
+            git remote add origin "https://github.com/$env:REPO"
+          }
+          git -c protocol.version=2 fetch --no-tags --depth=0 origin "+$env:SHA:$env:SHA"
+          git checkout --force "$env:SHA"
+          # 서브모듈이 없으면 아래 두 줄은 조용히 통과
+          git submodule sync --recursive
+          git -c protocol.version=2 submodule update --init --force --depth=1 --recursive
+          Pop-Location
 
       - name: Run gates (ak-scan + ak-test)
         shell: pwsh
@@ -121,9 +122,10 @@ jobs:
     needs: release
     timeout-minutes: 20
     steps:
-      - name: Pre-configure Git (kill exit 128)
+      - name: Pre-configure Git (safe dir & HOME)
         shell: pwsh
         run: |
+          $ErrorActionPreference='Stop'
           if (-not $env:HOME -or -not (Test-Path $env:HOME)) { $env:HOME = $env:USERPROFILE }
           git --version
           git config --global --add safe.directory '*'
@@ -131,26 +133,27 @@ jobs:
           if ($ws) {
             git config --global --add safe.directory "$ws"
             git config --global --add safe.directory ($ws -replace '\\','/')
-            try {
-              $rp = (Resolve-Path $ws -ErrorAction Stop).Path
-              git config --global --add safe.directory "$rp"
-              git config --global --add safe.directory ($rp -replace '\\','/')
-            } catch {}
           }
-          git config --global --list
-          $tmp = Join-Path $env:RUNNER_TEMP 'g1'
-          Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-          pushd $tmp
-          git init .
-          if ($LASTEXITCODE -ne 0) { throw "pre-check git init failed: $LASTEXITCODE" }
-          popd
 
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          lfs: false
+      - name: Manual checkout (no action/checkout warnings)
+        shell: pwsh
+        env:
+          REPO: ${{ github.repository }}
+          SHA:  ${{ github.sha }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $dst = $env:GITHUB_WORKSPACE
+          if (!(Test-Path $dst)) { New-Item -ItemType Directory -Force -Path $dst | Out-Null }
+          Push-Location $dst
+          if (!(Test-Path ".git")) { git init . }
+          if (-not (git remote | Select-String -SimpleMatch '^origin$')) {
+            git remote add origin "https://github.com/$env:REPO"
+          }
+          git -c protocol.version=2 fetch --no-tags --depth=0 origin "+$env:SHA:$env:SHA"
+          git checkout --force "$env:SHA"
+          git submodule sync --recursive
+          git -c protocol.version=2 submodule update --init --force --depth=1 --recursive
+          Pop-Location
 
       - name: Run canary (ak-test)
         shell: pwsh
