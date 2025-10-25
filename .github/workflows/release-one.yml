@@ -4,54 +4,112 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'vX.Y.Z (e.g. v1.0.1)'
+        description: 'vX.Y.Z (예: v1.0.1)'
         required: true
       notes:
         description: 'Release notes (optional)'
         required: false
         default: ''
       auto_bump:
-        description: 'Auto bump patch if tag exists'
+        description: '태그가 있으면 패치 버전 자동 증가'
         required: false
         default: 'false'
+      run_gates:
+        description: 'Windows 게이트/카나리 실행 여부'
+        required: false
+        default: 'true'
 
 permissions:
   contents: write
 
+concurrency:
+  group: release-one-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  gates:
+    if: ${{ inputs.run_gates == 'true' }}
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pre-release gates (optional AK scan/test)
+        shell: pwsh
+        run: |
+          & "scripts/g5/ak-scan.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
+          & "scripts/g5/ak-test.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
+
   release:
     runs-on: ubuntu-latest
+    needs: gates
     steps:
-      - name: Validate & maybe bump via API
-        id: validate
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version / maybe auto-bump
+        id: v
         uses: actions/github-script@v7
         env:
-          VERSION: ${{ inputs.version }}
+          IN_VERSION: ${{ inputs.version }}
           AUTO_BUMP: ${{ inputs.auto_bump }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            let ver = process.env.VERSION;
+            let ver = (process.env.IN_VERSION || '').trim();
             const auto = (process.env.AUTO_BUMP || '').toLowerCase() === 'true';
-            if (!/^v\d+\.\d+\.\d+$/.test(ver)) core.setFailed(`bad version: ${ver}`);
-            async function exists(tag){
-              try{ await github.rest.git.getRef({owner:context.repo.owner,repo:context.repo.repo,ref:`tags/${tag}`}); return true; }
-              catch(e){ if(e.status===404) return false; throw e; }
+            if (!/^v\d+\.\d+\.\d+$/.test(ver)) {
+              core.setFailed(`bad version: ${ver}`);
+              return;
+            }
+            async function exists(tag) {
+              try {
+                await github.rest.git.getRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `tags/${tag}`
+                });
+                return true;
+              } catch (e) {
+                if (e.status === 404) return false;
+                throw e;
+              }
             }
             if (await exists(ver)) {
-              if (!auto) core.setFailed(`tag already exists: ${ver}`);
-              const m = ver.match(/^v(\d+)\.(\d+)\.(\d+)$/); let [M,mn,p]=[+m[1],+m[2],+m[3]];
-              do { p += 1; } while (await exists(`v${M}.${mn}.${p}`));
-              ver = `v${M}.${mn}.${p}`; core.notice(`auto-bump -> ${ver}`);
+              if (!auto) {
+                core.setFailed(`tag already exists: ${ver}`);
+                return;
+              }
+              const m = ver.match(/^v(\d+)\.(\d+)\.(\d+)$/);
+              let [maj, min, pat] = [Number(m[1]), Number(m[2]), Number(m[3])];
+              do { pat += 1; } while (await exists(`v${maj}.${min}.${pat}`));
+              ver = `v${maj}.${min}.${pat}`;
+              core.notice(`auto-bump -> ${ver}`);
             }
-            core.exportVariable('VERSION', ver);
             core.setOutput('version', ver);
-      - name: Publish GitHub Release
+
+      - name: Create tag & publish release (API-only)
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ env.VERSION }}
+          tag_name: ${{ steps.v.outputs.version }}
           target_commitish: ${{ github.sha }}
           body: ${{ inputs.notes }}
           generate_release_notes: true
+
+  canary:
+    if: ${{ inputs.run_gates == 'true' }}
+    runs-on: windows-latest
+    needs: release
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Post-release canary
+        shell: pwsh
+        run: |
+          & "scripts/g5/ak-test.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
