@@ -8,48 +8,75 @@ param(
 )
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference='Stop'
-$PSDefaultParameterValues['*:Encoding']='utf8'
+$ErrorActionPreference = 'Stop'
+$PSDefaultParameterValues['*:Encoding'] = 'utf8'
 
-# ---- repo root 탐색 (.git 없어도 동작) ----
+# --- 레포 루트 탐색 (.git 없이도 동작) : OR 연산자 미사용 ---
 function Get-RepoRoot {
   $d = Resolve-Path $PSScriptRoot
-  for($i=0;$i -lt 6;$i++){
-    if (Test-Path (Join-Path $d '.github') -or Test-Path (Join-Path $d '.kobong')) { return $d }
-    $p = Split-Path -Parent $d
-    if ($p -eq $d) { break }
-    $d = $p
+  for ($i = 0; $i -lt 8; $i++) {
+    $p1 = Join-Path $d '.github'
+    if (Test-Path $p1) { return $d }
+    $p2 = Join-Path $d '.kobong'
+    if (Test-Path $p2) { return $d }
+    $parent = Split-Path -Parent $d
+    if ($parent -eq $d) { break }
+    $d = $parent
   }
-  return (Resolve-Path (Join-Path $PSScriptRoot '..' '..'))  # scripts/g5 기준 2단계 상위
+  # scripts/g5 기준 두 단계 위로 fallback
+  return (Resolve-Path (Join-Path $PSScriptRoot '..' '..'))
 }
 
-$ROOT = Get-RepoRoot
+$ROOT    = Get-RepoRoot
 Set-Location $ROOT
 $INV_DIR = Join-Path $ROOT '_inventory'
 New-Item -ItemType Directory -Force -Path $INV_DIR | Out-Null
 
-# ---- DocsManifest 로드 & 기본 검증 ----
 $MANIFEST_FILE = Join-Path $ROOT '.kobong/DocsManifest.json'
 if (-not (Test-Path $MANIFEST_FILE)) { throw "DocsManifest not found: $MANIFEST_FILE" }
-$Manifest = Get-Content $MANIFEST_FILE -Raw | ConvertFrom-Json
+
+# --- Manifest 로드/검증(배열 보장) ---
+$ManifestRaw = Get-Content $MANIFEST_FILE -Raw
+$Manifest = $null
+try {
+  $Manifest = $ManifestRaw | ConvertFrom-Json
+} catch {
+  throw "DocsManifest JSON parse error: $($_.Exception.Message)"
+}
 if (-not ($Manifest -is [System.Collections.IEnumerable])) { throw "DocsManifest must be an array" }
 
-# ---- 해시 스냅샷 생성 ----
+# --- 이전 스냅샷 로드 (있으면) ---
+$CSV   = Join-Path $INV_DIR 'hashes.csv'
+$CHG   = Join-Path $INV_DIR 'changes.txt'
+$oldRows = @{}
+if (Test-Path $CSV) {
+  try {
+    $oldRows = (Import-Csv $CSV) | Group-Object path -AsHashTable
+  } catch {
+    $oldRows = @{}
+  }
+}
+
+# --- 스캔 대상(무시 목록) ---
 $Ignore = @(
   '\.git\\', '^_inventory\\', 'node_modules\\', '\.cache\\', '\.vs\\', '\.vscode\\',
   'logs\\', '\.DS_Store$', '\.idea\\', '\.pytest_cache\\', '\.venv\\', '__pycache__\\'
 )
-function Should-Skip([string]$rel){
-  foreach($pat in $Ignore){ if ($rel -ireplace '/','\' -match $pat){ return $true } }
+function Should-Skip([string]$rel) {
+  $r = $rel -replace '/', '\'
+  foreach ($pat in $Ignore) {
+    if ($r -match $pat) { return $true }
+  }
   return $false
 }
 
+# --- 현재 스냅샷 생성 ---
 $files = Get-ChildItem -File -Recurse -Force | ForEach-Object {
   $rel = [IO.Path]::GetRelativePath($ROOT, $_.FullName)
   if (-not (Should-Skip $rel)) { $_ }
 }
 
-$rows = foreach($f in $files){
+$currList = foreach ($f in $files) {
   $h = Get-FileHash -Algorithm SHA256 -LiteralPath $f.FullName
   [pscustomobject]@{
     path          = [IO.Path]::GetRelativePath($ROOT, $f.FullName).Replace('\','/')
@@ -59,60 +86,63 @@ $rows = foreach($f in $files){
   }
 }
 
-$CSV = Join-Path $INV_DIR 'hashes.csv'
-$rows | Sort-Object path | Export-Csv -NoTypeInformation -Encoding UTF8 -Path $CSV
+# --- 새 스냅샷 저장(임시→원본 교체) ---
+$tmpCSV = Join-Path $INV_DIR 'hashes.tmp.csv'
+$currList | Sort-Object path | Export-Csv -NoTypeInformation -Encoding UTF8 -Path $tmpCSV
+Move-Item -Force $tmpCSV $CSV
 
-# ---- 이전 스냅샷과 비교(있으면) ----
-$CHG = Join-Path $INV_DIR 'changes.txt'
-if (Test-Path $CSV){
-  $prev = @{}
-  $old = if (Test-Path $CSV) { Import-Csv $CSV } else { @() }  # 첫 실행이면 빈값
-}
-# 이전 파일이 이번에 덮였으므로, 비교를 위해 메모리 보관
-$prevRows = $rows | Group-Object path -AsHashTable
+# --- 변경점 비교(oldRows vs currRows) ---
+$currRows = $currList | Group-Object path -AsHashTable
 
-$oldRows = @{}
-if (Test-Path $CSV){
-  try { $oldRows = (Import-Csv $CSV) | Group-Object path -AsHashTable } catch { $oldRows=@{} }
-}
+$added   = New-Object System.Collections.Generic.List[string]
+$removed = New-Object System.Collections.Generic.List[string]
+$changed = New-Object System.Collections.Generic.List[string]
 
-$added   = @()
-$removed = @()
-$changed = @()
-
-# oldRows vs prevRows (이전→현재)
-foreach($k in $oldRows.Keys){
-  if (-not $prevRows.ContainsKey($k)){ $removed += $k; continue }
-  if ($oldRows[$k].sha256 -ne $prevRows[$k].sha256){ $changed += $k }
-}
-foreach($k in $prevRows.Keys){
-  if (-not $oldRows.ContainsKey($k)){ $added += $k }
-}
-
-"ADDED   `t{0}"   -f ($added  -join "`n")   | Out-File $CHG -Encoding utf8
-"CHANGED `t{0}"   -f ($changed-join "`n")   | Out-File $CHG -Append -Encoding utf8
-"REMOVED `t{0}"   -f ($removed-join "`n")   | Out-File $CHG -Append -Encoding utf8
-
-# ---- Manifest 정책 검증 ----
-$viol = @()
-foreach($m in $Manifest){
-  $p = "$($m.path)".Replace('/','\')
-  $full = Join-Path $ROOT $p
-  $exists = Test-Path $full
-  if ($m.retention -eq 'permanent' -and -not $exists){
-    $viol += "permanent missing: $($m.path)"
+foreach ($k in $oldRows.Keys) {
+  if (-not $currRows.ContainsKey($k)) { [void]$removed.Add($k) }
+  else {
+    if ($oldRows[$k].sha256 -ne $currRows[$k].sha256) { [void]$changed.Add($k) }
   }
 }
-# 정책 파일 존재 보장 (Manifest가 가리키는 보안 정책)
-$policy = ($Manifest | Where-Object { $_.path -match '\.kobong/policy/.+\.ya?ml$' })
-foreach($pp in $policy){
-  $full = Join-Path $ROOT ($pp.path)
-  if (-not (Test-Path $full)){ $viol += "policy missing: $($pp.path)" }
+foreach ($k in $currRows.Keys) {
+  if (-not $oldRows.ContainsKey($k)) { [void]$added.Add($k) }
 }
 
-if ($Strict -and $viol.Count){
-  $viol -join "`n" | Out-Host
+"ADDED"   | Out-File $CHG -Encoding utf8
+($added   | Sort-Object) | Out-File $CHG -Append -Encoding utf8
+"CHANGED" | Out-File $CHG -Append -Encoding utf8
+($changed | Sort-Object) | Out-File $CHG -Append -Encoding utf8
+"REMOVED" | Out-File $CHG -Append -Encoding utf8
+($removed | Sort-Object) | Out-File $CHG -Append -Encoding utf8
+
+# --- Manifest 정책 검증 ---
+$viol = New-Object System.Collections.Generic.List[string]
+foreach ($m in $Manifest) {
+  $pp = "$($m.path)".Replace('/','\')
+  $full = Join-Path $ROOT $pp
+  $needPermanent = ($null -ne $m.retention) -and ($m.retention.ToString().ToLower() -eq 'permanent')
+  if ($needPermanent) {
+    if (-not (Test-Path $full)) {
+      [void]$viol.Add("permanent missing: $($m.path)")
+    }
+  }
+}
+
+# Manifest 내부에 정책(YAML) 지정이 있다면 존재 확인
+foreach ($m in $Manifest) {
+  $p = "$($m.path)"
+  if ($p.ToLower().EndsWith('.yaml') -or $p.ToLower().EndsWith('.yml')) {
+    $full = Join-Path $ROOT ($p.Replace('/','\'))
+    if (-not (Test-Path $full)) {
+      [void]$viol.Add("policy missing: $p")
+    }
+  }
+}
+
+if ($Strict -and $viol.Count -gt 0) {
+  $viol | ForEach-Object { Write-Host $_ }
   throw "Manifest violations: $($viol.Count)"
 }
 
 Write-Host "INVENTORY OK"
+exit 0
