@@ -181,4 +181,3 @@ jobs:
         run: |
           & "scripts/g5/ak-test.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
           if ($LASTEXITCODE -ne 0) { throw "canary failed with code $LASTEXITCODE" }
-
