@@ -1,0 +1,62 @@
+﻿name: CI — Smoke $120)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main", "feature/**", "dev/**" ]
+    paths:
+      - "app/**"
+      - "domain/**"
+      - "infra/**"
+      - "ui/**"
+      - "tests/e2e/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "app/**"
+      - "domain/**"
+      - "infra/**"
+      - "ui/**"
+      - "tests/e2e/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+
+concurrency:
+  group: ci-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22.19.0
+        uses: actions/setup-node@v4
+        with:
+          $120
+          cache: "npm"
+
+      - name: Install deps (npm ci)
+        run: npm ci
+
+      - name: Run lint (non-blocking)
+        run: npm run run-lint
+
+      - name: Build (tsc)
+        run: npm run build
+
+      - name: Run smoke (vitest e2e minimal)
+        run: npm run run-smoke
+
+
+
+
