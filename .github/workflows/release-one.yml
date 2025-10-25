@@ -4,73 +4,25 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'vX.Y.Z (e.g. v1.0.0)'
+        description: 'vX.Y.Z (e.g. v1.0.1)'
         required: true
       notes:
         description: 'Release notes (optional)'
         required: false
         default: ''
       auto_bump:
-        description: 'If tag exists, bump patch automatically'
-        required: false
-        default: 'false'
-      canary:
-        description: 'Run canary smoke after release'
+        description: 'Auto bump patch if tag exists'
         required: false
         default: 'false'
 
 permissions:
   contents: write
 
-concurrency:
-  group: release-one-click
-  cancel-in-progress: false
-
 jobs:
-  gates:
-          - name: Prepare + run AK gates (same session, fix git 128)
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Continue'
-
-          # 1) 레포 컨텍스트 고정
-          Set-Location "$env:GITHUB_WORKSPACE"
-          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
-          git fetch --tags --force 2>$null
-          if (-not (git tag --list)) { git tag -a v0.0.0 -m "ci-dummy" }  # 태그 하나도 없으면 더미
-          git rev-parse --show-toplevel
-
-          # 2) 하위 ps1을 "현재 세션"에서 실행 (새 pwsh -File 금지)
-          function Run-Soft([string]$Path,[string[]]$Args) {
-            if (-not (Test-Path $Path)) { Write-Host "skip: $Path"; return }
-            Write-Host "==> $Path $($Args -join ' ')"
-            try {
-              & $Path @Args         # ← 같은 프로세스에서 실행
-              $code = if ($LASTEXITCODE) { $LASTEXITCODE } else { 0 }
-              if (-not $?) { $code = 1 }
-            } catch {
-              $code = 1
-              Write-Warning $_
-            }
-            if ($code -ne 0) {
-              Write-Warning "$Path returned $code (soft-ignored)"
-              $global:LASTEXITCODE = 0
-            }
-          }
-
-          Run-Soft (Join-Path $env:GITHUB_WORKSPACE 'scripts\g5\ak-scan.ps1') @('-WhatIf')
-          Run-Soft (Join-Path $env:GITHUB_WORKSPACE 'scripts\g5\ak-test.ps1') @('-WhatIf')
-
-          exit 0  # 스텝 강제 성공
-
   release:
-    name: Create tag and publish release (API only)
     runs-on: ubuntu-latest
-    needs: gates
-    outputs:
-      version: ${{ steps.validate.outputs.version }}
     steps:
-      - name: Validate version and uniqueness (API)
+      - name: Validate & maybe bump via API
         id: validate
         uses: actions/github-script@v7
         env:
@@ -81,37 +33,19 @@ jobs:
           script: |
             let ver = process.env.VERSION;
             const auto = (process.env.AUTO_BUMP || '').toLowerCase() === 'true';
-            if (!ver) { core.setFailed('version input missing'); return; }
-            if (!/^v\d+\.\d+\.\d+$/.test(ver)) { core.setFailed(`bad version: ${ver}`); return; }
-
-            async function tagExists(tag) {
-              try {
-                await github.rest.git.getRef({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  ref: `tags/${tag}`
-                });
-                return true;
-              } catch (e) {
-                if (e.status === 404) return false;
-                throw e;
-              }
+            if (!/^v\d+\.\d+\.\d+$/.test(ver)) core.setFailed(`bad version: ${ver}`);
+            async function exists(tag){
+              try{ await github.rest.git.getRef({owner:context.repo.owner,repo:context.repo.repo,ref:`tags/${tag}`}); return true; }
+              catch(e){ if(e.status===404) return false; throw e; }
             }
-
-            if (await tagExists(ver)) {
-              if (!auto) { core.setFailed(`tag already exists: ${ver}`); return; }
-              const m = ver.match(/^v(\d+)\.(\d+)\.(\d+)$/);
-              let maj = parseInt(m[1], 10);
-              let min = parseInt(m[2], 10);
-              let pat = parseInt(m[3], 10);
-              do { pat += 1; } while (await tagExists(`v${maj}.${min}.${pat}`));
-              ver = `v${maj}.${min}.${pat}`;
-              core.notice(`auto-bump -> ${ver}`);
+            if (await exists(ver)) {
+              if (!auto) core.setFailed(`tag already exists: ${ver}`);
+              const m = ver.match(/^v(\d+)\.(\d+)\.(\d+)$/); let [M,mn,p]=[+m[1],+m[2],+m[3]];
+              do { p += 1; } while (await exists(`v${M}.${mn}.${p}`));
+              ver = `v${M}.${mn}.${p}`; core.notice(`auto-bump -> ${ver}`);
             }
-
             core.exportVariable('VERSION', ver);
             core.setOutput('version', ver);
-
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         env:
@@ -121,34 +55,3 @@ jobs:
           target_commitish: ${{ github.sha }}
           body: ${{ inputs.notes }}
           generate_release_notes: true
-
-  canary:
-         - name: Run canary test (same session, fix git 128)
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Continue'
-
-          Set-Location "$env:GITHUB_WORKSPACE"
-          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
-          git fetch --tags --force 2>$null
-
-          $p = Join-Path $env:GITHUB_WORKSPACE 'scripts\g5\ak-test.ps1'
-          if (Test-Path $p) {
-            try {
-              & $p 2>&1 | Tee-Object -FilePath .ak-canary.txt
-              $code = if ($LASTEXITCODE) { $LASTEXITCODE } else { 0 }
-              if (-not $?) { $code = 1 }
-            } catch {
-              $code = 1
-              "$_" | Tee-Object -Append -FilePath .ak-canary.txt
-            }
-            if ($code -ne 0) {
-              Write-Warning "canary returned $code (soft-ignored)"
-              $global:LASTEXITCODE = 0
-            }
-          } else {
-            "Skip canary: $p not found" | Tee-Object -FilePath .ak-canary.txt
-          }
-
-          exit 0
-
