@@ -11,11 +11,11 @@ on:
         required: false
         default: ''
       auto_bump:
-        description: '태그가 있으면 패치 버전 자동 증가'
+        description: '태그가 있으면 패치 자동 증가'
         required: false
         default: 'false'
       run_gates:
-        description: 'Windows 게이트/카나리 실행 여부'
+        description: 'Windows 게이트/카나리 실행'
         required: false
         default: 'true'
 
@@ -34,9 +34,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # 태그/이력 전부
+      - name: Git prep (Windows)
+        shell: pwsh
+        run: |
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE" | Out-Null
+          if (Test-Path .git\shallow) { git fetch --prune --unshallow 2>$null }
+          git fetch --tags --force 2>$null
       - name: Pre-release gates (optional AK scan/test)
         shell: pwsh
+        working-directory: ${{ github.workspace }}
         run: |
           & "scripts/g5/ak-scan.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
           & "scripts/g5/ak-test.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
@@ -48,6 +55,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Git prep (Linux)
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE" || true
+          [ -f .git/shallow ] && git fetch --prune --unshallow || true
+          git fetch --tags --force || true
 
       - name: Validate version / maybe auto-bump
         id: v
@@ -60,33 +73,19 @@ jobs:
           script: |
             let ver = (process.env.IN_VERSION || '').trim();
             const auto = (process.env.AUTO_BUMP || '').toLowerCase() === 'true';
-            if (!/^v\d+\.\d+\.\d+$/.test(ver)) {
-              core.setFailed(`bad version: ${ver}`);
-              return;
-            }
+            if (!/^v\d+\.\d+\.\d+$/.test(ver)) { core.setFailed(`bad version: ${ver}`); return; }
             async function exists(tag) {
               try {
-                await github.rest.git.getRef({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  ref: `tags/${tag}`
-                });
+                await github.rest.git.getRef({ owner: context.repo.owner, repo: context.repo.repo, ref: `tags/${tag}` });
                 return true;
-              } catch (e) {
-                if (e.status === 404) return false;
-                throw e;
-              }
+              } catch (e) { if (e.status === 404) return false; throw e; }
             }
             if (await exists(ver)) {
-              if (!auto) {
-                core.setFailed(`tag already exists: ${ver}`);
-                return;
-              }
+              if (!auto) { core.setFailed(`tag already exists: ${ver}`); return; }
               const m = ver.match(/^v(\d+)\.(\d+)\.(\d+)$/);
-              let [maj, min, pat] = [Number(m[1]), Number(m[2]), Number(m[3])];
-              do { pat += 1; } while (await exists(`v${maj}.${min}.${pat}`));
-              ver = `v${maj}.${min}.${pat}`;
-              core.notice(`auto-bump -> ${ver}`);
+              let [M,m,p] = [Number(m[1]), Number(m[2]), Number(m[3])];
+              do { p += 1; } while (await exists(`v${M}.${m}.${p}`));
+              ver = `v${M}.${m}.${p}`; core.notice(`auto-bump -> ${ver}`);
             }
             core.setOutput('version', ver);
 
@@ -109,7 +108,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Git prep (Windows)
+        shell: pwsh
+        run: |
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE" | Out-Null
+          if (Test-Path .git\shallow) { git fetch --prune --unshallow 2>$null }
+          git fetch --tags --force 2>$null
       - name: Post-release canary
         shell: pwsh
+        working-directory: ${{ github.workspace }}
         run: |
           & "scripts/g5/ak-test.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
