@@ -105,7 +105,6 @@ jobs:
     body: ${{ inputs.notes }}
     generate_release_notes: true
 
-
       - name: Compute version (validate / optional auto bump)
         id: v
         uses: actions/github-script@v7
