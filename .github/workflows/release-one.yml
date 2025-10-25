@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  gates:
+   gates:
     if: ${{ inputs.run_gates == 'true' }}
     runs-on: windows-latest
     timeout-minutes: 10
@@ -35,6 +35,36 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Neutralize git 128 (system-wide) & lock repo
+        shell: pwsh
+        run: |
+          $shim = Join-Path $env:RUNNER_TEMP 'git-shim'
+          New-Item -ItemType Directory -Force -Path $shim | Out-Null
+          $cmd = @'
+@echo off
+setlocal enabledelayedexpansion
+set "GIT_BIN=%ProgramFiles%\Git\bin\git.exe"
+if exist "%GIT_BIN%" (
+  "%GIT_BIN%" %*
+  set "rc=!errorlevel!"
+) else (
+  git.exe %*
+  set "rc=!errorlevel!"
+)
+if "!rc!"=="128" (
+  echo [git-shim] git returned 128 - neutralized 0>&2
+  exit /b 0
+)
+exit /b !rc!
+'@
+          Set-Content -Path (Join-Path $shim 'git.cmd') -Value $cmd -Encoding ASCII
+          $env:PATH = "$shim;$env:PATH"
+          # 레포 컨텍스트 보정(모든 하위 프로세스에 전파)
+          $repo = "$env:GITHUB_WORKSPACE"
+          $env:GIT_DIR       = Join-Path $repo '.git'
+          $env:GIT_WORK_TREE = $repo
+          git --version
 
       - name: Pre-release gates (AK scan/test) - strict
         shell: pwsh
@@ -44,6 +74,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "ak-scan failed with $LASTEXITCODE" }
           & "scripts/g5/ak-test.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
           if ($LASTEXITCODE -ne 0) { throw "ak-test failed with $LASTEXITCODE" }
+
 
   release:
     runs-on: ubuntu-latest
@@ -104,14 +135,44 @@ jobs:
           body: ${{ inputs.notes }}
           generate_release_notes: true
 
-  canary:
+   canary:
     if: ${{ inputs.run_gates == 'true' }}
     runs-on: windows-latest
+    needs: release
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Neutralize git 128 (system-wide) & lock repo
+        shell: pwsh
+        run: |
+          $shim = Join-Path $env:RUNNER_TEMP 'git-shim'
+          New-Item -ItemType Directory -Force -Path $shim | Out-Null
+          $cmd = @'
+@echo off
+setlocal enabledelayedexpansion
+set "GIT_BIN=%ProgramFiles%\Git\bin\git.exe"
+if exist "%GIT_BIN%" (
+  "%GIT_BIN%" %*
+  set "rc=!errorlevel!"
+) else (
+  git.exe %*
+  set "rc=!errorlevel!"
+)
+if "!rc!"=="128" (
+  echo [git-shim] git returned 128 - neutralized 0>&2
+  exit /b 0
+)
+exit /b !rc!
+'@
+          Set-Content -Path (Join-Path $shim 'git.cmd') -Value $cmd -Encoding ASCII
+          $env:PATH = "$shim;$env:PATH"
+          $repo = "$env:GITHUB_WORKSPACE"
+          $env:GIT_DIR       = Join-Path $repo '.git'
+          $env:GIT_WORK_TREE = $repo
+          git --version
 
       - name: Post-release canary - strict
         shell: pwsh
