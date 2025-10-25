@@ -4,69 +4,49 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'vX.Y.Z (예: v1.0.1)'
+        description: 'vX.Y.Z (e.g. v1.0.1)'
         required: true
       notes:
         description: 'Release notes (optional)'
         required: false
         default: ''
       auto_bump:
-        description: '태그가 있으면 패치 자동 증가'
+        description: 'Auto bump patch if tag exists'
         required: false
         default: 'false'
       run_gates:
-        description: 'Windows 게이트/카나리 실행'
+        description: 'Run Windows gates/canary'
         required: false
         default: 'true'
 
 permissions:
   contents: write
 
-concurrency:
-  group: release-one-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
-   gates:
+  gates:
     if: ${{ inputs.run_gates == 'true' }}
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Neutralize git 128 (system-wide) & lock repo
+      - name: Git shim (neutralize exit 128) and env
         shell: pwsh
         run: |
           $shim = Join-Path $env:RUNNER_TEMP 'git-shim'
           New-Item -ItemType Directory -Force -Path $shim | Out-Null
-          $cmd = @'
-@echo off
-setlocal enabledelayedexpansion
-set "GIT_BIN=%ProgramFiles%\Git\bin\git.exe"
-if exist "%GIT_BIN%" (
-  "%GIT_BIN%" %*
-  set "rc=!errorlevel!"
-) else (
-  git.exe %*
-  set "rc=!errorlevel!"
-)
-if "!rc!"=="128" (
-  echo [git-shim] git returned 128 - neutralized 0>&2
-  exit /b 0
-)
-exit /b !rc!
-'@
-          Set-Content -Path (Join-Path $shim 'git.cmd') -Value $cmd -Encoding ASCII
+          $content = "@echo off`r`nsetlocal enabledelayedexpansion`r`nset ""GIT_BIN=%ProgramFiles%\Git\bin\git.exe""`r`nif exist ""%GIT_BIN%"" (`r`n  ""%GIT_BIN%"" %*`r`n  set ""rc=!errorlevel!""`r`n) else (`r`n  git.exe %*`r`n  set ""rc=!errorlevel!""`r`n)`r`nif ""!rc!""==""128"" (`r`n  echo [git-shim] 128 neutralized 1>&2`r`n  exit /b 0`r`n)`r`nexit /b !rc!`r`n"
+          Set-Content -Path (Join-Path $shim 'git.cmd') -Value $content -Encoding ASCII
           $env:PATH = "$shim;$env:PATH"
-          # 레포 컨텍스트 보정(모든 하위 프로세스에 전파)
           $repo = "$env:GITHUB_WORKSPACE"
-          $env:GIT_DIR       = Join-Path $repo '.git'
+          $env:GIT_DIR = Join-Path $repo '.git'
           $env:GIT_WORK_TREE = $repo
           git --version
 
-      - name: Pre-release gates (AK scan/test) - strict
+      - name: Run gates
         shell: pwsh
         working-directory: ${{ github.workspace }}
         run: |
@@ -75,12 +55,11 @@ exit /b !rc!
           & "scripts/g5/ak-test.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
           if ($LASTEXITCODE -ne 0) { throw "ak-test failed with $LASTEXITCODE" }
 
-
   release:
     runs-on: ubuntu-latest
-    # 참고: run_gates=false 로 돌릴 계획이면 위의 needs 의존을 두지 마세요.
+    timeout-minutes: 20
     steps:
-      - name: Validate version / maybe auto-bump (API)
+      - name: Validate version (API)
         id: v
         uses: actions/github-script@v7
         env:
@@ -91,41 +70,25 @@ exit /b !rc!
           script: |
             const input = (process.env.IN_VERSION || '').trim();
             const auto  = (process.env.AUTO_BUMP || '').toLowerCase() === 'true';
-            if (!/^v\d+\.\d+\.\d+$/.test(input)) {
-              core.setFailed(`bad version: ${input}`);
-              return;
-            }
-
+            if (!/^v\d+\.\d+\.\d+$/.test(input)) { core.setFailed(`bad version: ${input}`); return; }
             let ver = input;
             async function exists(tag) {
               try {
-                await github.rest.git.getRef({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  ref: `tags/${tag}`
-                });
+                await github.rest.git.getRef({ owner: context.repo.owner, repo: context.repo.repo, ref: `tags/${tag}` });
                 return true;
-              } catch (e) {
-                if (e.status === 404) return false;
-                throw e;
-              }
+              } catch (e) { if (e.status === 404) return false; throw e; }
             }
-
             if (await exists(ver)) {
-              if (!auto) {
-                core.setFailed(`tag already exists: ${ver}`);
-                return;
-              }
+              if (!auto) { core.setFailed(`tag already exists: ${ver}`); return; }
               const mt = ver.match(/^v(\d+)\.(\d+)\.(\d+)$/);
-              let major = Number(mt[1]), minor = Number(mt[2]), patch = Number(mt[3]);
+              let major = Number(mt[1]); let minor = Number(mt[2]); let patch = Number(mt[3]);
               do { patch += 1; } while (await exists(`v${major}.${minor}.${patch}`));
               ver = `v${major}.${minor}.${patch}`;
               core.notice(`auto-bump -> ${ver}`);
             }
-
             core.setOutput('version', ver);
 
-      - name: Create tag & publish release (API-only)
+      - name: Publish release (API-only)
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -135,46 +98,30 @@ exit /b !rc!
           body: ${{ inputs.notes }}
           generate_release_notes: true
 
-   canary:
+  canary:
     if: ${{ inputs.run_gates == 'true' }}
     runs-on: windows-latest
-    needs: release
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Neutralize git 128 (system-wide) & lock repo
+      - name: Git shim (neutralize exit 128) and env
         shell: pwsh
         run: |
           $shim = Join-Path $env:RUNNER_TEMP 'git-shim'
           New-Item -ItemType Directory -Force -Path $shim | Out-Null
-          $cmd = @'
-@echo off
-setlocal enabledelayedexpansion
-set "GIT_BIN=%ProgramFiles%\Git\bin\git.exe"
-if exist "%GIT_BIN%" (
-  "%GIT_BIN%" %*
-  set "rc=!errorlevel!"
-) else (
-  git.exe %*
-  set "rc=!errorlevel!"
-)
-if "!rc!"=="128" (
-  echo [git-shim] git returned 128 - neutralized 0>&2
-  exit /b 0
-)
-exit /b !rc!
-'@
-          Set-Content -Path (Join-Path $shim 'git.cmd') -Value $cmd -Encoding ASCII
+          $content = "@echo off`r`nsetlocal enabledelayedexpansion`r`nset ""GIT_BIN=%ProgramFiles%\Git\bin\git.exe""`r`nif exist ""%GIT_BIN%"" (`r`n  ""%GIT_BIN%"" %*`r`n  set ""rc=!errorlevel!""`r`n) else (`r`n  git.exe %*`r`n  set ""rc=!errorlevel!""`r`n)`r`nif ""!rc!""==""128"" (`r`n  echo [git-shim] 128 neutralized 1>&2`r`n  exit /b 0`r`n)`r`nexit /b !rc!`r`n"
+          Set-Content -Path (Join-Path $shim 'git.cmd') -Value $content -Encoding ASCII
           $env:PATH = "$shim;$env:PATH"
           $repo = "$env:GITHUB_WORKSPACE"
-          $env:GIT_DIR       = Join-Path $repo '.git'
+          $env:GIT_DIR = Join-Path $repo '.git'
           $env:GIT_WORK_TREE = $repo
           git --version
 
-      - name: Post-release canary - strict
+      - name: Run canary
         shell: pwsh
         working-directory: ${{ github.workspace }}
         run: |
