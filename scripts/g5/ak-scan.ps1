@@ -19,14 +19,24 @@ function Find-RepoRoot([string]$start) {
   if (Test-Path (Join-Path $d '.git')) { return $d }
   return (Resolve-Path $start)
 }
+
 function Get-RepoRoot {
   if ($env:GITHUB_WORKSPACE -and (Test-Path $env:GITHUB_WORKSPACE)) { return $env:GITHUB_WORKSPACE }
   return (Find-RepoRoot -start $PSScriptRoot)
 }
 
+
 # 작업 폴더를 레포 루트로 고정
 $__repo = Get-RepoRoot
 Set-Location $__repo
+
+function Invoke-GitSoft {
+  param([Parameter(ValueFromRemainingArguments=$true)][string[]]$Args)
+  try { & git @Args } catch { Write-Warning "git failed: $($_.Exception.Message)"; $global:LASTEXITCODE=0; return }
+  if ($LASTEXITCODE -eq 128) { Write-Warning "git 128 ignored: git $($Args -join ' ')"; $global:LASTEXITCODE=0 }
+}
+Set-Alias git Invoke-GitSoft -Scope Local
+
 
 # --- git 128 무시 래퍼(안전장치) ---
 function Invoke-GitSoft {
