@@ -1,0 +1,37 @@
+{
+  "timestamp": "2025-09-24T18:03:29.1265229+09:00",
+  "repo": "D:\\ChatGPT5_AI_Link\\dosc\\kobong-orchestrator",
+  "http": [
+    {
+      "url": "http://localhost:5173/",
+      "ok": false,
+      "status": "The request was canceled due to the configured HttpClient.Timeout of 3 seconds elapsing.",
+      "when": "2025-09-24T18:03:25.4411152+09:00"
+    },
+    {
+      "url": "http://localhost:5173/metrics",
+      "ok": false,
+      "status": "The request was canceled due to the configured HttpClient.Timeout of 3 seconds elapsing.",
+      "when": "2025-09-24T18:03:28.4584021+09:00"
+    }
+  ],
+  "tcp": [
+    {
+      "port": 5173,
+      "state": "NotListening",
+      "pid": null,
+      "proc": null
+    },
+    {
+      "port": 5174,
+      "state": "NotListening",
+      "pid": null,
+      "proc": null
+    }
+  ],
+  "task": {
+    "name": "MyTask_Interactive_v2",
+    "lastRun": "09/24/2025 16:27:27",
+    "result": 3221225786
+  }
+}

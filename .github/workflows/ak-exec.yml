@@ -1,0 +1,114 @@
+name: AK7 exec (stable)
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  exec:
+    if: startsWith(github.event.comment.body, '/ak')
+    runs-on: windows-latest
+
+    steps:
+      - name: ack (exec stable)
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const body = context.payload.comment.body.trim();
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `ack ✅ "${body}" (exec stable)`
+            });
+
+      # PR인지 확인하고, PR이면 head 정보를 뽑아온다.
+      - name: detect PR
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          result-encoding: string
+          script: |
+            try {
+              const pr = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number
+              });
+              core.setOutput('isPR', '1');
+              core.setOutput('headRepo', pr.data.head.repo.full_name);
+              core.setOutput('sha', pr.data.head.sha);
+              core.setOutput('ref', pr.data.head.ref);
+            } catch (e) {
+              core.setOutput('isPR', '0');
+            }
+
+      # PR이 아니면 스킵 안내만 남기고 종료
+      - name: PR only notice
+        if: steps.pr.outputs.isPR != '1'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: 'ℹ️ `/ak` 실행은 **PR 대화**에서만 동작합니다. 현재는 Issue라 git 실행을 스킵했어요.'
+            });
+
+      - name: checkout PR head (no submodules)
+        if: steps.pr.outputs.isPR == '1'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.pr.outputs.headRepo }}
+          ref: ${{ steps.pr.outputs.sha }}
+          fetch-depth: 1
+          submodules: 'false'            # 서브모듈로 인한 git 128 방지
+          persist-credentials: false
+
+      - name: avoid git warnings
+        if: steps.pr.outputs.isPR == '1'
+        shell: bash
+        run: |
+          git config --global --add safe.directory '*'
+
+      - name: exec
+        if: steps.pr.outputs.isPR == '1'
+        shell: pwsh
+        continue-on-error: true          # 스크립트 실패해도 워크는 성공 처리
+        run: |
+          $BODY = "${{ github.event.comment.body }}".Trim()
+          # /ak <cmd> ...  → 첫 토큰을 명령으로 사용. 없으면 scan.
+          $cmd = ($BODY -replace '^/ak\s*','').Split(' ')[0]
+          if ([string]::IsNullOrWhiteSpace($cmd)) { $cmd = 'scan' }
+
+          $candidate = Join-Path -Path "scripts\g5" -ChildPath ("ak-{0}.ps1" -f $cmd)
+          Write-Host (">> PR head: ${{ steps.pr.outputs.headRepo }}@${{ steps.pr.outputs.ref }} (${{ steps.pr.outputs.sha }})")
+          Write-Host (">> Candidate(s): $candidate")
+
+          if (Test-Path $candidate) {
+            Write-Host (">> Running $candidate")
+            pwsh -NoProfile -ExecutionPolicy Bypass -File $candidate
+          } else {
+            Write-Host (">> No script file found: $candidate")
+          }
+
+      - name: exec done
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '✅ exec done'
+            });

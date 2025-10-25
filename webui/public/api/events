@@ -1,0 +1,3 @@
+: keep-alive
+event: ping
+data: {""ok"":true,""ts"":""2025-09-24T10:53:22.2465152+09:00""}

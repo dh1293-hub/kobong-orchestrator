@@ -1,0 +1,22 @@
+name: Contracts CI
+on:
+  pull_request:
+    branches: [ main ]
+jobs:
+  contracts:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify sentinel & port matrix
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $htmls = Get-ChildItem -Recurse -Include *.html
+          if (-not $htmls) { throw "No HTML files found" }
+          $must = @(
+            '__G5_SENTINEL:AK7_v1.1__','AK7_API_BASE','http://localhost:5181',
+            '__G5_SENTINEL:GHMON_v1.1__','GHMON_API_BASE','http://localhost:5182',
+            '__G5_SENTINEL:ORCHMON_v1.1__','ORCHMON_API_BASE','http://localhost:5183'
+          )
+          foreach($m in $must){ if(-not ($htmls | Select-String -SimpleMatch $m)){ throw "Missing: $m"} }
+          Write-Host "OK: sentinel/ports wired"

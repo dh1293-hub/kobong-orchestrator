@@ -1,0 +1,14 @@
+name: soft-guard
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail if PR has no approvals label or CODEOWNERS missing
+        run: |
+          echo "This check is advisory. Without branch protection, it won't block merges."
+          exit 1

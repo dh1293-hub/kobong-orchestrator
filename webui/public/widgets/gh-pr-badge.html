@@ -1,0 +1,39 @@
+<!doctype html><meta charset="utf-8"><title>GitHub PR Badge</title>
+<style>:root{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Apple Color Emoji}
+body{margin:0;padding:12px;background:#0b0f19;color:#e6e8f0}.card{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#12172a;box-shadow:0 4px 14px rgba(0,0,0,.25)}.dot{width:10px;height:10px;border-radius:50%}.state{font-weight:700;letter-spacing:.3px}.meta{opacity:.8;font-size:12px}.state.open .dot{background:#f5c518}.state.merged .dot{background:#22c55e}.state.unknown .dot{background:#64748b}a{color:#93c5fd;text-decoration:none}a:hover{text-decoration:underline}</style>
+<div class="card"><div class="dot"></div><div>
+  <div id="title" class="state unknown"><span class="state">UNKNOWN</span> · <a href="#" target="_blank">#-</a></div>
+  <div id="meta" class="meta">repo: -, base: -, updated: - · <span id="branch">-</span></div>
+</div></div>
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const q1=(sel)=>document.querySelector(sel);
+  const setText=(el,txt)=>{ if(el) el.textContent=txt; };
+  const setHtml=(el,html)=>{ if(el) el.innerHTML=html; };
+
+  async function load(){
+    try{
+      const r=await fetch('../data/gh-monitor.json?ts='+Date.now(),{cache:'no-store'});
+      const j=await r.json();
+      const t=$('title'), b=$('branch'), m=$('meta')||q1('#meta')||q1('.meta');
+      let s='unknown', bt='-';
+      if(j && j.latest){
+        const L=j.latest;
+        s=L.state||'unknown';
+        bt=(L.head||'-')+' → '+(L.base||'-');
+        setHtml(t, `<span class="state">${s.toUpperCase()}</span> · <a target="_blank" href="${L.url}">#${L.number}</a>`);
+      }else{
+        setHtml(t, `<span class="state">NO DATA</span>`);
+      }
+      if(t) t.className='state '+s;
+      setText(b, bt);
+      setText(m, `repo: ${j?.repo||'-'}, base: ${j?.base||'-'}, updated: ${j?.timestamp||'-'}`);
+    }catch(e){
+      const m=$('meta')||q1('#meta')||q1('.meta');
+      setText(m, 'load failed: '+e.message);
+    }
+  }
+  load(); setInterval(load,10000);
+})();
+</script>

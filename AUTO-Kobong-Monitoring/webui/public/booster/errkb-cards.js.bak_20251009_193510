@@ -1,0 +1,158 @@
+(()=>{ if(window.__errkb_cards_v1){return;} window.__errkb_cards_v1=1;
+const tab = document.querySelector("#tab-errkb .card"); if(!tab){ console.warn("[errkb] host not found"); return; }
+/* 기존 카드속카드 제거 */
+[...tab.querySelectorAll(".orch-box")].forEach(n=>n.remove());
+
+/* 스타일 */
+const css=`
+.errkb-bar{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}
+.errkb-bar input,.errkb-bar select{padding:8px 10px;border-radius:10px;border:1px solid var(--border,#ffffff22);background:transparent;color:var(--fg,inherit)}
+.errkb-bar .btn{padding:8px 12px;border-radius:10px;border:1px solid var(--border,#ffffff22);background:transparent;cursor:pointer}
+.errkb-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media(max-width:1200px){.errkb-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:820px){.errkb-grid{grid-template-columns:1fr}}
+.errkb-card{border:1px solid var(--border,#ffffff22);border-radius:14px;padding:12px;background:rgba(20,21,23,.85)}
+.errkb-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.errkb-title{font-size:14px;font-weight:700}
+.errkb-bad{font:12px/1 ui-monospace,Consolas,monospace;border:1px solid #ffffff22;border-radius:999px;padding:2px 8px}
+.errkb-pin{all:unset;cursor:pointer;border:1px solid #ffffff22;border-radius:8px;padding:2px 6px}
+.errkb-meta{opacity:.8;font:12px/1.2 ui-monospace,Consolas,monospace;margin-bottom:8px}
+.errkb-msg{font-size:14px;opacity:.95;white-space:pre-wrap;word-break:break-word;margin:6px 0 8px}
+.errkb-sol{background:rgba(255,255,255,.04);border:1px dashed #ffffff33;border-radius:10px;padding:8px}
+.errkb-sol pre{margin:6px 0 0 0;font:12px/1.4 ui-monospace,Consolas,monospace;white-space:pre-wrap}
+.errkb-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.orch-mono{font:12px/1.2 ui-monospace,Consolas,monospace}.orch-small{opacity:.85;font-size:.92em}
+`; const st=document.createElement("style"); st.textContent=css; document.head.appendChild(st);
+
+/* 상단 바 */
+const bar=document.createElement("div"); bar.className="errkb-bar";
+bar.innerHTML=`
+  <input placeholder="검색(지문/메시지)" data-k="q" size="24">
+  <select data-k="type"><option value="">type:전체</option><option>error</option><option>action</option><option>info</option><option>log</option></select>
+  <input placeholder="action 필터" data-k="act" size="16">
+  <select data-k="role"><option value="">role:전체</option><option>input</option><option>server</option><option>vserver</option><option>aux</option><option>extra</option></select>
+  <label><input type="checkbox" data-k="pinnedOnly"> pinned만</label>
+  <button class="btn" data-k="export">⤓ export (json)</button>
+  <button class="btn" data-k="clear">clear</button>
+  <span class="errkb-bad" data-k="meta">0 cards</span>`;
+tab.appendChild(bar);
+
+/* 카드 그리드 */
+const grid=document.createElement("div"); grid.className="errkb-grid"; tab.appendChild(grid);
+
+/* 규칙(지문→솔루션) */
+const KB_RULES=[
+  { re:/listen EACCES|permission denied .*:(\d+)/i, fp:"PORT_PERMISSION", sol:"원인: 포트 권한/충돌.\n해결: 관리자 PowerShell 실행, 점유 PID 종료, 포트변경/방화벽 예외." },
+  { re:/The term 'npm' is not recognized/i, fp:"NPM_NOT_FOUND", sol:"원인: npm PATH 미설정.\n해결: Node 설치 후 새 쉘, 또는 컨테이너 빌드 사용." },
+  { re:/node-gyp .* Could not find any Visual Studio/i, fp:"NODE_GYP_VS", sol:"원인: C++ 빌드툴 부재.\n해결: VS \"Desktop development with C++\" 설치." },
+  { re:/EPERM.*rmdir.*node-pty/i, fp:"NPM_EPERM_NODE_PTY", sol:"원인: 잠금/권한.\n해결: 에디터/터미널 종료, 관리자 권한, 폴더 잠금 해제." },
+  { re:/Cannot GET \//i, fp:"HOST_ROOT_404", sol:"원인: 루트 라우트 미구현.\n해결: /health·/api만 노출된 정상 상태(무시 가능)." },
+  { re:/ERR_CONNECTION_REFUSED/i, fp:"CONN_REFUSED", sol:"원인: 대상 포트 비가동/방화벽.\n해결: 포트/서비스/AutoStart 확인." },
+  { re:/net::ERR_FILE_NOT_FOUND/i, fp:"FILE_NOT_FOUND", sol:"원인: 정적 리소스 경로 오류.\n해결: /public/img 경로/파일명 확인." },
+  { re:/manifest .* not found.*windows.*servercore/i, fp:"DOCKER_IMAGE_TAG", sol:"원인: 윈도 이미지 태그 불일치.\n해결: 호스트 OS 빌드와 일치하는 ltsc 태그 사용." },
+  { re:/Empty continuation line/i, fp:"DOCKERFILE_LINE_CONT", sol:"원인: Dockerfile 라인 연속 구문.\n해결: 각 명령을 별도 라인으로 분리." },
+  { re:/ParserError.*The '<' operator is reserved/i, fp:"POWERSHELL_ANGLE", sol:"원인: PowerShell에서 <> 사용 오류.\n해결: 문자열/명령으로 치환." },
+  { re:/The variable '\$Date\.now\(\)' cannot be retrieved/i, fp:"POWERSHELL_VAR_IN_JS", sol:"원인: PowerShell에서 JS 문법 사용.\n해결: 문자열로 이스케이프 또는 JS 문맥에서 실행." },
+  { re:/timeline.*404/i, fp:"SSE_404", sol:"원인: /api/.../timeline 미구현.\n해결: server.js SSE 라우트 확인." },
+  { re:/not found.*\/api\/orchmon/i, fp:"API_BASE_BAD", sol:"원인: API_BASE/경로 불일치.\n해결: Set-OrchApi.ps1 로 재설정." },
+  { re:/health.*Failed to fetch/i, fp:"HEALTH_FETCH", sol:"원인: 오리진 mismatch.\n해결: fetch-redirect 또는 API_BASE 통일." },
+  { re:/manifest for .*windows.*ltsc2022 not found/i, fp:"NODE_IMAGE_TAG", sol:"원인: Node 윈도 이미지 태그 부재.\n해결: 유효 태그 확인/고정." },
+];
+const pickRule = (m)=>{ for(const r of KB_RULES){ if(r.re.test(m)) return r; } return {fp:"GENERIC", sol:"원인: 일반 오류. 포트/경로/권한/태그/로그 맥락 우선 점검."}; };
+
+/* 상태 */
+const map=new Map(); const MAX_EVENTS_PER_KEY=20;
+
+/* 렌더 */
+function render(){
+  const qv=(bar.querySelector('[data-k="q"]').value||'').toLowerCase();
+  const ty=(bar.querySelector('[data-k="type"]').value||'');
+  const rl=(bar.querySelector('[data-k="role"]').value||'');
+  const ac=(bar.querySelector('[data-k="act"]')?.value||'').toLowerCase();
+  const pinnedOnly=bar.querySelector('[data-k="pinnedOnly"]').checked;
+
+  const rows=[...map.entries()].filter(([k,v])=>{
+    const s=v.sample||{}; const T=(s.type||'').toLowerCase(); const R=(s.role||'').toLowerCase(); const A=(s.action||'').toLowerCase(); const M=((s.msg||s.message||'')+'').toLowerCase();
+    if(ty && T!==ty) return false; if(rl && R!==rl) return false; if(ac && !A.includes(ac)) return false;
+    if(qv && !(k.toLowerCase().includes(qv)||M.includes(qv))) return false;
+    if(pinnedOnly && !v.pinned) return false; return true;
+  }).sort((a,b)=>{ const pa=a[1].pinned?1:0, pb=b[1].pinned?1:0; if(pb!==pa) return pb-pa; if(b[1].count!==a[1].count) return b[1].count-a[1].count; return (b[1].lastTs||0)-(a[1].lastTs||0); });
+
+  grid.innerHTML=''; for(const [key,v] of rows){
+    const s=v.sample||{}; const lastTs=new Date(v.lastTs||Date.now()).toLocaleTimeString(); const msg=(s.msg||s.message||'')+'';
+    const card=document.createElement('div'); card.className='errkb-card'; card.dataset.key=key;
+    card.innerHTML=`
+      <div class="errkb-h"><div class="errkb-title">${key}</div>
+        <div class="errkb-row"><span class="errkb-bad" title="집계">${v.count}</span>
+        <button class="errkb-pin" data-act="pin">${v.pinned?'★ pinned':'☆ pin'}</button></div></div>
+      <div class="errkb-meta errkb-muted">type=${s.type||'-'} · role=${s.role||'-'} · action=${s.action||'-'} · last=${lastTs}</div>
+      <div class="errkb-msg">${msg.slice(0,300)}</div>
+      <div class="errkb-sol"><b>해결책</b><pre>${v.sol}</pre>
+        <div class="errkb-row">
+          <button class="btn" data-act="copy-sol">복사(해결책)</button>
+          <button class="btn" data-act="copy-json">복사(원본 JSON)</button>
+          <button class="btn" data-act="more">최근 이벤트</button>
+          <button class="btn" data-act="klc">KLC 연동</button>
+        </div></div>`;
+    card.addEventListener("click", async (e)=>{
+      const b=e.target.closest('button[data-act]'); if(!b) return; const act=b.dataset.act;
+      if(act==='pin'){ v.pinned=!v.pinned; render(); }
+      if(act==='copy-sol'){ try{ await navigator.clipboard.writeText(v.sol); b.textContent='복사됨!'; setTimeout(()=>b.textContent='복사(해결책)',800);}catch{} }
+      if(act==='copy-json'){ try{ await navigator.clipboard.writeText(JSON.stringify(v.sample||{},null,2)); b.textContent='복사됨!'; setTimeout(()=>b.textContent='복사(원본 JSON)',800);}catch{} }
+      if(act==='more'){ showRecent(key,v); }
+      if(act==='klc'){ openKLC(key,v); }
+    });
+    grid.appendChild(card);
+  }
+  bar.querySelector('[data-k="meta"]').textContent = `${rows.length} cards`;
+}
+function showRecent(key,v){
+  const wrap=document.createElement('div'); wrap.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:99999';
+  const pane=document.createElement('div'); pane.style.cssText='width:min(780px,92vw);max-height:80vh;overflow:auto;background:#13151a;color:#eaeaea;border:1px solid #ffffff22;border-radius:14px;padding:12px';
+  pane.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b>Recent · ${key}</b><button class="btn" data-x>닫기</button></div>`;
+  const pre=document.createElement('pre'); pre.style.cssText='white-space:pre-wrap;font:12px/1.4 ui-monospace,Consolas,monospace'; pre.textContent=v.events.map(o=>JSON.stringify(o)).join('\n');
+  pane.appendChild(pre); wrap.appendChild(pane); document.body.appendChild(wrap);
+  wrap.addEventListener('click',e=>{ if(e.target.dataset.x!==undefined || e.target===wrap){ wrap.remove(); }});
+}
+function openKLC(key,v){ console.log('[KLC]', {fingerprint:key, sample:v.sample}); alert('KLC 연동 자리 (fingerprint: '+key+')'); }
+
+/* 집계 */
+const map=new Map(); const MAX_EVENTS_PER_KEY=20;
+const pickFp = (o)=>{ const m=((o.msg||o.message||'')+''); const rule=pickRule(m); if(o.errCode) return 'E#'+o.errCode; if(rule && rule.fp!=='GENERIC') return rule.fp; if(o.action) return 'ACT:'+o.action; return 'MSG:'+m.slice(0,80); };
+function upsert(o){
+  const key=pickFp(o); const m=((o.msg||o.message||'')+''); const rule=pickRule(m);
+  const cur=map.get(key)||{count:0,lastTs:0,sample:o,events:[],pinned:false,sol:rule.sol};
+  cur.count++; cur.lastTs=o.ts||Date.now(); cur.sample=o; cur.sol=rule.sol; cur.events.push(o); if(cur.events.length>MAX_EVENTS_PER_KEY) cur.events.shift();
+  map.set(key,cur);
+}
+
+/* 이벤트 수신 */
+function onEvent(o){
+  // 에러성 이벤트만 우선 집계
+  const t=(o.type||'').toLowerCase(); const a=(o.action||'').toLowerCase(); const m=((o.msg||o.message||'')+'').toLowerCase();
+  if(t==='error' || /error|fail|rollback|exception|timeout/.test(a) || /error|fail|rollback|exception|timeout/.test(m)){ upsert(o); render(); }
+}
+
+/* ORCHBUS 구독(실데이터) 또는 샘플15 */
+if(window.ORCHBUS && typeof ORCHBUS.subscribe==='function'){ ORCHBUS.subscribe(onEvent); }
+else{
+  const S=[ /* sample 15 */ 
+    {type:'error',role:'server',action:'listen',msg:'Error: listen EACCES: permission denied 0.0.0.0:5193',ts:Date.now()-6e5},
+    {type:'error',role:'server',action:'listen',msg:'Error: listen EACCES: permission denied 0.0.0.0:5188',ts:Date.now()-54e4},
+    {type:'error',role:'server',action:'docker',msg:'manifest for mcr.microsoft.com/windows/node:lts-windowsservercore-ltsc2022 not found',ts:Date.now()-48e4},
+    {type:'error',role:'server',action:'docker',msg:'no matching manifest for windows(10.0.19045)/amd64 in the manifest list entries',ts:Date.now()-42e4},
+    {type:'error',role:'npm',action:'node-gyp',msg:'gyp ERR! find VS Could not find any Visual Studio installation to use',ts:Date.now()-36e4},
+    {type:'error',role:'npm',action:'node-pty',msg:'EPERM: operation not permitted, rmdir ...\\node_modules\\node-pty\\deps',ts:Date.now()-30e4},
+    {type:'error',role:'ps',action:'parser',msg:"ParserError: The '<' operator is reserved for future use.",ts:Date.now()-24e4},
+    {type:'error',role:'ps',action:'var',msg:"The variable '$Date.now()' cannot be retrieved because it has not been set.",ts:Date.now()-18e4},
+    {type:'error',role:'web',action:'fetch',msg:'GET http://localhost:5183/health net::ERR_CONNECTION_REFUSED',ts:Date.now()-12e4},
+    {type:'error',role:'web',action:'static',msg:'net::ERR_FILE_NOT_FOUND /public/img/STS_LOGO-크림색.png',ts:Date.now()-60e3},
+    {type:'info',role:'host',action:'health',msg:'{\"ok\":true,\"service\":\"orchmon\",\"mode\":\"MOCK\"}',ts:Date.now()-40e3},
+    {type:'action',role:'input',action:'good',msg:'user pressed GOOD',ts:Date.now()-30e3},
+    {type:'error',role:'api',action:'timeline',msg:'GET /api/orchmon/timeline 404 (Not Found)',ts:Date.now()-20e3},
+    {type:'error',role:'api',action:'apibase',msg:'http://localhost:5193/api/orchmon : not found',ts:Date.now()-10e3},
+    {type:'error',role:'web',action:'health',msg:'[ORCHMON] health: ERROR Failed to fetch',ts:Date.now()-5e3},
+  ]; S.forEach(onEvent);
+}
+console.log("%cError-KB cards (3-col) installed","background:#19c37d;color:#111;padding:2px 6px;border-radius:6px");
+})();

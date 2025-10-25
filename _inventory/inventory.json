@@ -1,0 +1,3697 @@
+[
+  {
+    "path": ".editorconfig",
+    "Length": 133,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.6799464Z"
+  },
+  {
+    "path": ".gitattributes",
+    "Length": 745,
+    "LastWriteTimeUtc": "2025-10-20T04:29:01.9976163Z"
+  },
+  {
+    "path": ".gitignore",
+    "Length": 465,
+    "LastWriteTimeUtc": "2025-10-21T15:12:01.3718562Z"
+  },
+  {
+    "path": ".npmrc",
+    "Length": 25,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.6799464Z"
+  },
+  {
+    "path": "CHANGELOG.md",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "fix-ak.ps1",
+    "Length": 8982,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.705723Z"
+  },
+  {
+    "path": "kobong_gpt_5_주도형_개발_계획서_v_1.md",
+    "Length": 9322,
+    "LastWriteTimeUtc": "2025-10-19T02:44:14.2934799Z"
+  },
+  {
+    "path": "README.md",
+    "Length": 463,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "remove-open-ps7-cmd.ps1",
+    "Length": 3938,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "repo-curate-and-commit.ps1",
+    "Length": 3665,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "Rollbackfile.json",
+    "Length": 1851,
+    "LastWriteTimeUtc": "2025-10-20T01:55:11.0176849Z"
+  },
+  {
+    "path": "SECURITY.md",
+    "Length": 2463,
+    "LastWriteTimeUtc": "2025-10-19T02:44:15.0419431Z"
+  },
+  {
+    "path": "upgrade-gh-and-hook.ps1",
+    "Length": 4337,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": ".backup\\working_backup_20251021_105707.zip",
+    "Length": 108582303,
+    "LastWriteTimeUtc": "2025-10-21T01:58:54.4764212Z"
+  },
+  {
+    "path": ".config\\.psscriptanalyzerrc.psd1",
+    "Length": 329,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.6799464Z"
+  },
+  {
+    "path": ".githooks\\pre-commit",
+    "Length": 433,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.6799464Z"
+  },
+  {
+    "path": ".githooks\\pre-commit.bat",
+    "Length": 315,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.6799464Z"
+  },
+  {
+    "path": ".githooks\\pre-commit.cmd",
+    "Length": 315,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.6799464Z"
+  },
+  {
+    "path": ".githooks\\pre-commit.ps1",
+    "Length": 878,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.6799464Z"
+  },
+  {
+    "path": ".githooks\\pre-push",
+    "Length": 410,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.6799464Z"
+  },
+  {
+    "path": ".githooks\\pre-push.cmd",
+    "Length": 313,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.6799464Z"
+  },
+  {
+    "path": ".githooks\\pre-push.ps1",
+    "Length": 1476,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.6799464Z"
+  },
+  {
+    "path": ".githooks\\_bak\\pre-commit.local-20250918-054137.bak",
+    "Length": 474,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.6799464Z"
+  },
+  {
+    "path": ".github\\workflows\\ak-auto.yml",
+    "Length": 5637,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.567668Z"
+  },
+  {
+    "path": ".github\\workflows\\ak-commands.yml",
+    "Length": 3560,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5686692Z"
+  },
+  {
+    "path": ".github\\workflows\\ak-context.yml",
+    "Length": 2053,
+    "LastWriteTimeUtc": "2025-10-21T20:24:24.570959Z"
+  },
+  {
+    "path": ".github\\workflows\\auto-github-release.yml",
+    "Length": 1259,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5686692Z"
+  },
+  {
+    "path": ".github\\workflows\\auto-merge.yml",
+    "Length": 556,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5686692Z"
+  },
+  {
+    "path": ".github\\workflows\\ci-apply-patches-smoke.yml",
+    "Length": 673,
+    "LastWriteTimeUtc": "2025-10-21T19:45:39.2506156Z"
+  },
+  {
+    "path": ".github\\workflows\\dispatch-on-release.yml",
+    "Length": 706,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5696611Z"
+  },
+  {
+    "path": ".github\\workflows\\guard-flush-queue.yml",
+    "Length": 1333,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5696611Z"
+  },
+  {
+    "path": ".github\\workflows\\guard-logs-ignored.yml",
+    "Length": 1347,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5696611Z"
+  },
+  {
+    "path": ".github\\workflows\\guard-readme-badge.yml",
+    "Length": 715,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.570668Z"
+  },
+  {
+    "path": ".github\\workflows\\guard-sentinel.yml",
+    "Length": 881,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.570668Z"
+  },
+  {
+    "path": ".github\\workflows\\health-monitor.yml",
+    "Length": 1500,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.570668Z"
+  },
+  {
+    "path": ".github\\workflows\\housekeeping-smoke.yml",
+    "Length": 2002,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5716608Z"
+  },
+  {
+    "path": ".github\\workflows\\klc-append-release.yml",
+    "Length": 1655,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5716608Z"
+  },
+  {
+    "path": ".github\\workflows\\klc-nightly-aggregate.yml",
+    "Length": 538,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5716608Z"
+  },
+  {
+    "path": ".github\\workflows\\klc-validate.yml",
+    "Length": 1376,
+    "LastWriteTimeUtc": "2025-10-21T20:25:00.9466155Z"
+  },
+  {
+    "path": ".github\\workflows\\klc-verify.yml",
+    "Length": 602,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5716608Z"
+  },
+  {
+    "path": ".github\\workflows\\post-release-canary.yml",
+    "Length": 882,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5726688Z"
+  },
+  {
+    "path": ".github\\workflows\\protect-manual.yml",
+    "Length": 1973,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5726688Z"
+  },
+  {
+    "path": ".github\\workflows\\psanalyze.yml",
+    "Length": 2388,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5726688Z"
+  },
+  {
+    "path": ".github\\workflows\\release-docs.yml",
+    "Length": 3896,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5736681Z"
+  },
+  {
+    "path": ".github\\workflows\\release-gate-auto.yml",
+    "Length": 540,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5736681Z"
+  },
+  {
+    "path": ".github\\workflows\\release-gate-strong.yml",
+    "Length": 1645,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5736681Z"
+  },
+  {
+    "path": ".github\\workflows\\release-gate.yml",
+    "Length": 869,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5746677Z"
+  },
+  {
+    "path": ".github\\workflows\\weekly-auto-release-smoke.yml",
+    "Length": 1448,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5746677Z"
+  },
+  {
+    "path": ".github\\workflows\\weekly-housekeeping.yml",
+    "Length": 1204,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5746677Z"
+  },
+  {
+    "path": ".github\\workflows\\xp-summary-artifact.yml",
+    "Length": 3592,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5756678Z"
+  },
+  {
+    "path": ".kobong\\patches.pending.txt",
+    "Length": 6716,
+    "LastWriteTimeUtc": "2025-10-21T17:24:50.830117Z"
+  },
+  {
+    "path": ".kobong\\archived\\patches-20250924-135817.txt",
+    "Length": 6137,
+    "LastWriteTimeUtc": "2025-09-25T21:54:51.6342598Z"
+  },
+  {
+    "path": ".kobong\\context\\context-latest.json",
+    "Length": 925,
+    "LastWriteTimeUtc": "2025-10-21T20:53:42.1967197Z"
+  },
+  {
+    "path": ".kobong\\context\\context-latest.txt",
+    "Length": 244,
+    "LastWriteTimeUtc": "2025-10-21T20:53:42.1967197Z"
+  },
+  {
+    "path": ".kobong\\logs\\api.log",
+    "Length": 5780,
+    "LastWriteTimeUtc": "2025-10-21T20:53:42.2134569Z"
+  },
+  {
+    "path": ".kobong\\logs\\ak\\run-1761069472151.log",
+    "Length": 521,
+    "LastWriteTimeUtc": "2025-10-21T17:57:52.1559927Z"
+  },
+  {
+    "path": ".kobong\\logs\\ak\\run-1761071326283.log",
+    "Length": 522,
+    "LastWriteTimeUtc": "2025-10-21T18:28:46.2874124Z"
+  },
+  {
+    "path": ".kobong\\logs\\ak\\run-1761074603031.log",
+    "Length": 521,
+    "LastWriteTimeUtc": "2025-10-21T19:23:23.0358015Z"
+  },
+  {
+    "path": ".kobong\\reports\\ERROR-KB.md",
+    "Length": 5768,
+    "LastWriteTimeUtc": "2025-09-27T23:41:52.4516814Z"
+  },
+  {
+    "path": ".kobong\\schema\\klc-log-v1.3.schema.json",
+    "Length": 906,
+    "LastWriteTimeUtc": "2025-10-21T20:26:05.9369273Z"
+  },
+  {
+    "path": ".pr-artifacts\\xp-summary-20250915-125039.md",
+    "Length": 126,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.6799464Z"
+  },
+  {
+    "path": ".vscode\\settings.json",
+    "Length": 235,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.6799464Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\AK7_CarefulFix.ps1",
+    "Length": 8229,
+    "LastWriteTimeUtc": "2025-10-21T11:54:22.0633632Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\ak7_patch_apply.ps1",
+    "Length": 1514,
+    "LastWriteTimeUtc": "2025-10-21T11:54:18.5770399Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\Deploy-AK7-WebUI.ps1",
+    "Length": 1481,
+    "LastWriteTimeUtc": "2025-10-21T11:54:08.1225881Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\README_AK7_CarefulFix.txt",
+    "Length": 2024,
+    "LastWriteTimeUtc": "2025-10-21T11:54:00.2250448Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\README_AK7.md",
+    "Length": 1694,
+    "LastWriteTimeUtc": "2025-10-21T11:54:04.7678334Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\unlock_log_node.ps1",
+    "Length": 6494,
+    "LastWriteTimeUtc": "2025-10-21T11:53:54.7371612Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\containers\\ak7-shells\\Dockerfile.windows",
+    "Length": 1307,
+    "LastWriteTimeUtc": "2025-10-21T11:53:00.5981381Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\containers\\ak7-shells\\package-lock.json",
+    "Length": 2469,
+    "LastWriteTimeUtc": "2025-10-21T18:29:31.6154275Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\containers\\ak7-shells\\package.json",
+    "Length": 205,
+    "LastWriteTimeUtc": "2025-10-21T16:59:07.6904952Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\containers\\ak7-shells\\Run-OrchMon-5193.ps1",
+    "Length": 889,
+    "LastWriteTimeUtc": "2025-10-21T11:57:15.6460894Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\containers\\ak7-shells\\server-ak7.js",
+    "Length": 5465,
+    "LastWriteTimeUtc": "2025-10-21T15:12:01.3728571Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\containers\\ak7-shells\\server.js",
+    "Length": 5465,
+    "LastWriteTimeUtc": "2025-10-21T16:37:59.7479226Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\containers\\ak7-shells\\server.zip",
+    "Length": 2525,
+    "LastWriteTimeUtc": "2025-10-21T16:33:51.2535007Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\scripts\\03_Smoke-AK7.ps1",
+    "Length": 432,
+    "LastWriteTimeUtc": "2025-10-21T11:56:26.7860328Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\scripts\\ak7\\03_Smoke-AK7.ps1",
+    "Length": 432,
+    "LastWriteTimeUtc": "2025-10-21T11:56:37.381676Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\scripts\\ak7\\Install-AK7-AutoStart.ps1",
+    "Length": 4705,
+    "LastWriteTimeUtc": "2025-10-21T11:56:34.6064831Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\scripts\\ak7\\Install-AK7-Dual-AutoStart.ps1",
+    "Length": 6962,
+    "LastWriteTimeUtc": "2025-10-21T11:56:31.541508Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\AK7_code_diffs.patch",
+    "Length": 9641,
+    "LastWriteTimeUtc": "2025-10-21T11:55:50.4975026Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\ak7-bridge.js",
+    "Length": 1774,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1894047Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\AUTO-Kobong-Monitoring - 복사본.html",
+    "Length": 26335,
+    "LastWriteTimeUtc": "2025-10-21T19:23:22.9408268Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\AUTO-Kobong-Monitoring - 복사본.html.bak-20251022-025752",
+    "Length": 26161,
+    "LastWriteTimeUtc": "2025-10-21T16:27:53.7431116Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\AUTO-Kobong-Monitoring - 복사본.html.bak-20251022-032846",
+    "Length": 26335,
+    "LastWriteTimeUtc": "2025-10-21T17:57:52.0543495Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\AUTO-Kobong-Monitoring - 복사본.html.bak-20251022-042322",
+    "Length": 26337,
+    "LastWriteTimeUtc": "2025-10-21T18:28:46.1540676Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\AUTO-Kobong-Monitoring.html",
+    "Length": 26334,
+    "LastWriteTimeUtc": "2025-10-21T19:23:22.9438274Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\AUTO-Kobong-Monitoring.html.bak-20251022-025752",
+    "Length": 26160,
+    "LastWriteTimeUtc": "2025-10-21T16:44:39.3297662Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\AUTO-Kobong-Monitoring.html.bak-20251022-032846",
+    "Length": 26334,
+    "LastWriteTimeUtc": "2025-10-21T17:57:52.0573565Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\AUTO-Kobong-Monitoring.html.bak-20251022-042322",
+    "Length": 26336,
+    "LastWriteTimeUtc": "2025-10-21T18:28:46.1570679Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\messages-wiring.js",
+    "Length": 675,
+    "LastWriteTimeUtc": "2025-10-21T11:55:37.7788289Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\orchmon-bridge.js",
+    "Length": 1777,
+    "LastWriteTimeUtc": "2025-10-21T11:55:33.1434422Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\reset-local.html",
+    "Length": 661,
+    "LastWriteTimeUtc": "2025-10-21T19:23:22.9458287Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\reset-local.html.bak-20251022-025752",
+    "Length": 487,
+    "LastWriteTimeUtc": "2025-10-21T11:55:27.7719997Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\reset-local.html.bak-20251022-032846",
+    "Length": 661,
+    "LastWriteTimeUtc": "2025-10-21T17:57:52.0599122Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\reset-local.html.bak-20251022-042322",
+    "Length": 662,
+    "LastWriteTimeUtc": "2025-10-21T18:28:46.1590676Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\ak7-bridge.js",
+    "Length": 1774,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1894047Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\ak7-bus-guard.js",
+    "Length": 1147,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1899123Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\ak7-compat-shim.js",
+    "Length": 459,
+    "LastWriteTimeUtc": "2025-10-21T01:42:53.8495452Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\ak7-net-override.js",
+    "Length": 3755,
+    "LastWriteTimeUtc": "2025-10-21T01:42:53.850545Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\ak7-ws-guard.js",
+    "Length": 1606,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1899123Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\boot-loader.js",
+    "Length": 1154,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1899123Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\boot-loader.js.bak_20251010_115114",
+    "Length": 1085,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1909177Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\boot-loader.js.bak_20251010_115601",
+    "Length": 1038,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1909177Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\boot-loader.js.bak_20251010_120214",
+    "Length": 1111,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1909177Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\boot-loader.js.bak_20251010_121006",
+    "Length": 1114,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1909177Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\boot-loader.js.bak_20251010_210047",
+    "Length": 1114,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1909177Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\errkb-cards.js",
+    "Length": 12886,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1909177Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\errkb-cards.js.bak_20251009_193510",
+    "Length": 13217,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1919184Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\errkb-wiring.js",
+    "Length": 2961,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1919184Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\messages-pane.js",
+    "Length": 8343,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1919184Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\messages-wiring.js",
+    "Length": 1293,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1919184Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\orch-bus-auto.js",
+    "Length": 1546,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1919184Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\orch-bus.js",
+    "Length": 973,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.192918Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\overview-cards - 복사본.js",
+    "Length": 7381,
+    "LastWriteTimeUtc": "2025-10-21T19:12:38.762669Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\overview-cards.js",
+    "Length": 11507,
+    "LastWriteTimeUtc": "2025-10-21T20:48:59.2040862Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\settings-pane.js",
+    "Length": 12563,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.192918Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\timeline-tools.js",
+    "Length": 4636,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.192918Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\booster\\timeline-wiring.js",
+    "Length": 148,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.192918Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\css\\orchmon.css",
+    "Length": 1738,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1939183Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\img\\STS_LOGO-광택.png",
+    "Length": 19425,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.1939183Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\img\\STS_LOGO-크림색.png",
+    "Length": 18368,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.194918Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\xterm\\xterm.css",
+    "Length": 409,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.194918Z"
+  },
+  {
+    "path": "AUTO-Kobong-Monitoring\\webui\\public\\xterm\\xterm.js",
+    "Length": 8231,
+    "LastWriteTimeUtc": "2025-10-20T05:56:08.194918Z"
+  },
+  {
+    "path": "dev\\kb-api.cjs",
+    "Length": 1767,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dev\\kb-dev-backend.mjs",
+    "Length": 1796,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\app\\bootstrap.js",
+    "Length": 872,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\app\\hardening.js",
+    "Length": 6791,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\app\\kobong_api.acl.js",
+    "Length": 55,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\app\\kobong_api.js",
+    "Length": 1315,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\app\\kobong.js",
+    "Length": 68,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\app\\kobong\\index.js",
+    "Length": 69,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\app\\kobong_api\\index.js",
+    "Length": 69,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\app\\reporting\\report_service.js",
+    "Length": 164,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\app\\reporting\\ReportService.js",
+    "Length": 2028,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\domain\\dsl\\ast.js",
+    "Length": 413,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\domain\\dsl\\parser.js",
+    "Length": 3223,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\domain\\dsl\\v0_4\\parser.js",
+    "Length": 550,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\domain\\dsl\\v0_4\\ports.js",
+    "Length": 11,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\domain\\dsl\\v0_4\\types.js",
+    "Length": 11,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\domain\\ports\\httpClient.js",
+    "Length": 11,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\domain\\ports\\kobong_api.js",
+    "Length": 11,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\domain\\ports\\kvs.js",
+    "Length": 11,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\domain\\ports\\logger.js",
+    "Length": 11,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\domain\\reporting\\errors.js",
+    "Length": 360,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\domain\\reporting\\ports.js",
+    "Length": 59,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\domain\\reporting\\types.js",
+    "Length": 11,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\infra\\kobong_api.js",
+    "Length": 73,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\infra\\adapters\\index.js",
+    "Length": 100,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\infra\\adapters\\kobong_api_rest.js",
+    "Length": 3046,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\infra\\adapters\\stub\\httpClient.js",
+    "Length": 575,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\infra\\adapters\\stub\\kvs.js",
+    "Length": 1110,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\infra\\kobong\\git_repo.js",
+    "Length": 1337,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\infra\\kobong\\index.js",
+    "Length": 76,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\infra\\logging\\jsonlLogger.js",
+    "Length": 3057,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\infra\\reporting\\CsvRenderer.js",
+    "Length": 530,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\infra\\reporting\\JsonRenderer.js",
+    "Length": 645,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\infra\\reporting\\memory_report_engine.js",
+    "Length": 661,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\infra\\reporting\\parser_adapter.js",
+    "Length": 189,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\infra\\reporting\\ParserAdapter.js",
+    "Length": 1366,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\infra\\reporting\\QueryStub.js",
+    "Length": 1959,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "dist\\ui\\reporting\\cli.js",
+    "Length": 486,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "docs\\Kobong-Weekly-Housekeeping.xml",
+    "Length": 1743,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.695716Z"
+  },
+  {
+    "path": "docs\\status.html",
+    "Length": 2153,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.705723Z"
+  },
+  {
+    "path": "docs\\badges\\ops-failures.svg",
+    "Length": 646,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.705723Z"
+  },
+  {
+    "path": "docs\\badges\\repo-state.svg",
+    "Length": 622,
+    "LastWriteTimeUtc": "2025-10-04T23:59:26.705723Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\containers\\ghmon-shells\\$null",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-20T04:29:01.9996141Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\containers\\ghmon-shells\\del.txt",
+    "Length": 5,
+    "LastWriteTimeUtc": "2025-10-20T04:29:01.9996141Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\containers\\ghmon-shells\\del1.txt",
+    "Length": 4,
+    "LastWriteTimeUtc": "2025-10-20T04:29:01.9996141Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\containers\\ghmon-shells\\Dockerfile.windows",
+    "Length": 642,
+    "LastWriteTimeUtc": "2025-10-20T04:29:01.9996141Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\containers\\ghmon-shells\\ghmon-dev.example",
+    "Length": 119,
+    "LastWriteTimeUtc": "2025-10-20T05:12:07.8407755Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\containers\\ghmon-shells\\server_plus.js",
+    "Length": 24499,
+    "LastWriteTimeUtc": "2025-10-20T04:29:02.001614Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\containers\\GitHub-Mon-shells\\Dockerfile.windows",
+    "Length": 267,
+    "LastWriteTimeUtc": "2025-10-20T04:29:01.9986155Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\containers\\GitHub-Mon-shells\\package.json",
+    "Length": 144,
+    "LastWriteTimeUtc": "2025-10-20T04:29:01.9986155Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\containers\\GitHub-Mon-shells\\server.js",
+    "Length": 2668,
+    "LastWriteTimeUtc": "2025-10-20T04:29:01.9986155Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\containers\\GitHub-Mon-ui\\Dockerfile.windows",
+    "Length": 640,
+    "LastWriteTimeUtc": "2025-10-20T04:29:01.9986155Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\containers\\GitHub-Mon-ui\\package.json",
+    "Length": 72,
+    "LastWriteTimeUtc": "2025-10-20T04:29:01.9996141Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\containers\\GitHub-Mon-ui\\server_ui.js",
+    "Length": 1161,
+    "LastWriteTimeUtc": "2025-10-20T04:29:01.9996141Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\docs\\README.md",
+    "Length": 1286,
+    "LastWriteTimeUtc": "2025-10-20T04:29:02.001614Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\scripts\\g5\\shells\\run-GitHub-Mon-shells-win.ps1",
+    "Length": 604,
+    "LastWriteTimeUtc": "2025-10-20T04:29:02.001614Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\scripts\\g5\\shells\\stop-GitHub-Mon-shells.ps1",
+    "Length": 220,
+    "LastWriteTimeUtc": "2025-10-20T04:29:02.002621Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\scripts\\g5\\ui\\deploy-GitHub-Mon-ui.ps1",
+    "Length": 572,
+    "LastWriteTimeUtc": "2025-10-20T04:29:02.002621Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\webui\\ghmon-ui-map.js",
+    "Length": 503,
+    "LastWriteTimeUtc": "2025-10-20T05:12:07.8427758Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\webui\\GitHub-Mon-bridge.js",
+    "Length": 12649,
+    "LastWriteTimeUtc": "2025-10-20T05:12:07.8417757Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\webui\\GitHub-Monitoring-Min.html",
+    "Length": 52427,
+    "LastWriteTimeUtc": "2025-10-21T19:23:22.9503433Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\webui\\GitHub-Monitoring-Min.html.bak-20251022-025752",
+    "Length": 52238,
+    "LastWriteTimeUtc": "2025-10-20T05:12:07.8417757Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\webui\\GitHub-Monitoring-Min.html.bak-20251022-032846",
+    "Length": 52427,
+    "LastWriteTimeUtc": "2025-10-21T17:57:52.0651507Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\webui\\GitHub-Monitoring-Min.html.bak-20251022-042322",
+    "Length": 52429,
+    "LastWriteTimeUtc": "2025-10-21T18:28:46.1633173Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\webui\\public\\css\\GitHub-Mon.css",
+    "Length": 5756,
+    "LastWriteTimeUtc": "2025-10-20T05:12:07.8427758Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\webui\\public\\img\\STS_LOGO-광택.png",
+    "Length": 19425,
+    "LastWriteTimeUtc": "2025-10-20T05:12:07.8427758Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\webui\\public\\img\\STS_LOGO-크림색.png",
+    "Length": 18368,
+    "LastWriteTimeUtc": "2025-10-20T05:12:07.8437792Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\webui\\public\\xterm\\xterm.css",
+    "Length": 59,
+    "LastWriteTimeUtc": "2025-10-20T05:12:07.8437792Z"
+  },
+  {
+    "path": "GitHub-Monitoring\\webui\\public\\xterm\\xterm.js",
+    "Length": 55,
+    "LastWriteTimeUtc": "2025-10-20T05:12:07.8437792Z"
+  },
+  {
+    "path": "ops\\ak-rescue-186-20250928-110147.md",
+    "Length": 249,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\03_Smoke-OrchMon.ps1",
+    "Length": 696,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5756678Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\보호 스크립트.md",
+    "Length": 2243,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5869295Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\Check-Integrity.ps1",
+    "Length": 649,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5756678Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\INTEGRITY_BASELINE.json",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5766691Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\Make-IntegrityBaseline.ps1",
+    "Length": 529,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5766691Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\containers\\orch-shells\\Dockerfile.windows",
+    "Length": 1307,
+    "LastWriteTimeUtc": "2025-10-08T13:05:00.654106Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\containers\\orch-shells\\package-lock.json",
+    "Length": 2469,
+    "LastWriteTimeUtc": "2025-10-08T15:31:52.3787362Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\containers\\orch-shells\\package.json",
+    "Length": 205,
+    "LastWriteTimeUtc": "2025-10-08T15:31:52.3757291Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\containers\\orch-shells\\Run-OrchMon-5193.ps1",
+    "Length": 889,
+    "LastWriteTimeUtc": "2025-10-08T16:34:58.0608266Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\containers\\orch-shells\\server.js",
+    "Length": 5152,
+    "LastWriteTimeUtc": "2025-10-08T15:31:51.7133923Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\public\\booster\\booster-v2.js",
+    "Length": 3481,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5796626Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\public\\booster\\messages-wiring.js",
+    "Length": 4086,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5796626Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\messages-wiring.js",
+    "Length": 675,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5806715Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\Orchestrator-Monitoring-Su.html",
+    "Length": 24433,
+    "LastWriteTimeUtc": "2025-10-21T19:23:22.9543417Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\Orchestrator-Monitoring-Su.html.bak-20251022-025752",
+    "Length": 23847,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5806715Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\Orchestrator-Monitoring-Su.html.bak-20251022-032846",
+    "Length": 24433,
+    "LastWriteTimeUtc": "2025-10-21T18:28:45.7762994Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\Orchestrator-Monitoring-Su.html.bak-20251022-042322",
+    "Length": 24434,
+    "LastWriteTimeUtc": "2025-10-21T18:28:46.1683172Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\orchmon-bridge.js",
+    "Length": 1777,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5806715Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\booster\\boot-loader.js",
+    "Length": 766,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5816607Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\booster\\errkb-cards.js",
+    "Length": 12894,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5816607Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\booster\\errkb-cards.js.bak_20251009_193510",
+    "Length": 13217,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5816607Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\booster\\errkb-wiring.js",
+    "Length": 2961,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5826603Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\booster\\messages-pane.js",
+    "Length": 8343,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5826603Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\booster\\messages-wiring.js",
+    "Length": 1293,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5836693Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\booster\\orch-bus-auto.js",
+    "Length": 1558,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5836693Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\booster\\orch-bus.js",
+    "Length": 973,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5836693Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\booster\\overview-cards.js",
+    "Length": 7381,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5836693Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\booster\\settings-pane.js",
+    "Length": 12575,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5846604Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\booster\\timeline-tools.js",
+    "Length": 4636,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5846604Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\booster\\timeline-wiring.js",
+    "Length": 148,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5846604Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\css\\orchmon.css",
+    "Length": 1738,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5846604Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\img\\STS_LOGO-광택.png",
+    "Length": 19425,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5859271Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\img\\STS_LOGO-크림색.png",
+    "Length": 18368,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5859271Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\xterm\\xterm.css",
+    "Length": 409,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5869295Z"
+  },
+  {
+    "path": "Orchestrator-Monitoring\\webui\\public\\xterm\\xterm.js",
+    "Length": 8231,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5869295Z"
+  },
+  {
+    "path": "public\\index.html",
+    "Length": 775,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "public\\data\\gh-monitor.json",
+    "Length": 4005,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "public\\widgets\\gh-pr-badge.html",
+    "Length": 2105,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "public\\widgets\\gh-pr-mini.html",
+    "Length": 1580,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "public\\widgets\\mini-dashboard.html",
+    "Length": 5301,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "scripts\\health-server.mjs",
+    "Length": 612,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\ui_patch_direct.ps1",
+    "Length": 9854,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\_tmp.patch.txt",
+    "Length": 393,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5919276Z"
+  },
+  {
+    "path": "scripts\\g5\\ak-audit.ps1",
+    "Length": 781,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "scripts\\g5\\ak-checks.ps1",
+    "Length": 538,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "scripts\\g5\\ak-dispatch.ps1",
+    "Length": 1680,
+    "LastWriteTimeUtc": "2025-10-20T20:06:49.9519974Z"
+  },
+  {
+    "path": "scripts\\g5\\ak-fixloop.ps1",
+    "Length": 1319,
+    "LastWriteTimeUtc": "2025-10-20T20:06:49.9519974Z"
+  },
+  {
+    "path": "scripts\\g5\\ak-fmt.ps1",
+    "Length": 1241,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "scripts\\g5\\ak-label.ps1",
+    "Length": 1068,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "scripts\\g5\\ak-lint.ps1",
+    "Length": 1336,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "scripts\\g5\\ak-merge.ps1",
+    "Length": 934,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "scripts\\g5\\ak-protect.ps1",
+    "Length": 1051,
+    "LastWriteTimeUtc": "2025-10-20T20:06:49.9893667Z"
+  },
+  {
+    "path": "scripts\\g5\\ak-release.ps1",
+    "Length": 1251,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "scripts\\g5\\ak-rerun.ps1",
+    "Length": 1070,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "scripts\\g5\\ak-rewrite.ps1",
+    "Length": 1319,
+    "LastWriteTimeUtc": "2025-10-20T20:06:49.9893667Z"
+  },
+  {
+    "path": "scripts\\g5\\ak-scan.ps1",
+    "Length": 1319,
+    "LastWriteTimeUtc": "2025-10-20T20:06:49.9893667Z"
+  },
+  {
+    "path": "scripts\\g5\\ak-status.ps1",
+    "Length": 582,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "scripts\\g5\\ak-test.ps1",
+    "Length": 1319,
+    "LastWriteTimeUtc": "2025-10-20T20:06:49.9903793Z"
+  },
+  {
+    "path": "scripts\\g5\\apply-patches.ps1",
+    "Length": 5459,
+    "LastWriteTimeUtc": "2025-10-21T19:35:25.4906492Z"
+  },
+  {
+    "path": "scripts\\g5\\apply-pending-patches.ps1",
+    "Length": 587073,
+    "LastWriteTimeUtc": "2025-10-20T20:06:49.9990033Z"
+  },
+  {
+    "path": "scripts\\g5\\auto-fix-open-prs.ps1",
+    "Length": 4841,
+    "LastWriteTimeUtc": "2025-10-20T20:06:49.9998382Z"
+  },
+  {
+    "path": "scripts\\g5\\auto-merge-ready.ps1",
+    "Length": 3645,
+    "LastWriteTimeUtc": "2025-10-20T20:06:50.0938649Z"
+  },
+  {
+    "path": "scripts\\g5\\auto-pr-complete.ps1",
+    "Length": 7968,
+    "LastWriteTimeUtc": "2025-10-20T20:06:50.0948689Z"
+  },
+  {
+    "path": "scripts\\g5\\autostart-verify.ps1",
+    "Length": 708,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5929281Z"
+  },
+  {
+    "path": "scripts\\g5\\branch-prune-quiet.ps1",
+    "Length": 3347,
+    "LastWriteTimeUtc": "2025-10-20T20:06:50.4021258Z"
+  },
+  {
+    "path": "scripts\\g5\\Check-AK7-Ports.ps1",
+    "Length": 1514,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5879282Z"
+  },
+  {
+    "path": "scripts\\g5\\Check-All-DevMock.ps1",
+    "Length": 1079,
+    "LastWriteTimeUtc": "2025-10-21T15:12:01.3850432Z"
+  },
+  {
+    "path": "scripts\\g5\\check-pr-ready.ps1",
+    "Length": 4738,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2329678Z"
+  },
+  {
+    "path": "scripts\\g5\\Clean-AK7-Ports.ps1",
+    "Length": 1703,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5879282Z"
+  },
+  {
+    "path": "scripts\\g5\\doctor.ps1",
+    "Length": 2422,
+    "LastWriteTimeUtc": "2025-10-20T20:06:50.4094833Z"
+  },
+  {
+    "path": "scripts\\g5\\enforcement-check.ps1",
+    "Length": 2333,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5929281Z"
+  },
+  {
+    "path": "scripts\\g5\\enforcement-check.v2.ps1",
+    "Length": 3381,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5929281Z"
+  },
+  {
+    "path": "scripts\\g5\\enforcement-check.v3.ps1",
+    "Length": 3066,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5939288Z"
+  },
+  {
+    "path": "scripts\\g5\\error-trend.ps1",
+    "Length": 3427,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\fetch-quiet.ps1",
+    "Length": 3421,
+    "LastWriteTimeUtc": "2025-10-20T20:06:50.4094833Z"
+  },
+  {
+    "path": "scripts\\g5\\finalize-release.ps1",
+    "Length": 3158,
+    "LastWriteTimeUtc": "2025-10-20T20:06:50.4169323Z"
+  },
+  {
+    "path": "scripts\\g5\\fix-console-now.ps1",
+    "Length": 2701,
+    "LastWriteTimeUtc": "2025-10-21T18:28:34.3703992Z"
+  },
+  {
+    "path": "scripts\\g5\\fix-gha-pwsh-installer.ps1",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\fix-weekly-smoke-yaml.v2.ps1",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\g5-autopilot-noninteractive.ps1",
+    "Length": 3316,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5939288Z"
+  },
+  {
+    "path": "scripts\\g5\\g5-d11d15-pack.ps1",
+    "Length": 6946,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5939288Z"
+  },
+  {
+    "path": "scripts\\g5\\g5-d3d5-pack.ps1",
+    "Length": 6095,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5939288Z"
+  },
+  {
+    "path": "scripts\\g5\\g5-d6d7-pack.ps1",
+    "Length": 6506,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5949226Z"
+  },
+  {
+    "path": "scripts\\g5\\g5-d8d10-pack.ps1",
+    "Length": 6087,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5949226Z"
+  },
+  {
+    "path": "scripts\\g5\\g5-start-servers.ps1",
+    "Length": 1948,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5949226Z"
+  },
+  {
+    "path": "scripts\\g5\\github-status-export.ps1",
+    "Length": 4727,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\good-list.ps1",
+    "Length": 527,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\good-restore.ps1",
+    "Length": 1587,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\good-save.ps1",
+    "Length": 1703,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\guard-run.ps1",
+    "Length": 1748,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\harden-private-pro.ps1",
+    "Length": 2915,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5959309Z"
+  },
+  {
+    "path": "scripts\\g5\\harden-private-pro.v2.ps1",
+    "Length": 2885,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5959309Z"
+  },
+  {
+    "path": "scripts\\g5\\health-smoke.ps1",
+    "Length": 499,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5959309Z"
+  },
+  {
+    "path": "scripts\\g5\\housekeeping-summarize.ps1",
+    "Length": 2277,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\housekeeping-weekly-run.ps1",
+    "Length": 4144,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\housekeeping-weekly.ps1",
+    "Length": 2426,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\Install-AK7-AutoStart.ps1",
+    "Length": 2870,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5879282Z"
+  },
+  {
+    "path": "scripts\\g5\\install-guards.ps1",
+    "Length": 3406,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5969301Z"
+  },
+  {
+    "path": "scripts\\g5\\install-hooks.ps1",
+    "Length": 774,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5969301Z"
+  },
+  {
+    "path": "scripts\\g5\\Install-OrchMon-AutoStart.ps1",
+    "Length": 3260,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5879282Z"
+  },
+  {
+    "path": "scripts\\g5\\Install-OrchMon-AutoStart.ps1.bak_20251009_210841",
+    "Length": 6759,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5889279Z"
+  },
+  {
+    "path": "scripts\\g5\\Install-OrchMon-AutoStart.ps1.bak_20251009_211643",
+    "Length": 6764,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5889279Z"
+  },
+  {
+    "path": "scripts\\g5\\Install-OrchMon-AutoStart.ps1.bak_20251010_104129",
+    "Length": 6774,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5889279Z"
+  },
+  {
+    "path": "scripts\\g5\\Install-OrchMon-AutoStart.ps1.bak_20251019_101101",
+    "Length": 2946,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5889279Z"
+  },
+  {
+    "path": "scripts\\g5\\inventory.ps1",
+    "Length": 1849,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5969301Z"
+  },
+  {
+    "path": "scripts\\g5\\klc-aggregate.ps1",
+    "Length": 1316,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5969301Z"
+  },
+  {
+    "path": "scripts\\g5\\klc-verify.ps1",
+    "Length": 2005,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.597929Z"
+  },
+  {
+    "path": "scripts\\g5\\kobong-run.cmd",
+    "Length": 764,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\kobong-run.ps1",
+    "Length": 772,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\launch-ci-summary.cmd",
+    "Length": 493,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\launch-kobong-logger.cmd",
+    "Length": 498,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\launch-kobong-orchestrator.cmd",
+    "Length": 504,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\launch-monitor-logs.cmd",
+    "Length": 493,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\launch-monitor-status.cmd",
+    "Length": 495,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\lib-safe.psm1",
+    "Length": 2127,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\make-g5-context.ps1",
+    "Length": 2975,
+    "LastWriteTimeUtc": "2025-10-21T19:49:14.448446Z"
+  },
+  {
+    "path": "scripts\\g5\\make-run-report.ps1",
+    "Length": 3717,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\manifest-prune.ps1",
+    "Length": 4428,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\monitor-health.ps1",
+    "Length": 1501,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\monitor-logs.ps1",
+    "Length": 3237,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\monitor-status.ps1",
+    "Length": 3615,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\om-ui-init.patch.txt",
+    "Length": 8929,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.597929Z"
+  },
+  {
+    "path": "scripts\\g5\\one-shot-setup.ps1",
+    "Length": 1475,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\open-ps7-here.cmd",
+    "Length": 210,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\ops-menu.ps1",
+    "Length": 2949,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\ops-one-key.ps1",
+    "Length": 4963,
+    "LastWriteTimeUtc": "2025-10-21T20:06:19.3793937Z"
+  },
+  {
+    "path": "scripts\\g5\\Patch-OrchMon-NodePath.ps1",
+    "Length": 1262,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.589928Z"
+  },
+  {
+    "path": "scripts\\g5\\ports-clean.ps1",
+    "Length": 613,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5989283Z"
+  },
+  {
+    "path": "scripts\\g5\\post-merge-ship.ps1",
+    "Length": 2054,
+    "LastWriteTimeUtc": "2025-10-21T19:53:17.8670287Z"
+  },
+  {
+    "path": "scripts\\g5\\pr-automerge-watch.ps1",
+    "Length": 3716,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\pr-badge-dedupe.ps1",
+    "Length": 942,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2486617Z"
+  },
+  {
+    "path": "scripts\\g5\\pr-rebase-onto-main.ps1",
+    "Length": 4134,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\pr-rerun-checks-and-watch.ps1",
+    "Length": 2488,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\pre-push",
+    "Length": 602,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5989283Z"
+  },
+  {
+    "path": "scripts\\g5\\protect-file.ps1",
+    "Length": 1364,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\ps-header-enforcer.ps1",
+    "Length": 3136,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\register-docs-manifest.ps1",
+    "Length": 5934,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5989283Z"
+  },
+  {
+    "path": "scripts\\g5\\register-housekeeping-task.ps1",
+    "Length": 6923,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\register-manifest.ps1",
+    "Length": 4612,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\release-append-badge.ps1",
+    "Length": 2031,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\release-next-patch.ps1",
+    "Length": 2771,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\release-stabilize-with-watch.ps1",
+    "Length": 3426,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\release-stabilize.ps1",
+    "Length": 5306,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\release-train-with-watch.ps1",
+    "Length": 3088,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\release-train.ps1",
+    "Length": 4064,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\release-vpatch.ps1",
+    "Length": 5943,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\release-vpatch.safe.ps1",
+    "Length": 3480,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\remove-guards.ps1",
+    "Length": 609,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5999282Z"
+  },
+  {
+    "path": "scripts\\g5\\repair-protection.ps1",
+    "Length": 963,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5999282Z"
+  },
+  {
+    "path": "scripts\\g5\\restart-containers.ps1",
+    "Length": 645,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5999282Z"
+  },
+  {
+    "path": "scripts\\g5\\rotate-apply-log.ps1",
+    "Length": 3524,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\run-auto-patch-and-verify.ps1",
+    "Length": 4387,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\run-github-monitor.ps1",
+    "Length": 770,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\run-kobong-logger.ps1",
+    "Length": 459,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\run-kobong-orchestrator.ps1",
+    "Length": 2036,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\run-orch-shells-win.ps1",
+    "Length": 923,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.6009282Z"
+  },
+  {
+    "path": "scripts\\g5\\Run-OrchMon-5183-5193.ps1",
+    "Length": 3781,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.589928Z"
+  },
+  {
+    "path": "scripts\\g5\\Run-OrchMon-5183-5193.ps1.bak_20251019_101101",
+    "Length": 3636,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.589928Z"
+  },
+  {
+    "path": "scripts\\g5\\run-pr-complete.ps1",
+    "Length": 1178,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\run-public-badge-sync.ps1",
+    "Length": 861,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\run-static-web.ps1",
+    "Length": 4293,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\run-step4-keep.ps1",
+    "Length": 1500,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\run-watchdog.ps1",
+    "Length": 3248,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\scheduler-tune.ps1",
+    "Length": 1425,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\serve-public.ps1",
+    "Length": 4324,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\setup-git-hooks.ps1",
+    "Length": 177,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\shell-status.ps1",
+    "Length": 1554,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\smoke-auto-release.ps1",
+    "Length": 2859,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\soft-guard.yml",
+    "Length": 343,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.6019281Z"
+  },
+  {
+    "path": "scripts\\g5\\Start-AK7.ps1",
+    "Length": 2994,
+    "LastWriteTimeUtc": "2025-10-21T01:42:53.8695462Z"
+  },
+  {
+    "path": "scripts\\g5\\Start-All-DevMock.ps1",
+    "Length": 1820,
+    "LastWriteTimeUtc": "2025-10-21T15:12:01.3850432Z"
+  },
+  {
+    "path": "scripts\\g5\\status-setup.ps1",
+    "Length": 1126,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\Stop-All-DevMock.ps1",
+    "Length": 334,
+    "LastWriteTimeUtc": "2025-10-21T15:12:01.3850432Z"
+  },
+  {
+    "path": "scripts\\g5\\synthetic-pr-workload.ps1",
+    "Length": 8702,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\unprotect-file.ps1",
+    "Length": 730,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\update-docs-and-inventory.ps1",
+    "Length": 2134,
+    "LastWriteTimeUtc": "2025-10-21T19:49:56.5241928Z"
+  },
+  {
+    "path": "scripts\\g5\\verify-housekeeping.ps1",
+    "Length": 2025,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\verify-protection.ps1",
+    "Length": 623,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.6019281Z"
+  },
+  {
+    "path": "scripts\\g5\\verify-protection.v2.ps1",
+    "Length": 1185,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.6029284Z"
+  },
+  {
+    "path": "scripts\\g5\\watch-badge-ready.ps1",
+    "Length": 3581,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\watch-readme-badge.ps1",
+    "Length": 3663,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251021_113052.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T02:30:52.6188901Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251021_113052.out.log",
+    "Length": 55,
+    "LastWriteTimeUtc": "2025-10-21T02:30:52.7367234Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251021_205102.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T11:51:02.2936703Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251021_205102.out.log",
+    "Length": 55,
+    "LastWriteTimeUtc": "2025-10-21T11:51:02.5377668Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_013626.err.log",
+    "Length": 1156,
+    "LastWriteTimeUtc": "2025-10-21T16:36:26.4377459Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_013626.out.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:36:26.3349724Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_013859.err.log",
+    "Length": 1156,
+    "LastWriteTimeUtc": "2025-10-21T16:38:59.6786902Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_013859.out.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:38:59.6060356Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_014052.err.log",
+    "Length": 1156,
+    "LastWriteTimeUtc": "2025-10-21T16:40:52.6649874Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_014052.out.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:40:52.5949958Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_014256.err.log",
+    "Length": 1156,
+    "LastWriteTimeUtc": "2025-10-21T16:42:56.3092218Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_014256.out.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:42:56.239193Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_014340.err.log",
+    "Length": 1156,
+    "LastWriteTimeUtc": "2025-10-21T16:43:40.5359845Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_014340.out.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:43:40.4652939Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_015116.err.log",
+    "Length": 1156,
+    "LastWriteTimeUtc": "2025-10-21T16:51:16.2756441Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_015116.out.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:51:16.2046969Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_015910.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:59:10.2330454Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_015910.out.log",
+    "Length": 55,
+    "LastWriteTimeUtc": "2025-10-21T16:59:10.343685Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_020151.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T17:01:51.896749Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_020151.out.log",
+    "Length": 55,
+    "LastWriteTimeUtc": "2025-10-21T17:01:51.9938499Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_032934.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T18:29:34.1919259Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-DEV_20251022_032934.out.log",
+    "Length": 55,
+    "LastWriteTimeUtc": "2025-10-21T18:29:34.5154107Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251021_113052.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T02:30:52.6258916Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251021_113052.out.log",
+    "Length": 55,
+    "LastWriteTimeUtc": "2025-10-21T02:30:52.7854161Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251021_205102.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T11:51:02.3403144Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251021_205102.out.log",
+    "Length": 55,
+    "LastWriteTimeUtc": "2025-10-21T11:51:02.5377668Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_013626.err.log",
+    "Length": 1168,
+    "LastWriteTimeUtc": "2025-10-21T16:36:26.4397446Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_013626.out.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:36:26.368247Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_013859.err.log",
+    "Length": 1168,
+    "LastWriteTimeUtc": "2025-10-21T16:38:59.6786902Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_013859.out.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:38:59.6150357Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_014052.err.log",
+    "Length": 1168,
+    "LastWriteTimeUtc": "2025-10-21T16:40:52.6689882Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_014052.out.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:40:52.6044673Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_014256.err.log",
+    "Length": 1168,
+    "LastWriteTimeUtc": "2025-10-21T16:42:56.3149085Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_014256.out.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:42:56.2483278Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_014340.err.log",
+    "Length": 1168,
+    "LastWriteTimeUtc": "2025-10-21T16:43:40.536985Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_014340.out.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:43:40.4752942Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_015116.err.log",
+    "Length": 1168,
+    "LastWriteTimeUtc": "2025-10-21T16:51:16.2797235Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_015116.out.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:51:16.2152511Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_015910.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:59:10.2425987Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_015910.out.log",
+    "Length": 55,
+    "LastWriteTimeUtc": "2025-10-21T16:59:10.372907Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_020151.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T17:01:51.905749Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_020151.out.log",
+    "Length": 55,
+    "LastWriteTimeUtc": "2025-10-21T17:01:51.9938499Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_032934.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T18:29:34.2009212Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\AK7-MOCK_20251022_032934.out.log",
+    "Length": 55,
+    "LastWriteTimeUtc": "2025-10-21T18:29:34.5507423Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251021_113052.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T02:30:52.6338831Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251021_113052.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T02:30:52.7652811Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251021_205102.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T11:51:02.3526429Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251021_205102.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T11:51:02.6088149Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_013626.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:36:26.3778663Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_013626.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T16:36:26.5472913Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_013859.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:38:59.6240356Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_013859.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T16:38:59.7308559Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_014052.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:40:52.6124669Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_014052.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T16:40:52.7239916Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_014256.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:42:56.2554078Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_014256.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T16:42:56.4134714Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_014340.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:43:40.5049846Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_014340.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T16:43:40.6107404Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_015116.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:51:16.2232517Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_015116.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T16:51:16.340071Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_015910.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:59:10.2495987Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_015910.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T16:59:10.3739058Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_020151.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T17:01:51.9132705Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_020151.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T17:01:52.0144821Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_032934.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T18:29:34.206498Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-DEV_20251022_032934.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T18:29:34.5517444Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251021_113052.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T02:30:52.6401633Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251021_113052.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T02:30:52.7854161Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251021_205102.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T11:51:02.364597Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251021_205102.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T11:51:02.6088149Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_013626.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:36:26.3848674Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_013626.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T16:36:26.5472913Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_013859.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:38:59.6310368Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_013859.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T16:38:59.7298616Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_014052.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:40:52.6224669Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_014052.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T16:40:52.7529925Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_014256.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:42:56.2624073Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_014256.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T16:42:56.4424666Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_014340.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:43:40.5129858Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_014340.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T16:43:40.6312536Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_015116.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:51:16.2332514Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_015116.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T16:51:16.3692142Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_015910.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T16:59:10.2579186Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_015910.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T16:59:10.372907Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_020151.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T17:01:51.9213781Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_020151.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T17:01:52.0438789Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_032934.err.log",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-21T18:29:34.2134987Z"
+  },
+  {
+    "path": "scripts\\g5\\logs\\ORCH-MOCK_20251022_032934.out.log",
+    "Length": 63,
+    "LastWriteTimeUtc": "2025-10-21T18:29:34.5517444Z"
+  },
+  {
+    "path": "scripts\\g5\\patches\\apply-patches_hotfix_v1.patch.txt",
+    "Length": 268,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5989283Z"
+  },
+  {
+    "path": "scripts\\g5\\patches\\Install-AK7-AutoStart.ps1",
+    "Length": 4251,
+    "LastWriteTimeUtc": "2025-10-20T20:06:50.4184891Z"
+  },
+  {
+    "path": "scripts\\g5\\patches\\om-ui-init.patch.txt",
+    "Length": 8929,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5989283Z"
+  },
+  {
+    "path": "scripts\\g5\\shells\\Install-AK7-AutoStart.ps1",
+    "Length": 4251,
+    "LastWriteTimeUtc": "2025-10-20T20:06:50.4190053Z"
+  },
+  {
+    "path": "scripts\\g5\\shells\\run-orch-host-5188.ps1",
+    "Length": 5922,
+    "LastWriteTimeUtc": "2025-10-20T20:06:50.4200863Z"
+  },
+  {
+    "path": "scripts\\g5\\shells\\run-orch-shells-host.ps1",
+    "Length": 6377,
+    "LastWriteTimeUtc": "2025-10-20T20:06:50.4206049Z"
+  },
+  {
+    "path": "scripts\\g5\\shells\\run-orch-shells-win.ps1",
+    "Length": 1033,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.6019281Z"
+  },
+  {
+    "path": "scripts\\g5\\shells\\stop-orch-shells.ps1",
+    "Length": 237,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.6019281Z"
+  },
+  {
+    "path": "scripts\\g5\\UI\\deploy-GitHub-Mon-ui.ps1",
+    "Length": 1644,
+    "LastWriteTimeUtc": "2025-10-20T20:06:49.914882Z"
+  },
+  {
+    "path": "scripts\\g5\\UI\\Install-AK7-AutoStart.ps1",
+    "Length": 4251,
+    "LastWriteTimeUtc": "2025-10-20T20:06:49.9128836Z"
+  },
+  {
+    "path": "scripts\\g5\\UI\\run-GHMON.ps1",
+    "Length": 2307,
+    "LastWriteTimeUtc": "2025-10-20T20:06:49.9178887Z"
+  },
+  {
+    "path": "scripts\\g5\\UI\\stop-GHMON.ps1",
+    "Length": 605,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5919276Z"
+  },
+  {
+    "path": "scripts\\g5\\UI\\test-GHMON.ps1",
+    "Length": 299,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5919276Z"
+  },
+  {
+    "path": "scripts\\g5\\UI\\ui_patch_direct.ps1",
+    "Length": 986,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.5919276Z"
+  },
+  {
+    "path": "scripts\\lib\\kobong-fileio.psm1",
+    "Length": 1892,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "src\\kobong-logger-cli\\kobong-logger.psm1",
+    "Length": 1470,
+    "LastWriteTimeUtc": "2025-10-20T02:05:31.6029284Z"
+  },
+  {
+    "path": "STS_Logo\\sts_logo.png",
+    "Length": 1460874,
+    "LastWriteTimeUtc": "2025-10-19T02:44:14.2944799Z"
+  },
+  {
+    "path": "tests\\contract\\_smoke.spec.ts",
+    "Length": 420,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\package-lock.json",
+    "Length": 29150,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\package.json",
+    "Length": 243,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\vite.config.mjs",
+    "Length": 322,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2742995Z"
+  },
+  {
+    "path": "webui\\public\\__ping_dashboard__.txt",
+    "Length": 36,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\public\\brand.png",
+    "Length": 1460874,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\public\\brand.svg",
+    "Length": 303,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\public\\events",
+    "Length": 90,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\public\\github.html",
+    "Length": 5310,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\public\\index.html",
+    "Length": 3126,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\public\\metrics",
+    "Length": 52,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2742995Z"
+  },
+  {
+    "path": "webui\\public\\status.html",
+    "Length": 7040,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2742995Z"
+  },
+  {
+    "path": "webui\\public\\sts-kobong-GitHub-min.html",
+    "Length": 5207,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2742995Z"
+  },
+  {
+    "path": "webui\\public\\api\\events",
+    "Length": 90,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\public\\api\\metrics",
+    "Length": 52,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\public\\css\\app.css",
+    "Length": 2838,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\public\\data\\gh-monitor.json",
+    "Length": 932,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\public\\js\\app.mjs",
+    "Length": 2122,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\public\\js\\kb-theme.js",
+    "Length": 1963,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\public\\js\\kb-topline.js",
+    "Length": 1797,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2586681Z"
+  },
+  {
+    "path": "webui\\public\\js\\metrics.mjs",
+    "Length": 1634,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2742995Z"
+  },
+  {
+    "path": "webui\\public\\js\\sse.mjs",
+    "Length": 644,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2742995Z"
+  },
+  {
+    "path": "webui\\public\\js\\status.js",
+    "Length": 5230,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2742995Z"
+  },
+  {
+    "path": "webui\\public\\js\\sts-gh-min.js",
+    "Length": 3449,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2742995Z"
+  },
+  {
+    "path": "webui\\public\\js\\ui.mjs",
+    "Length": 860,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2742995Z"
+  },
+  {
+    "path": "webui\\public\\widgets\\gh-pr-badge.html",
+    "Length": 2105,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2742995Z"
+  },
+  {
+    "path": "webui\\public\\widgets\\gh-pr-mini.html",
+    "Length": 1580,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2742995Z"
+  },
+  {
+    "path": "webui\\public\\widgets\\mini-dashboard.html",
+    "Length": 5301,
+    "LastWriteTimeUtc": "2025-10-04T23:59:29.2742995Z"
+  },
+  {
+    "path": "_deploy\\cache\\.editorconfig",
+    "Length": 133,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5495347Z"
+  },
+  {
+    "path": "_deploy\\cache\\.gitattributes",
+    "Length": 695,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5495347Z"
+  },
+  {
+    "path": "_deploy\\cache\\.gitignore",
+    "Length": 244,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5555355Z"
+  },
+  {
+    "path": "_deploy\\cache\\.npmrc",
+    "Length": 25,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5565351Z"
+  },
+  {
+    "path": "_deploy\\cache\\CHANGELOG.md",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5585354Z"
+  },
+  {
+    "path": "_deploy\\cache\\fix-ak.ps1",
+    "Length": 8982,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5697465Z"
+  },
+  {
+    "path": "_deploy\\cache\\kobong_gpt_5_주도형_개발_계획서_v_1.md",
+    "Length": 9322,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5697465Z"
+  },
+  {
+    "path": "_deploy\\cache\\README.md",
+    "Length": 463,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5595348Z"
+  },
+  {
+    "path": "_deploy\\cache\\remove-open-ps7-cmd.ps1",
+    "Length": 3938,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0170666Z"
+  },
+  {
+    "path": "_deploy\\cache\\repo-curate-and-commit.ps1",
+    "Length": 3665,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.017588Z"
+  },
+  {
+    "path": "_deploy\\cache\\Rollbackfile.json",
+    "Length": 1851,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5595348Z"
+  },
+  {
+    "path": "_deploy\\cache\\SECURITY.md",
+    "Length": 2463,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5595348Z"
+  },
+  {
+    "path": "_deploy\\cache\\upgrade-gh-and-hook.ps1",
+    "Length": 4337,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0424164Z"
+  },
+  {
+    "path": "_deploy\\cache\\.config\\.psscriptanalyzerrc.psd1",
+    "Length": 329,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5495347Z"
+  },
+  {
+    "path": "_deploy\\cache\\.githooks\\pre-commit",
+    "Length": 433,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5505348Z"
+  },
+  {
+    "path": "_deploy\\cache\\.githooks\\pre-commit.bat",
+    "Length": 315,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5505348Z"
+  },
+  {
+    "path": "_deploy\\cache\\.githooks\\pre-commit.cmd",
+    "Length": 315,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5505348Z"
+  },
+  {
+    "path": "_deploy\\cache\\.githooks\\pre-commit.ps1",
+    "Length": 878,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5505348Z"
+  },
+  {
+    "path": "_deploy\\cache\\.githooks\\pre-push",
+    "Length": 410,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5505348Z"
+  },
+  {
+    "path": "_deploy\\cache\\.githooks\\pre-push.cmd",
+    "Length": 313,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5515345Z"
+  },
+  {
+    "path": "_deploy\\cache\\.githooks\\pre-push.ps1",
+    "Length": 1476,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5515345Z"
+  },
+  {
+    "path": "_deploy\\cache\\.githooks\\_bak\\pre-commit.local-20250918-054137.bak",
+    "Length": 474,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5505348Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\dependabot.yml",
+    "Length": 146,
+    "LastWriteTimeUtc": "2025-10-18T13:19:12.0851807Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\pull_request_template.md",
+    "Length": 406,
+    "LastWriteTimeUtc": "2025-10-18T13:19:12.0851807Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\ak-auto.yml",
+    "Length": 5636,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5515345Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\ak-commands.yml",
+    "Length": 3559,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5525349Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\auto-github-release.yml",
+    "Length": 1258,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5525349Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\auto-merge.yml",
+    "Length": 555,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5525349Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\dispatch-on-release.yml",
+    "Length": 705,
+    "LastWriteTimeUtc": "2025-10-18T13:19:12.0861842Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\guard-flush-queue.yml",
+    "Length": 1332,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5525349Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\guard-logs-ignored.yml",
+    "Length": 1346,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5535345Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\guard-readme-badge.yml",
+    "Length": 714,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5535345Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\guard-sentinel.yml",
+    "Length": 880,
+    "LastWriteTimeUtc": "2025-10-18T13:19:12.0861842Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\health-monitor.yml",
+    "Length": 1499,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5535345Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\housekeeping-smoke.yml",
+    "Length": 2039,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5535345Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\klc-verify.yml",
+    "Length": 986,
+    "LastWriteTimeUtc": "2025-10-18T13:19:12.0861842Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\protect-manual.yml",
+    "Length": 1972,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5545347Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\psanalyze.yml",
+    "Length": 2387,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5545347Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\release-docs.yml",
+    "Length": 3895,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5545347Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\release-gate-auto.yml",
+    "Length": 539,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5545347Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\release-gate-strong.yml",
+    "Length": 1683,
+    "LastWriteTimeUtc": "2025-10-18T13:19:12.0861842Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\release-gate.yml",
+    "Length": 560,
+    "LastWriteTimeUtc": "2025-10-18T13:19:12.0871807Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\weekly-auto-release-smoke.yml",
+    "Length": 1447,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5545347Z"
+  },
+  {
+    "path": "_deploy\\cache\\.github\\workflows\\xp-summary-artifact.yml",
+    "Length": 3594,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5555355Z"
+  },
+  {
+    "path": "_deploy\\cache\\.kobong\\archived\\patches-20250924-135817.txt",
+    "Length": 6137,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5555355Z"
+  },
+  {
+    "path": "_deploy\\cache\\.kobong\\reports\\ERROR-KB.md",
+    "Length": 5768,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5565351Z"
+  },
+  {
+    "path": "_deploy\\cache\\.pr-artifacts\\xp-summary-20250915-125039.md",
+    "Length": 126,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5565351Z"
+  },
+  {
+    "path": "_deploy\\cache\\.vscode\\settings.json",
+    "Length": 235,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5565351Z"
+  },
+  {
+    "path": "_deploy\\cache\\AUTO-Kobong\\AUTO-Kobong-메뉴얼.md",
+    "Length": 5337,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5575349Z"
+  },
+  {
+    "path": "_deploy\\cache\\AUTO-Kobong\\CODEOWNERS.manual.add.txt",
+    "Length": 226,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5575349Z"
+  },
+  {
+    "path": "_deploy\\cache\\AUTO-Kobong\\start-ak.ps1",
+    "Length": 3555,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5585354Z"
+  },
+  {
+    "path": "_deploy\\cache\\AUTO-Kobong\\scripts\\g5\\ak-dispatch.ps1",
+    "Length": 2223,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5575349Z"
+  },
+  {
+    "path": "_deploy\\cache\\AUTO-Kobong\\scripts\\g5\\ak-fixloop.ps1",
+    "Length": 833,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5575349Z"
+  },
+  {
+    "path": "_deploy\\cache\\AUTO-Kobong\\scripts\\g5\\ak-live-extract.ps1",
+    "Length": 3081,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5585354Z"
+  },
+  {
+    "path": "_deploy\\cache\\AUTO-Kobong\\scripts\\g5\\ak-rewrite.ps1",
+    "Length": 873,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5585354Z"
+  },
+  {
+    "path": "_deploy\\cache\\AUTO-Kobong\\scripts\\g5\\ak-scan.ps1",
+    "Length": 962,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5585354Z"
+  },
+  {
+    "path": "_deploy\\cache\\AUTO-Kobong\\scripts\\g5\\ak-test.ps1",
+    "Length": 450,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5585354Z"
+  },
+  {
+    "path": "_deploy\\cache\\deploy\\deploy-postswitch.ps1",
+    "Length": 1653,
+    "LastWriteTimeUtc": "2025-10-18T13:19:12.0871807Z"
+  },
+  {
+    "path": "_deploy\\cache\\deploy\\deploy-release.ps1",
+    "Length": 2408,
+    "LastWriteTimeUtc": "2025-10-18T13:19:12.0871807Z"
+  },
+  {
+    "path": "_deploy\\cache\\deploy\\urs-mark-good.ps1",
+    "Length": 501,
+    "LastWriteTimeUtc": "2025-10-18T13:19:12.0871807Z"
+  },
+  {
+    "path": "_deploy\\cache\\deploy\\urs-rollback.ps1",
+    "Length": 1576,
+    "LastWriteTimeUtc": "2025-10-18T13:19:12.0881728Z"
+  },
+  {
+    "path": "_deploy\\cache\\dev\\kb-api.cjs",
+    "Length": 1767,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5595348Z"
+  },
+  {
+    "path": "_deploy\\cache\\dev\\kb-dev-backend.mjs",
+    "Length": 1796,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5605351Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\app\\bootstrap.js",
+    "Length": 872,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5605351Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\app\\hardening.js",
+    "Length": 6791,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5605351Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\app\\kobong_api.acl.js",
+    "Length": 55,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5615347Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\app\\kobong_api.js",
+    "Length": 1315,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5615347Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\app\\kobong.js",
+    "Length": 68,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5605351Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\app\\kobong\\index.js",
+    "Length": 69,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5615347Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\app\\kobong_api\\index.js",
+    "Length": 69,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5615347Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\app\\reporting\\report_service.js",
+    "Length": 164,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5625347Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\app\\reporting\\ReportService.js",
+    "Length": 2028,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5625347Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\domain\\dsl\\ast.js",
+    "Length": 413,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5625347Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\domain\\dsl\\parser.js",
+    "Length": 3223,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5625347Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\domain\\dsl\\v0_4\\parser.js",
+    "Length": 550,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5635351Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\domain\\dsl\\v0_4\\ports.js",
+    "Length": 11,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5635351Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\domain\\dsl\\v0_4\\types.js",
+    "Length": 11,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5635351Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\domain\\ports\\httpClient.js",
+    "Length": 11,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5645352Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\domain\\ports\\kobong_api.js",
+    "Length": 11,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5645352Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\domain\\ports\\kvs.js",
+    "Length": 11,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5645352Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\domain\\ports\\logger.js",
+    "Length": 11,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5645352Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\domain\\reporting\\errors.js",
+    "Length": 360,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5652486Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\domain\\reporting\\ports.js",
+    "Length": 59,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5652486Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\domain\\reporting\\types.js",
+    "Length": 11,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5652486Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\infra\\kobong_api.js",
+    "Length": 73,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5672538Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\infra\\adapters\\index.js",
+    "Length": 100,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5652486Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\infra\\adapters\\kobong_api_rest.js",
+    "Length": 3046,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5652486Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\infra\\adapters\\stub\\httpClient.js",
+    "Length": 575,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5662537Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\infra\\adapters\\stub\\kvs.js",
+    "Length": 1110,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5662537Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\infra\\kobong\\git_repo.js",
+    "Length": 1337,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5662537Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\infra\\kobong\\index.js",
+    "Length": 76,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5662537Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\infra\\logging\\jsonlLogger.js",
+    "Length": 3057,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5672538Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\infra\\reporting\\CsvRenderer.js",
+    "Length": 530,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5672538Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\infra\\reporting\\JsonRenderer.js",
+    "Length": 645,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5672538Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\infra\\reporting\\memory_report_engine.js",
+    "Length": 661,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5681146Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\infra\\reporting\\parser_adapter.js",
+    "Length": 189,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5687422Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\infra\\reporting\\ParserAdapter.js",
+    "Length": 1366,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5681146Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\infra\\reporting\\QueryStub.js",
+    "Length": 1959,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5681146Z"
+  },
+  {
+    "path": "_deploy\\cache\\dist\\ui\\reporting\\cli.js",
+    "Length": 486,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5687422Z"
+  },
+  {
+    "path": "_deploy\\cache\\docs\\Kobong-Weekly-Housekeeping.xml",
+    "Length": 1743,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5687422Z"
+  },
+  {
+    "path": "_deploy\\cache\\docs\\status.html",
+    "Length": 2153,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5697465Z"
+  },
+  {
+    "path": "_deploy\\cache\\docs\\badges\\ops-failures.svg",
+    "Length": 646,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5687422Z"
+  },
+  {
+    "path": "_deploy\\cache\\docs\\badges\\repo-state.svg",
+    "Length": 622,
+    "LastWriteTimeUtc": "2025-10-18T13:19:08.5697465Z"
+  },
+  {
+    "path": "_deploy\\cache\\ops\\ak-rescue-186-20250928-110147.md",
+    "Length": 249,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0146036Z"
+  },
+  {
+    "path": "_deploy\\cache\\public\\index.html",
+    "Length": 775,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0160617Z"
+  },
+  {
+    "path": "_deploy\\cache\\public\\data\\gh-monitor.json",
+    "Length": 4005,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0160617Z"
+  },
+  {
+    "path": "_deploy\\cache\\public\\widgets\\gh-pr-badge.html",
+    "Length": 2105,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0160617Z"
+  },
+  {
+    "path": "_deploy\\cache\\public\\widgets\\gh-pr-mini.html",
+    "Length": 1580,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0170666Z"
+  },
+  {
+    "path": "_deploy\\cache\\public\\widgets\\mini-dashboard.html",
+    "Length": 5301,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0170666Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\health-server.mjs",
+    "Length": 612,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0397955Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\ui_patch_direct.ps1",
+    "Length": 9854,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0397955Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ak-audit.ps1",
+    "Length": 781,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0181396Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ak-checks.ps1",
+    "Length": 538,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0181396Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ak-dispatch.ps1",
+    "Length": 1637,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0186495Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ak-fixloop.ps1",
+    "Length": 1284,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0187082Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ak-fmt.ps1",
+    "Length": 1241,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0187082Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ak-label.ps1",
+    "Length": 1068,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0192171Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ak-lint.ps1",
+    "Length": 1336,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0192171Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ak-merge.ps1",
+    "Length": 934,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0192171Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ak-protect.ps1",
+    "Length": 1030,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0192171Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ak-release.ps1",
+    "Length": 1251,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0202161Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ak-rerun.ps1",
+    "Length": 1070,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0202161Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ak-rewrite.ps1",
+    "Length": 1284,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0202161Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ak-scan.ps1",
+    "Length": 1284,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0202161Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ak-status.ps1",
+    "Length": 582,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0202161Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ak-test.ps1",
+    "Length": 1284,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0212278Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\apply-patches.ps1",
+    "Length": 119,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0212278Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\apply-pending-patches.ps1",
+    "Length": 574340,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0212278Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\auto-fix-open-prs.ps1",
+    "Length": 4746,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0222257Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\auto-merge-ready.ps1",
+    "Length": 3564,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0225432Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\auto-pr-complete.ps1",
+    "Length": 7776,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0225432Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\autostart-verify.ps1",
+    "Length": 708,
+    "LastWriteTimeUtc": "2025-10-18T13:19:12.0881728Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\branch-prune-quiet.ps1",
+    "Length": 3267,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0230544Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\check-pr-ready.ps1",
+    "Length": 4738,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0230544Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\doctor.ps1",
+    "Length": 2366,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0236113Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\error-trend.ps1",
+    "Length": 3427,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0236113Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\fetch-quiet.ps1",
+    "Length": 3334,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0236113Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\finalize-release.ps1",
+    "Length": 3088,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0241721Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\fix-gha-pwsh-installer.ps1",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0241721Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\fix-weekly-smoke-yaml.v2.ps1",
+    "Length": 0,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0241721Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\github-status-export.ps1",
+    "Length": 4727,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0246829Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\good-list.ps1",
+    "Length": 527,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0246829Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\good-restore.ps1",
+    "Length": 1587,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0246829Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\good-save.ps1",
+    "Length": 1703,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0246829Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\guard-run.ps1",
+    "Length": 1748,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0246829Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\housekeeping-summarize.ps1",
+    "Length": 2277,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0256805Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\housekeeping-weekly-run.ps1",
+    "Length": 4144,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0256805Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\housekeeping-weekly.ps1",
+    "Length": 2426,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0266824Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\kobong-run.cmd",
+    "Length": 764,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0266824Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\kobong-run.ps1",
+    "Length": 772,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0266824Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\launch-ci-summary.cmd",
+    "Length": 493,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.027681Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\launch-kobong-logger.cmd",
+    "Length": 498,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.027681Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\launch-kobong-orchestrator.cmd",
+    "Length": 504,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.027681Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\launch-monitor-logs.cmd",
+    "Length": 493,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0282909Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\launch-monitor-status.cmd",
+    "Length": 495,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0282909Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\lib-safe.psm1",
+    "Length": 2127,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0282909Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\make-run-report.ps1",
+    "Length": 3717,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0288042Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\manifest-prune.ps1",
+    "Length": 4428,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0293949Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\monitor-health.ps1",
+    "Length": 1501,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0294124Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\monitor-logs.ps1",
+    "Length": 3237,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0294124Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\monitor-status.ps1",
+    "Length": 3615,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0299217Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\one-shot-setup.ps1",
+    "Length": 1475,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0299217Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\open-ps7-here.cmd",
+    "Length": 210,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0299217Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ops-menu.ps1",
+    "Length": 2949,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0309209Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ports-clean.ps1",
+    "Length": 613,
+    "LastWriteTimeUtc": "2025-10-18T13:19:12.0881728Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\pr-automerge-watch.ps1",
+    "Length": 3716,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0309209Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\pr-badge-dedupe.ps1",
+    "Length": 942,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0309209Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\pr-rebase-onto-main.ps1",
+    "Length": 4134,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0309209Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\pr-rerun-checks-and-watch.ps1",
+    "Length": 2488,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0309209Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\protect-file.ps1",
+    "Length": 1364,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0319213Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\ps-header-enforcer.ps1",
+    "Length": 3136,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0319213Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\register-housekeeping-task.ps1",
+    "Length": 6923,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0319213Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\register-manifest.ps1",
+    "Length": 4612,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0319213Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\release-append-badge.ps1",
+    "Length": 2031,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0329207Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\release-next-patch.ps1",
+    "Length": 2771,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0329207Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\release-stabilize-with-watch.ps1",
+    "Length": 3426,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0329207Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\release-stabilize.ps1",
+    "Length": 5306,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0329207Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\release-train-with-watch.ps1",
+    "Length": 3088,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0329207Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\release-train.ps1",
+    "Length": 4064,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0339205Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\release-vpatch.ps1",
+    "Length": 5943,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0345453Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\release-vpatch.safe.ps1",
+    "Length": 3480,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0345884Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\rotate-apply-log.ps1",
+    "Length": 3524,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0345884Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\run-auto-patch-and-verify.ps1",
+    "Length": 4387,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0351464Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\run-github-monitor.ps1",
+    "Length": 770,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0351464Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\run-kobong-logger.ps1",
+    "Length": 459,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0356507Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\run-kobong-orchestrator.ps1",
+    "Length": 2036,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0357272Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\run-pr-complete.ps1",
+    "Length": 1178,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0357272Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\run-public-badge-sync.ps1",
+    "Length": 861,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0362866Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\run-static-web.ps1",
+    "Length": 4293,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0362866Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\run-step4-keep.ps1",
+    "Length": 1500,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0367967Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\run-watchdog.ps1",
+    "Length": 3248,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0367967Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\scheduler-tune.ps1",
+    "Length": 1425,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0367967Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\serve-public.ps1",
+    "Length": 4324,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0367967Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\setup-git-hooks.ps1",
+    "Length": 177,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0367967Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\shell-status.ps1",
+    "Length": 1554,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0377956Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\smoke-auto-release.ps1",
+    "Length": 2859,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0377956Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\status-setup.ps1",
+    "Length": 1126,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0377956Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\synthetic-pr-workload.ps1",
+    "Length": 8702,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0377956Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\unprotect-file.ps1",
+    "Length": 730,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0387956Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\verify-housekeeping.ps1",
+    "Length": 2025,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0387956Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\watch-badge-ready.ps1",
+    "Length": 3581,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0387956Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\g5\\watch-readme-badge.ps1",
+    "Length": 3663,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0387956Z"
+  },
+  {
+    "path": "_deploy\\cache\\scripts\\lib\\kobong-fileio.psm1",
+    "Length": 1892,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0397955Z"
+  },
+  {
+    "path": "_deploy\\cache\\sts_logo\\sts_logo.png",
+    "Length": 1460874,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.041897Z"
+  },
+  {
+    "path": "_deploy\\cache\\tests\\contract\\_smoke.spec.ts",
+    "Length": 420,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0424164Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\package-lock.json",
+    "Length": 29150,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0429309Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\package.json",
+    "Length": 243,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0434152Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\vite.config.mjs",
+    "Length": 322,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.05027Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\__ping_dashboard__.txt",
+    "Length": 36,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0434357Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\brand.png",
+    "Length": 1460874,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0454438Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\brand.svg",
+    "Length": 303,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0454438Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\events",
+    "Length": 90,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.046436Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\github.html",
+    "Length": 5510,
+    "LastWriteTimeUtc": "2025-10-19T22:53:00.0127345Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\index.html",
+    "Length": 3334,
+    "LastWriteTimeUtc": "2025-10-19T22:53:00.0167358Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\metrics",
+    "Length": 52,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0492719Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\status.html",
+    "Length": 7245,
+    "LastWriteTimeUtc": "2025-10-19T22:53:00.0207366Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\sts-kobong-GitHub-min.html",
+    "Length": 5404,
+    "LastWriteTimeUtc": "2025-10-19T22:53:00.0237358Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\api\\events",
+    "Length": 90,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0434357Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\api\\metrics",
+    "Length": 52,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0434357Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\css\\app.css",
+    "Length": 2838,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0458926Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\data\\gh-monitor.json",
+    "Length": 932,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0458926Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\js\\app.mjs",
+    "Length": 2122,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0474358Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\js\\kb-theme.js",
+    "Length": 1963,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0474358Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\js\\kb-topline.js",
+    "Length": 1797,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0474358Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\js\\metrics.mjs",
+    "Length": 1634,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0474358Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\js\\sse.mjs",
+    "Length": 644,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0474358Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\js\\status.js",
+    "Length": 5230,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0486602Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\js\\sts-gh-min.js",
+    "Length": 3449,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0487579Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\js\\ui.mjs",
+    "Length": 860,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.0492719Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\widgets\\gh-pr-badge.html",
+    "Length": 2105,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.05027Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\widgets\\gh-pr-mini.html",
+    "Length": 1580,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.05027Z"
+  },
+  {
+    "path": "_deploy\\cache\\webui\\public\\widgets\\mini-dashboard.html",
+    "Length": 5301,
+    "LastWriteTimeUtc": "2025-10-18T13:19:11.05027Z"
+  }
+]

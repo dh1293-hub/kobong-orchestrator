@@ -46,3 +46,4 @@ jobs:
           fi
           gh release delete "$tag" -y >/dev/null 2>&1 || true
           git push origin ":refs/tags/$tag" || true
+

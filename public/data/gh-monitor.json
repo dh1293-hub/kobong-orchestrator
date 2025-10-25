@@ -1,0 +1,127 @@
+{
+  "repo": "dh1293-hub/kobong-orchestrator",
+  "base": "main",
+  "timestamp": "2025-09-24T16:07:39.9503139+09:00",
+  "totals": {
+    "merged_24h": 2,
+    "open": 2
+  },
+  "latest": {
+    "number": 177,
+    "state": "merged",
+    "merged_at": "2025-09-24T00:22:38Z",
+    "created_at": "2025-09-23T23:54:22Z",
+    "head": "synthetic/gpt5-20250924-085333",
+    "base": "main",
+    "title": "Synthetic/gpt5 20250924 085333",
+    "labels": [
+      "synthetic",
+      "gpt5",
+      "heartbeat"
+    ],
+    "url": "https://github.com/dh1293-hub/kobong-orchestrator/pull/177",
+    "isSynthetic": true
+  },
+  "recent": [
+    {
+      "number": 177,
+      "state": "merged",
+      "merged_at": "2025-09-24T00:22:38Z",
+      "created_at": "2025-09-23T23:54:22Z",
+      "head": "synthetic/gpt5-20250924-085333",
+      "base": "main",
+      "title": "Synthetic/gpt5 20250924 085333",
+      "labels": [
+        "synthetic",
+        "gpt5",
+        "heartbeat"
+      ],
+      "url": "https://github.com/dh1293-hub/kobong-orchestrator/pull/177",
+      "isSynthetic": true
+    },
+    {
+      "number": 176,
+      "state": "merged",
+      "merged_at": "2025-09-23T21:52:57Z",
+      "created_at": "2025-09-23T21:44:59Z",
+      "head": "fix/ui-safe-regex-20250924-clean-20250924064313",
+      "base": "main",
+      "title": "fix(ui): safe regex + hook injection; resolve Html/html collision",
+      "labels": [],
+      "url": "https://github.com/dh1293-hub/kobong-orchestrator/pull/176",
+      "isSynthetic": false
+    },
+    {
+      "number": 175,
+      "state": "merged",
+      "merged_at": "2025-09-18T00:34:43Z",
+      "created_at": "2025-09-18T00:20:50Z",
+      "head": "ops/health-monitor-20250918-092047",
+      "base": "main",
+      "title": "ops(health): add health monitor + CI smoke",
+      "labels": [],
+      "url": "https://github.com/dh1293-hub/kobong-orchestrator/pull/175",
+      "isSynthetic": false
+    },
+    {
+      "number": 174,
+      "state": "merged",
+      "merged_at": "2025-09-17T23:43:22Z",
+      "created_at": "2025-09-17T23:43:14Z",
+      "head": "ops/fix-weekly-smoke-gitid-20250918-084313",
+      "base": "main",
+      "title": "ci(weekly-smoke): fix git identity for tag push",
+      "labels": [],
+      "url": "https://github.com/dh1293-hub/kobong-orchestrator/pull/174",
+      "isSynthetic": false
+    },
+    {
+      "number": 173,
+      "state": "merged",
+      "merged_at": "2025-09-17T23:31:49Z",
+      "created_at": "2025-09-17T23:31:38Z",
+      "head": "ops/fix-weekly-smoke-yaml-20250918-083136",
+      "base": "main",
+      "title": "ci(weekly-smoke): repair YAML + ensure workflow_dispatch on main",
+      "labels": [],
+      "url": "https://github.com/dh1293-hub/kobong-orchestrator/pull/173",
+      "isSynthetic": false
+    },
+    {
+      "number": 172,
+      "state": "merged",
+      "merged_at": "2025-09-17T23:28:19Z",
+      "created_at": "2025-09-17T23:24:11Z",
+      "head": "ops/promote-weekly-smoke-20250918-082055",
+      "base": "main",
+      "title": "ci(weekly-smoke): enable workflow_dispatch on main",
+      "labels": [],
+      "url": "https://github.com/dh1293-hub/kobong-orchestrator/pull/172",
+      "isSynthetic": false
+    },
+    {
+      "number": 171,
+      "state": "merged",
+      "merged_at": "2025-09-17T21:09:41Z",
+      "created_at": "2025-09-17T21:09:30Z",
+      "head": "ops/housekeeping-summary-20250918-060927",
+      "base": "main",
+      "title": "ci(housekeeping): summary + PR sticky comment",
+      "labels": [],
+      "url": "https://github.com/dh1293-hub/kobong-orchestrator/pull/171",
+      "isSynthetic": false
+    },
+    {
+      "number": 170,
+      "state": "merged",
+      "merged_at": "2025-09-17T21:05:48Z",
+      "created_at": "2025-09-17T21:05:32Z",
+      "head": "ops/dev-editor-std-20250918-060530",
+      "base": "main",
+      "title": "chore(dev): editor consistency (.editorconfig + VSCode PS7)",
+      "labels": [],
+      "url": "https://github.com/dh1293-hub/kobong-orchestrator/pull/170",
+      "isSynthetic": false
+    }
+  ]
+}

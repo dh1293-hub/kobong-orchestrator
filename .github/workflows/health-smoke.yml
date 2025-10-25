@@ -1,0 +1,15 @@
+name: health-smoke
+on: pull_request
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ps7 smoke
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $files = 'ak-scan.ps1','ak-rewrite.ps1','ak-fixloop.ps1','ak-test.ps1' | % { Join-Path 'scripts/g5' $_ }
+          foreach($f in $files){ if(-not (Test-Path $f)){ throw "missing $f" } }
+          pwsh -NoProfile -File scripts/g5/ak-scan.ps1 | Out-Host
+          pwsh -NoProfile -File scripts/g5/ak-test.ps1 | Out-Host
