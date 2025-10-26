@@ -1,6 +1,7 @@
 name: Health Smoke (daily)
 
 
+
 on:
   schedule:
     - cron: "0 0 * * *"     # 09:00 KST
@@ -27,12 +28,9 @@ jobs:
     runs-on: windows-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      # 입력 비워두면 시크릿으로 폴백 (레포 시크릿에 미리 넣어두면 편함)
-      DEF5182: ${{ secrets.GHMON_BASE_5182 }}
-      DEF5199: ${{ secrets.GHMON_BASE_5199 }}
 
     steps:
-      # 0) 로컬 액션 부트스트랩 (.github/actions만 전개)
+      # 0) 로컬 액션 부트스트랩 (.github/actions 만 전개)
       - name: Bootstrap local actions (no git)
         shell: pwsh
         run: |
@@ -59,21 +57,37 @@ jobs:
           Copy-Item -Path (Join-Path $root.FullName '.github\actions') -Destination $dst -Recurse -Force
           Remove-Item $zip -Force
 
-      # 1) (옵션) 전개 — 필요시 소스가져오기. 없어도 동작엔 지장 없음
+      # 1) (옵션) 소스 전개
       - uses: ./.github/actions/zip-fetch
 
-      # 2) 헬스 체크 (입력→시크릿 순 폴백)
-      # -- BEGIN REPLACE: hosted ping with skip when unset --
+      # 2) ✅ 입력/시크릿을 안전하게 해석 → outputs 로 노출
+      - name: Resolve base URLs
+        id: bases
+        shell: pwsh
+        env:
+          IN_5182: ${{ github.event.inputs.base5182 }}
+          IN_5199: ${{ github.event.inputs.base5199 }}
+          SEC_5182: ${{ secrets.GHMON_BASE_5182 }}
+          SEC_5199: ${{ secrets.GHMON_BASE_5199 }}
+        run: |
+          $b1 = if ([string]::IsNullOrWhiteSpace($env:IN_5182)) { $env:SEC_5182 } else { $env:IN_5182 }
+          $b2 = if ([string]::IsNullOrWhiteSpace($env:IN_5199)) { $env:SEC_5199 } else { $env:IN_5199 }
+          if ([string]::IsNullOrWhiteSpace($b1) -or [string]::IsNullOrWhiteSpace($b2)) {
+            "HAS_BASES=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          } else {
+            "HAS_BASES=true"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            "B1=$b1"          | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            "B2=$b2"          | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          }
+
+      # 3) 값이 준비된 경우에만 핑 실행
       - name: Ping GHMON 5182 / 5199 (hosted)
-        if: ${{ (github.event.inputs.base5182 != '' && github.event.inputs.base5199 != '') || (secrets.GHMON_BASE_5182 != '' && secrets.GHMON_BASE_5199 != '') }}
+        if: ${{ steps.bases.outputs.HAS_BASES == 'true' }}
         shell: pwsh
         run: |
           $ErrorActionPreference='Continue'
-          # 우선순위: 입력 > 시크릿
-          $in1 = '${{ github.event.inputs.base5182 }}'
-          $in2 = '${{ github.event.inputs.base5199 }}'
-          $B1  = if ([string]::IsNullOrWhiteSpace($in1)) { '${{ secrets.GHMON_BASE_5182 }}' } else { $in1 }
-          $B2  = if ([string]::IsNullOrWhiteSpace($in2)) { '${{ secrets.GHMON_BASE_5199 }}' } else { $in2 }
+          $B1 = '${{ steps.bases.outputs.B1 }}'
+          $B2 = '${{ steps.bases.outputs.B2 }}'
 
           function Test-Health($base){
             try { (Invoke-RestMethod "$base/api/ghmon/health" -TimeoutSec 8).ok } catch { $false }
@@ -87,13 +101,12 @@ jobs:
 
           if (-not ($ok1 -and $ok2)) { Write-Error "health failed"; exit 1 }
 
+      # 4) 값이 없으면 녹색으로 스킵
       - name: Skip ping (no base URLs provided)
-        if: ${{ !((github.event.inputs.base5182 != '' && github.event.inputs.base5199 != '') || (secrets.GHMON_BASE_5182 != '' && secrets.GHMON_BASE_5199 != '')) }}
-        run: echo "health-smoke:skipped (no base URLs). Provide inputs or set repo secrets to enable hosted checks."
-      # -- END REPLACE --
+        if: ${{ steps.bases.outputs.HAS_BASES != 'true' }}
+        run: echo "health-smoke:skipped (no base URLs). Provide inputs or set repo secrets."
 
-
-      # 3) 로그 업로드(유일 이름, 409 방지)
+      # 5) 항상 로그 업로드 (409 방지: 유일 이름)
       - uses: ./.github/actions/publish-logs
         if: always()
         with:
