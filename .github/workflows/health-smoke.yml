@@ -63,19 +63,17 @@ jobs:
       - uses: ./.github/actions/zip-fetch
 
       # 2) 헬스 체크 (입력→시크릿 순 폴백)
+      # -- BEGIN REPLACE: hosted ping with skip when unset --
       - name: Ping GHMON 5182 / 5199 (hosted)
+        if: ${{ (github.event.inputs.base5182 != '' && github.event.inputs.base5199 != '') || (secrets.GHMON_BASE_5182 != '' && secrets.GHMON_BASE_5199 != '') }}
         shell: pwsh
         run: |
           $ErrorActionPreference='Continue'
+          # 우선순위: 입력 > 시크릿
           $in1 = '${{ github.event.inputs.base5182 }}'
           $in2 = '${{ github.event.inputs.base5199 }}'
-          $B1 = if ([string]::IsNullOrWhiteSpace($in1)) { $env:DEF5182 } else { $in1 }
-          $B2 = if ([string]::IsNullOrWhiteSpace($in2)) { $env:DEF5199 } else { $in2 }
-
-          if (-not $B1 -or -not $B2) {
-            Write-Error "base URLs are not set. Provide inputs or set secrets GHMON_BASE_5182 / GHMON_BASE_5199."
-            exit 2
-          }
+          $B1  = if ([string]::IsNullOrWhiteSpace($in1)) { '${{ secrets.GHMON_BASE_5182 }}' } else { $in1 }
+          $B2  = if ([string]::IsNullOrWhiteSpace($in2)) { '${{ secrets.GHMON_BASE_5199 }}' } else { $in2 }
 
           function Test-Health($base){
             try { (Invoke-RestMethod "$base/api/ghmon/health" -TimeoutSec 8).ok } catch { $false }
@@ -88,6 +86,12 @@ jobs:
             Tee-Object -FilePath "logs/health-smoke.log" -Append
 
           if (-not ($ok1 -and $ok2)) { Write-Error "health failed"; exit 1 }
+
+      - name: Skip ping (no base URLs provided)
+        if: ${{ !((github.event.inputs.base5182 != '' && github.event.inputs.base5199 != '') || (secrets.GHMON_BASE_5182 != '' && secrets.GHMON_BASE_5199 != '')) }}
+        run: echo "health-smoke:skipped (no base URLs). Provide inputs or set repo secrets to enable hosted checks."
+      # -- END REPLACE --
+
 
       # 3) 로그 업로드(유일 이름, 409 방지)
       - uses: ./.github/actions/publish-logs
