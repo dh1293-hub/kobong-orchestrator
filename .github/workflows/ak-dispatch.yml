@@ -12,7 +12,7 @@ on:
         required: false
         default: ""
       sha:
-        description: "Commit SHA (optional) — empty uses current"
+        description: "Commit SHA (optional)"
         required: false
         default: ""
 
@@ -28,44 +28,11 @@ concurrency:
 jobs:
   run:
     runs-on: windows-latest
-    env:
-      GITHUB_TOKEN: ${{ github.token }}
-
     steps:
-      # ✅ Git 미사용: GitHub API zipball로 소스 가져오기
-      - name: Fetch repository zip (no git)
-        shell: pwsh
-        run: |
-          $ErrorActionPreference='Stop'
-          $ref = '${{ github.event.inputs.sha }}'
-          if ([string]::IsNullOrWhiteSpace($ref)) { $ref = '${{ github.sha }}' }
-
-          $repo = '${{ github.repository }}'
-          $owner,$name = $repo.Split('/')
-
-          $zip  = Join-Path $env:RUNNER_TEMP 'src.zip'
-          $dst  = Join-Path $env:RUNNER_TEMP 'src'
-          if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
-          New-Item -ItemType Directory -Force -Path $dst | Out-Null
-
-          $Headers = @{
-            Authorization            = "Bearer $env:GITHUB_TOKEN"
-            "X-GitHub-Api-Version"   = "2022-11-28"
-            "User-Agent"             = "actions-zip-fetch"
-            Accept                   = "application/vnd.github+json"
-          }
-          $url = "https://api.github.com/repos/$owner/$name/zipball/$ref"
-          Write-Host "AK> downloading $url"
-          Invoke-WebRequest -Uri $url -Headers $Headers -OutFile $zip
-
-          Expand-Archive -Path $zip -DestinationPath $dst -Force
-          $root = Get-ChildItem -Directory $dst | Select-Object -First 1
-          if (-not $root) { throw "Expand failed: no root dir" }
-
-          Copy-Item -Path (Join-Path $root.FullName '*') `
-                    -Destination $env:GITHUB_WORKSPACE `
-                    -Recurse -Force
-          Remove-Item $zip -Force
+      # Git 전혀 안 씀: zip-fetch 재사용 액션으로 소스 전개
+      - uses: ./.github/actions/zip-fetch
+        with:
+          ref: ${{ github.event.inputs.sha || github.sha }}
 
       - name: AK Dispatch
         shell: pwsh
@@ -77,29 +44,12 @@ jobs:
             -Pr "${{ github.event.inputs.pr }}" `
             -Sha "${{ github.event.inputs.sha }}"
 
-      # ✅ 로그는 항상 zip으로 남김(중복 업로드 방지 + 유일 이름)
-      - name: Pack logs to zip
+      # 실행 로그는 항상 zip으로 보존(유일 이름, 409 방지)
+      - uses: ./.github/actions/publish-logs
         if: always()
-        shell: pwsh
-        run: |
-          $dir = Join-Path $env:GITHUB_WORKSPACE 'logs'
-          if (-not (Test-Path $dir)) {
-            New-Item -ItemType Directory -Force -Path $dir | Out-Null
-            'init' | Out-File (Join-Path $dir 'placeholder.log') -Encoding utf8
-          }
-          $out = Join-Path $env:RUNNER_TEMP 'ak-logs.zip'
-          if (Test-Path $out) { Remove-Item $out -Force }
-          Compress-Archive -Path "$dir\*" -DestinationPath $out -Force
-          Write-Host "AK> artifact: $out"
-
-      - name: Upload logs artifact
-        if: always()
-        uses: actions/upload-artifact@v4
         with:
-          name: ak-logs-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/ak-logs.zip
-          overwrite: true
-          if-no-files-found: warn
+          logdir: logs
+          name: ak-logs
 
       - name: Comment to PR (optional)
         if: ${{ github.event.inputs.pr != '' }}
