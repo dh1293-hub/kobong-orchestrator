@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       cmd:
-        description: "/ak scan | test | rewrite | fixloop | fix | help"
+        description: "/ak scan | test | rewrite | fix | help"
         required: true
         type: string
       pr:
@@ -30,10 +30,17 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0                    # git 128 예방(태그/기원 조회 OK)
+
+      - name: Git safe.directory (avoid 128)
+        run: git config --global --add safe.directory "$PWD"  # 소유권 경고 제거
 
       - name: AK Dispatch
         shell: pwsh
         run: |
+          # 항상 워크스페이스에서 실행(스크립트 내부 cd로 인한 git 128 예방)
+          Set-Location $env:GITHUB_WORKSPACE
           pwsh -NoProfile -File "scripts/g5/ak-dispatch.ps1" `
             -Command "${{ github.event.inputs.cmd }}" `
             -Pr "${{ github.event.inputs.pr }}" `
@@ -44,45 +51,18 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts | Out-Null
-          if (-not (Test-Path logs)) { New-Item -ItemType Directory -Force -Path logs | Out-Null; 'init' | Out-File logs\placeholder.log -Encoding utf8 }
+          if (-not (Test-Path logs)) {
+            New-Item -ItemType Directory -Force -Path logs | Out-Null
+            'init' | Out-File logs\placeholder.log -Encoding utf8
+          }
           Compress-Archive -Path logs\* -DestinationPath artifacts\ak-logs.zip -Force
-      
+
+      # ⚠️ v4는 동일 이름 중복 업로드 시 409. 이름에 run_id/run_attempt로 유일성 보장 + overwrite.
       - name: Upload logs artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ak-logs
+          name: ak-logs-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/ak-logs.zip
-
-      # 콘솔 외에도 파일 로그 보존
-      - name: Upload logs (KLC/others)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ak-logs
-          path: |
-            logs/*.jsonl
-            logs/*.log
-            **/logs/*.jsonl
-            **/logs/*.log
-          if-no-files-found: ignore
-
-      # pr 입력이 있으면 PR에 꼬리 코멘트 남김(선택)
-      - name: Comment to PR (optional)
-        if: ${{ github.event.inputs.pr != '' }}
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const pr = Number(process.env.PR);
-            const cmd = process.env.CMD;
-            const sha = process.env.SHA || context.sha;
-            const short = (sha || '').slice(0,7);
-            const body = `AK dispatch \`${cmd}\` finished on \`${short}\``;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: pr, body
-            });
-        env:
-          PR:  ${{ github.event.inputs.pr }}
-          CMD: ${{ github.event.inputs.cmd }}
-          SHA: ${{ github.event.inputs.sha }}
+          overwrite: true                   # 재시도 시에도 충돌 방지
+          if-no-files-found: warn
