@@ -1,53 +1,85 @@
 name: Health Smoke (daily)
 
+
 on:
   schedule:
-    # UTC 00:00 (KST 09:00)
-    - cron: '0 0 * * *'
-  workflow_dispatch: {}
+    - cron: "0 0 * * *"     # 09:00 KST
+  workflow_dispatch:
+    inputs:
+      base5182:
+        description: "GHMON base (default http://localhost:5182)"
+        required: false
+        default: "http://localhost:5182"
+      base5199:
+        description: "GHMON MOCK base (default http://localhost:5199)"
+        required: false
+        default: "http://localhost:5199"
 
 permissions:
   contents: read
 
 concurrency:
-  group: health-smoke
-  cancel-in-progress: true
+  group: health-smoke-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  smoke:
-    runs-on: windows-latest
-    timeout-minutes: 15
+  ping:
+    runs-on: self-hosted
+    env:
+      GH_TOKEN: ${{ github.token }}
 
     steps:
-      - name: Download source (zipball)
+      # 0) 로컬 액션 부트스트랩 (checkout 없이 .github/actions 만 전개)
+      - name: Bootstrap local actions (no git)
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          SHA:  ${{ github.sha }}
         run: |
           $ErrorActionPreference='Stop'
-          $zip = Join-Path $env:RUNNER_TEMP 'src.zip'
-          $tmp = Join-Path $env:RUNNER_TEMP 'src-unzip'
+          $repo='${{ github.repository }}'
+          $ref ='${{ github.sha }}'
+          $zip = Join-Path $env:RUNNER_TEMP 'repo.zip'
+          $tmp = Join-Path $env:RUNNER_TEMP 'repo'
           if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
           New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-
-          $headers = @{
-            Authorization = "Bearer $env:GH_TOKEN"
-            "User-Agent" = "actions"
-            "X-GitHub-Api-Version" = "2022-11-28"
+          $Headers=@{
+            Authorization="Bearer $env:GH_TOKEN"
+            "X-GitHub-Api-Version"="2022-11-28"
+            "User-Agent"="bootstrap-actions"
+            Accept="application/vnd.github+json"
           }
-          $url = "https://api.github.com/repos/$env:REPO/zipball/$env:SHA"
-          Invoke-WebRequest -Uri $url -Headers $headers -OutFile $zip -UseBasicParsing
+          $owner,$name = $repo.Split('/')
+          $url = "https://api.github.com/repos/$owner/$name/zipball/$ref"
+          Invoke-WebRequest -Uri $url -Headers $Headers -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $tmp -Force
+          $root = Get-ChildItem -Directory $tmp | Select-Object -First 1
+          $dst  = Join-Path $env:GITHUB_WORKSPACE '.github'
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Copy-Item -Path (Join-Path $root.FullName '.github\actions') -Destination $dst -Recurse -Force
+          Remove-Item $zip -Force
 
-          Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force
-          $root = Get-ChildItem $tmp -Directory | Select-Object -First 1
-          if (-not $root) { throw "zipball root not found" }
-          Get-ChildItem -LiteralPath $root.FullName -Force | Copy-Item -Destination $env:GITHUB_WORKSPACE -Recurse -Force
+      # 1) Git 미사용: zip-fetch 액션으로 소스 전개
+      - uses: ./.github/actions/zip-fetch
 
-      - name: Smoke run (DRY)
+      # 2) 헬스 체크
+      - name: Ping GHMON 5182 / 5199
         shell: pwsh
-        working-directory: ${{ github.workspace }}
+        env:
+          B1: ${{ github.event.inputs.base5182 }}
+          B2: ${{ github.event.inputs.base5199 }}
         run: |
-          $ErrorActionPreference='Stop'
-          & "scripts/g5/ak-test.ps1" -Pr "0" -Sha "${{ github.sha }}" -ConfirmApply:$false
+          $ErrorActionPreference='Continue'
+          function Test-Health($base){
+            try { (Invoke-RestMethod "$base/api/ghmon/health" -TimeoutSec 5).ok } catch { $false }
+          }
+          $ok1 = Test-Health $env:B1
+          $ok2 = Test-Health $env:B2
+          if (-not (Test-Path logs)) { New-Item -ItemType Directory -Force -Path logs | Out-Null }
+          "$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss')) 5182=$ok1 5199=$ok2" |
+            Tee-Object -FilePath "logs/health-smoke.log" -Append
+          if(-not ($ok1 -and $ok2)){ Write-Error "health failed"; exit 1 }
+
+      # 3) ✅ 끝에 로그 업로드 (409 방지·유일 이름)
+      - uses: ./.github/actions/publish-logs
+        if: always()
+        with:
+          logdir: logs
+          name: health-logs
