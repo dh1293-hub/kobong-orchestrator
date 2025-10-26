@@ -1,18 +1,20 @@
 name: zip-fetch
-description: Fetch repository via GitHub API zipball (no git.exe)
+description: "Fetch repository via GitHub API zipball (no git.exe)"
+
 inputs:
   ref:
-    description: commit SHA/branch/tag
+    description: "commit SHA / branch / tag (empty uses GITHUB_SHA)"
     required: false
-    default: ${{ github.sha }}
+    default: ""
   repo:
-    description: owner/repo (default: current)
+    description: "owner/repo (empty uses current repository)"
     required: false
-    default: ${{ github.repository }}
+    default: ""
   path:
-    description: destination path
+    description: "destination path (empty uses GITHUB_WORKSPACE)"
     required: false
-    default: ${{ github.workspace }}
+    default: ""
+
 runs:
   using: "composite"
   steps:
@@ -21,24 +23,38 @@ runs:
         GH_TOKEN: ${{ github.token }}
       run: |
         $ErrorActionPreference='Stop'
+
+        # ---- resolve inputs with safe fallbacks (no expressions in defaults) ----
         $ref  = '${{ inputs.ref }}'
+        if ([string]::IsNullOrWhiteSpace($ref))  { $ref  = '${{ github.sha }}' }
+
         $repo = '${{ inputs.repo }}'
+        if ([string]::IsNullOrWhiteSpace($repo)) { $repo = '${{ github.repository }}' }
+
         $dst  = '${{ inputs.path }}'
+        if ([string]::IsNullOrWhiteSpace($dst))  { $dst  = '${{ github.workspace }}' }
+
+        # ---- download & expand zipball ----
         $owner,$name = $repo.Split('/')
-        $zip  = Join-Path $env:RUNNER_TEMP 'src.zip'
-        $tmp  = Join-Path $env:RUNNER_TEMP 'src'
+        $zip = Join-Path $env:RUNNER_TEMP 'src.zip'
+        $tmp = Join-Path $env:RUNNER_TEMP 'src'
         if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
         New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+
         $Headers = @{
-          Authorization="Bearer $env:GH_TOKEN"
-          "X-GitHub-Api-Version"="2022-11-28"
-          "User-Agent"="zip-fetch"
-          Accept="application/vnd.github+json"
+          Authorization          = "Bearer $env:GH_TOKEN"
+          "X-GitHub-Api-Version" = "2022-11-28"
+          "User-Agent"           = "zip-fetch"
+          Accept                 = "application/vnd.github+json"
         }
+
         $url = "https://api.github.com/repos/$owner/$name/zipball/$ref"
+        Write-Host "zip-fetch> GET $url"
         Invoke-WebRequest -Uri $url -Headers $Headers -OutFile $zip
+
         Expand-Archive -Path $zip -DestinationPath $tmp -Force
         $root = Get-ChildItem -Directory $tmp | Select-Object -First 1
         if (-not $root) { throw "Expand failed: no root dir" }
+
         Copy-Item -Path (Join-Path $root.FullName '*') -Destination $dst -Recurse -Force
         Remove-Item $zip -Force
