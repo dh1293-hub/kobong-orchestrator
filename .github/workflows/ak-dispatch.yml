@@ -39,6 +39,21 @@ jobs:
             -Pr "${{ github.event.inputs.pr }}" `
             -Sha "${{ github.event.inputs.sha }}"
 
+      - name: Pack logs to zip
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          if (-not (Test-Path logs)) { New-Item -ItemType Directory -Force -Path logs | Out-Null; 'init' | Out-File logs\placeholder.log -Encoding utf8 }
+          Compress-Archive -Path logs\* -DestinationPath artifacts\ak-logs.zip -Force
+      
+      - name: Upload logs artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ak-logs
+          path: artifacts/ak-logs.zip
+
       # 콘솔 외에도 파일 로그 보존
       - name: Upload logs (KLC/others)
         if: always()
