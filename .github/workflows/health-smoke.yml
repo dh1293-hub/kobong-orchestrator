@@ -1,7 +1,5 @@
 name: Health Smoke (daily)
 
-
-
 on:
   schedule:
     - cron: "0 0 * * *"     # 09:00 KST
