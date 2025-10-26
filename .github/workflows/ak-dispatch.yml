@@ -27,11 +27,15 @@ concurrency:
 
 jobs:
   run:
-    runs-on: windows-latest
+    # ▶ KO-GHMON 러너로 고정
+    runs-on: [self-hosted, ghmon-safe]
+    # ▶ 혹시 PR 트리거를 추가해도 fork PR에서는 실행 금지
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
     env:
       GH_TOKEN: ${{ github.token }}
+
     steps:
-      # 0) 로컬 액션 부트스트랩 (checkout 없이 .github/actions 만 전개)
+      # 0) 로컬 액션 부트스트랩 (.github/actions만 전개) — checkout 없이 로컬 액션 사용
       - name: Bootstrap local actions (no git)
         shell: pwsh
         run: |
@@ -58,12 +62,12 @@ jobs:
           Copy-Item -Path (Join-Path $root.FullName '.github\actions') -Destination $dst -Recurse -Force
           Remove-Item $zip -Force
 
-      # 1) (이제 존재함) zip-fetch 로 전체 소스 전개
+      # 1) Git 없이 소스 전개
       - uses: ./.github/actions/zip-fetch
         with:
           ref: ${{ github.event.inputs.sha || github.sha }}
 
-      # 2) 메인 실행
+      # 2) 디스패치 실행
       - name: AK Dispatch
         shell: pwsh
         run: |
@@ -74,7 +78,7 @@ jobs:
             -Pr "${{ github.event.inputs.pr }}" `
             -Sha "${{ github.event.inputs.sha }}"
 
-      # 3) 로그 업로드(409 방지: 고유 이름)
+      # 3) 실행 로그 업로드(유일 이름 → 409 방지)
       - uses: ./.github/actions/publish-logs
         if: always()
         with:
