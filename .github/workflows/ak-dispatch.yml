@@ -1,125 +1,73 @@
-name: AK Dispatch (slash commands)
+name: ak-dispatch
 
 on:
   workflow_dispatch:
     inputs:
       cmd:
-        description: '/ak scan | test | rewrite | fix | help'
+        description: "/ak scan | test | rewrite | fixloop | fix | help"
         required: true
+        type: string
       pr:
-        description: 'PR number (optional when manual)'
+        description: "PR number (optional)"
         required: false
-        default: ''
+        default: ""
       sha:
-        description: 'Commit SHA (optional when manual)'
+        description: "Commit SHA (optional)"
         required: false
-        default: ''
-  issue_comment:
-    types: [created]
+        default: ""
 
 permissions:
   contents: read
-  issues: write
   pull-requests: write
+  issues: write
+
+concurrency:
+  group: ak-dispatch-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  route:
-    runs-on: ubuntu-latest
-    outputs:
-      run: ${{ steps.parse.outputs.run }}
-      op:  ${{ steps.parse.outputs.op }}
-      pr:  ${{ steps.parse.outputs.pr }}
-      sha: ${{ steps.parse.outputs.sha }}
-    steps:
-      - id: parse
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const ev = context.payload;
-            let run = false, op = '', pr = '', sha = '';
-
-            if (context.eventName === 'issue_comment') {
-              const body = (ev.comment?.body || '').trim();
-              if (/^\/ak(\s|$)/i.test(body) && ev.issue?.pull_request) {
-                run = true;
-                const m = body.match(/^\/ak\s+([a-z]+)(?:\s+(.+))?$/i);
-                op = (m?.[1] || '').toLowerCase();
-                pr = String(ev.issue.number);
-
-                // PR head SHA 가져오기
-                const prData = await github.rest.pulls.get({
-                  owner: context.repo.owner, repo: context.repo.repo, pull_number: Number(pr)
-                });
-                sha = prData.data.head.sha;
-              }
-            } else if (context.eventName === 'workflow_dispatch') {
-              run = true;
-              op  = (core.getInput('cmd') || '').trim().toLowerCase();
-              pr  = (core.getInput('pr')  || '').trim();
-              sha = (core.getInput('sha') || '').trim() || context.sha;
-            }
-
-            core.setOutput('run', run ? 'yes' : 'no');
-            core.setOutput('op', op);
-            core.setOutput('pr', pr);
-            core.setOutput('sha', sha);
-
-  ak:
-    needs: route
-    if: ${{ needs.route.outputs.run == 'yes' }}
+  run:
     runs-on: windows-latest
     steps:
-      - name: Download source (zipball)
+      - uses: actions/checkout@v4
+
+      - name: AK Dispatch
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          SHA:  ${{ needs.route.outputs.sha }}
         run: |
-          $ErrorActionPreference='Stop'
-          $zip = Join-Path $env:RUNNER_TEMP 'src.zip'
-          $tmp = Join-Path $env:RUNNER_TEMP 'src-unzip'
-          Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          pwsh -NoProfile -File "scripts/g5/ak-dispatch.ps1" `
+            -Command "${{ github.event.inputs.cmd }}" `
+            -Pr "${{ github.event.inputs.pr }}" `
+            -Sha "${{ github.event.inputs.sha }}"
 
-          $h = @{ Authorization = "Bearer $env:GH_TOKEN"; "User-Agent"="actions"; "X-GitHub-Api-Version"="2022-11-28" }
-          $u = "https://api.github.com/repos/$env:REPO/zipball/$env:SHA"
-          Invoke-WebRequest -Uri $u -Headers $h -OutFile $zip -UseBasicParsing
-          Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force
-          $root = Get-ChildItem $tmp | ? { $_.PSIsContainer } | Select-Object -First 1
-          if (-not $root) { throw "zipball root not found" }
-          New-Item -ItemType Directory -Force -Path $env:GITHUB_WORKSPACE | Out-Null
-          Get-ChildItem -LiteralPath $root.FullName -Force | Move-Item -Destination $env:GITHUB_WORKSPACE -Force
+      # 콘솔 외에도 파일 로그 보존
+      - name: Upload logs (KLC/others)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ak-logs
+          path: |
+            logs/*.jsonl
+            logs/*.log
+            **/logs/*.jsonl
+            **/logs/*.log
+          if-no-files-found: ignore
 
-      - name: Run AK op
-        id: run
-        shell: pwsh
-        env:
-          OP:  ${{ needs.route.outputs.op }}
-          PR:  ${{ needs.route.outputs.pr }}
-          SHA: ${{ needs.route.outputs.sha }}
-        working-directory: ${{ github.workspace }}
-        run: |
-          $ErrorActionPreference='Stop'
-          $op = $env:OP
-          switch ($op) {
-            'scan'    { & "scripts/g5/ak-scan.ps1"   -Pr $env:PR -Sha $env:SHA -ConfirmApply:$false; break }
-            'test'    { & "scripts/g5/ak-test.ps1"   -Pr $env:PR -Sha $env:SHA -ConfirmApply:$false; break }
-            'rewrite' { & "scripts/g5/ak-rewrite.ps1" -Pr $env:PR -Sha $env:SHA -ConfirmApply:$false; break }
-            'fix'     { & "scripts/g5/ak-fixloop.ps1" -Pr $env:PR -Sha $env:SHA -ConfirmApply:$false; break }
-            default   { Write-Host "unknown op: $op"; exit 0 }
-          }
-
-      - name: Tail comment to PR/Issue
-        if: ${{ github.event_name == 'issue_comment' }}
+      # pr 입력이 있으면 PR에 꼬리 코멘트 남김(선택)
+      - name: Comment to PR (optional)
+        if: ${{ github.event.inputs.pr != '' }}
         uses: actions/github-script@v7
-        env:
-          OP:  ${{ needs.route.outputs.op }}
-          PR:  ${{ needs.route.outputs.pr }}
-          SHA: ${{ needs.route.outputs.sha }}
         with:
           script: |
-            const body = `AK **${process.env.OP}** done on \`${process.env.SHA.slice(0,7)}\``;
+            const pr = Number(process.env.PR);
+            const cmd = process.env.CMD;
+            const sha = process.env.SHA || context.sha;
+            const short = (sha || '').slice(0,7);
+            const body = `AK dispatch \`${cmd}\` finished on \`${short}\``;
             await github.rest.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo, issue_number: Number(process.env.PR), body
-            })
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: pr, body
+            });
+        env:
+          PR:  ${{ github.event.inputs.pr }}
+          CMD: ${{ github.event.inputs.cmd }}
+          SHA: ${{ github.event.inputs.sha }}
