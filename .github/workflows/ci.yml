@@ -1,38 +1,80 @@
 name: ci/webui
+
 on:
   pull_request:
   push:
     branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-webui-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      # 0) 로컬 액션 부트스트랩 (checkout 없이 .github/actions만 전개)
+      - name: Bootstrap local actions (no git)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $repo='${{ github.repository }}'
+          $ref ='${{ github.sha }}'
+          $zip = Join-Path $env:RUNNER_TEMP 'repo.zip'
+          $tmp = Join-Path $env:RUNNER_TEMP 'repo'
+          if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          $Headers=@{
+            Authorization="Bearer $env:GH_TOKEN"
+            "X-GitHub-Api-Version"="2022-11-28"
+            "User-Agent"="bootstrap-actions"
+            Accept="application/vnd.github+json"
+          }
+          $owner,$name = $repo.Split('/')
+          $url = "https://api.github.com/repos/$owner/$name/zipball/$ref"
+          Invoke-WebRequest -Uri $url -Headers $Headers -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $tmp -Force
+          $root = Get-ChildItem -Directory $tmp | Select-Object -First 1
+          $dst  = Join-Path $env:GITHUB_WORKSPACE '.github'
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Copy-Item -Path (Join-Path $root.FullName '.github\actions') -Destination $dst -Recurse -Force
+          Remove-Item $zip -Force
 
-      # Node 툴체인 (필요하면 18/20로 바꿔도 OK)
-      - uses: actions/setup-node@v4
-        with: { node-version: '22' }
+      # 1) Git 미사용: zip-fetch 액션으로 소스 전개
+      - uses: ./.github/actions/zip-fetch
 
-      # 1) 웹 리소스 빌드/정적 검사(프로젝트에 맞게 스크립트 추가 가능)
-      - name: Install deps (optional)
+      # 2) (옵션) Node 빌드: package.json 있을 때만
+      - name: Install & build (optional)
         if: hashFiles('package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: npm ci + build (optional)
+        if: hashFiles('package.json') != ''
+        shell: pwsh
         run: |
           npm ci
           if (Test-Path package.json) { npm run -s build || exit 1 }
 
-      # 2) 간단한 HTML 검증(정적)
+      # 3) 간단 HTML 존재/빈파일 검사
       - name: Validate HTML (basic)
+        shell: pwsh
         run: |
           $files = Get-ChildItem -Recurse -Include *.html
-          if ($files.Count -eq 0) { echo "no html"; exit 0 }
+          if ($files.Count -eq 0) { "no html"; exit 0 }
           foreach ($f in $files) {
-            Write-Host "check $($f.FullName)"
-            # 너무 엄격한 린트는 배제, 존재 여부만
-            if (!(Get-Content $f.FullName)) { Write-Error "empty file: $($f.FullName)"; exit 1 }
+            if (-not (Get-Content $f.FullName)) { Write-Error "empty file: $($f.FullName)"; exit 1 }
           }
 
-      # 3) 문서/링크 라이트 린트
+      # 4) 문서 최소 린트
       - name: Docs lint
+        shell: pwsh
         run: |
           $md = Get-ChildItem -Recurse -Include *.md
           if ($md.Count -eq 0) { exit 0 }
@@ -41,3 +83,10 @@ jobs:
               Write-Error "empty md: $($m.FullName)"; exit 1
             }
           }
+
+      # 5) ✅ 로그 업로드(유일 이름, 409 방지)
+      - uses: ./.github/actions/publish-logs
+        if: always()
+        with:
+          logdir: logs
+          name: ci-logs
