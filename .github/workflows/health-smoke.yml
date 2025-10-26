@@ -1,4 +1,4 @@
-name: Health Smoke (daily)
+name: health/smoke
 
 on:
   schedule:
@@ -6,11 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       base5182:
-        description: "GHMON base (예: http://203.0.113.10:5182 또는 https://ghmon.example.com)"
+        description: "override GHMON base (empty -> http://localhost:5182)"
         required: false
         default: ""
       base5199:
-        description: "GHMON MOCK base (예: http://203.0.113.10:5199)"
+        description: "override GHMON MOCK base (empty -> http://localhost:5199)"
         required: false
         default: ""
 
@@ -28,7 +28,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
 
     steps:
-      # 0) 로컬 액션 부트스트랩 (.github/actions 만 전개)
+      # 0) 로컬 액션 부트스트랩 (.github/actions만 전개)
       - name: Bootstrap local actions (no git)
         shell: pwsh
         run: |
@@ -57,49 +57,40 @@ jobs:
 
       # 1) (옵션) 소스 전개
       - uses: ./.github/actions/zip-fetch
+        with:
+          ref: ${{ github.sha }}
 
-      # 2) ✅ 입력/시크릿을 안전하게 해석 → outputs 로 노출
+      # 2) localhost 기본값 해석 (입력 비우면 localhost)
       - name: Resolve base URLs (self-hosted defaults)
         id: bases
         shell: pwsh
         env:
-            IN_5182: ${{ github.event.inputs.base5182 }}
-            IN_5199: ${{ github.event.inputs.base5199 }}
-            run: |
-              $b1 = if ([string]::IsNullOrWhiteSpace($env:IN_5182)) { 'http://localhost:5182' } else { $env:IN_5182 }
-              $b2 = if ([string]::IsNullOrWhiteSpace($env:IN_5199)) { 'http://localhost:5199' } else { $env:IN_5199 }
-              "HAS_BASES=true"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-              "B1=$b1"          | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-              "B2=$b2"          | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          IN_5182: ${{ github.event.inputs.base5182 }}
+          IN_5199: ${{ github.event.inputs.base5199 }}
+        run: |
+          $b1 = if ([string]::IsNullOrWhiteSpace($env:IN_5182)) { 'http://localhost:5182' } else { $env:IN_5182 }
+          $b2 = if ([string]::IsNullOrWhiteSpace($env:IN_5199)) { 'http://localhost:5199' } else { $env:IN_5199 }
+          "B1=$b1" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "B2=$b2" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-
-      # 3) 값이 준비된 경우에만 핑 실행
-      - name: Ping GHMON 5182 / 5199 (hosted)
-        if: ${{ steps.bases.outputs.HAS_BASES == 'true' }}
+      # 3) 실제 헬스 체크
+      - name: Ping GHMON 5182 / 5199
         shell: pwsh
         run: |
           $ErrorActionPreference='Continue'
-          $B1 = '${{ steps.bases.outputs.B1 }}'
-          $B2 = '${{ steps.bases.outputs.B2 }}'
-
+          $B1='${{ steps.bases.outputs.B1 }}'
+          $B2='${{ steps.bases.outputs.B2 }}'
           function Test-Health($base){
             try { (Invoke-RestMethod "$base/api/ghmon/health" -TimeoutSec 8).ok } catch { $false }
           }
           $ok1 = Test-Health $B1
           $ok2 = Test-Health $B2
-
           if (-not (Test-Path logs)) { New-Item -ItemType Directory -Force -Path logs | Out-Null }
           "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] 5182=$ok1  5199=$ok2  B1=$B1  B2=$B2" |
             Tee-Object -FilePath "logs/health-smoke.log" -Append
-
           if (-not ($ok1 -and $ok2)) { Write-Error "health failed"; exit 1 }
 
-      # 4) 값이 없으면 녹색으로 스킵
-      - name: Skip ping (no base URLs provided)
-        if: ${{ steps.bases.outputs.HAS_BASES != 'true' }}
-        run: echo "health-smoke:skipped (no base URLs). Provide inputs or set repo secrets."
-
-      # 5) 항상 로그 업로드 (409 방지: 유일 이름)
+      # 4) 항상 로그 업로드 (409 방지: 유일 이름)
       - uses: ./.github/actions/publish-logs
         if: always()
         with:
