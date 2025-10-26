@@ -1,26 +1,32 @@
 name: publish-logs
-description: Zip logs and upload artifact with unique name
+description: "Zip logs and upload artifact with unique name"
+
 inputs:
   logdir:
+    description: "directory to zip (default: logs)"
     required: false
-    default: logs
+    default: "logs"
   name:
+    description: "artifact base name (default: ak-logs)"
     required: false
-    default: ak-logs
+    default: "ak-logs"
+
 runs:
   using: "composite"
   steps:
     - shell: pwsh
       run: |
-        $dir='${{ inputs.logdir }}'
+        $ErrorActionPreference='Stop'
+        $dir = '${{ inputs.logdir }}'
         if (-not (Test-Path $dir)) {
           New-Item -ItemType Directory -Force -Path $dir | Out-Null
           'init' | Out-File (Join-Path $dir 'placeholder.log') -Encoding utf8
         }
-        $out = Join-Path $env:RUNNER_TEMP '${{ inputs.name }}.zip'
+        $out = Join-Path $env:RUNNER_TEMP ('{0}.zip' -f '${{ inputs.name }}')
         if (Test-Path $out) { Remove-Item $out -Force }
-        Compress-Archive -Path "$dir\*" -DestinationPath $out -Force
-        Write-Host "artifact:$out"
+        Compress-Archive -Path (Join-Path $dir '*') -DestinationPath $out -Force
+        Write-Host "publish-logs> $out"
+
     - uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.name }}-${{ github.run_id }}-${{ github.run_attempt }}
