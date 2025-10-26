@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   ping:
-    runs-on: windows-latest
+    runs-on: self-hosted
     env:
       GH_TOKEN: ${{ github.token }}
 
@@ -61,24 +61,19 @@ jobs:
       - uses: ./.github/actions/zip-fetch
 
       # 2) ✅ 입력/시크릿을 안전하게 해석 → outputs 로 노출
-      - name: Resolve base URLs
+      - name: Resolve base URLs (self-hosted defaults)
         id: bases
         shell: pwsh
         env:
-          IN_5182: ${{ github.event.inputs.base5182 }}
-          IN_5199: ${{ github.event.inputs.base5199 }}
-          SEC_5182: ${{ secrets.GHMON_BASE_5182 }}
-          SEC_5199: ${{ secrets.GHMON_BASE_5199 }}
-        run: |
-          $b1 = if ([string]::IsNullOrWhiteSpace($env:IN_5182)) { $env:SEC_5182 } else { $env:IN_5182 }
-          $b2 = if ([string]::IsNullOrWhiteSpace($env:IN_5199)) { $env:SEC_5199 } else { $env:IN_5199 }
-          if ([string]::IsNullOrWhiteSpace($b1) -or [string]::IsNullOrWhiteSpace($b2)) {
-            "HAS_BASES=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          } else {
-            "HAS_BASES=true"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            "B1=$b1"          | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            "B2=$b2"          | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          }
+            IN_5182: ${{ github.event.inputs.base5182 }}
+            IN_5199: ${{ github.event.inputs.base5199 }}
+            run: |
+              $b1 = if ([string]::IsNullOrWhiteSpace($env:IN_5182)) { 'http://localhost:5182' } else { $env:IN_5182 }
+              $b2 = if ([string]::IsNullOrWhiteSpace($env:IN_5199)) { 'http://localhost:5199' } else { $env:IN_5199 }
+              "HAS_BASES=true"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+              "B1=$b1"          | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+              "B2=$b2"          | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
 
       # 3) 값이 준비된 경우에만 핑 실행
       - name: Ping GHMON 5182 / 5199 (hosted)
