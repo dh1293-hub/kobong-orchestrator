@@ -28,12 +28,42 @@ concurrency:
 jobs:
   run:
     runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
-      # Git 전혀 안 씀: zip-fetch 재사용 액션으로 소스 전개
+      # 0) 로컬 액션 부트스트랩 (checkout 없이 .github/actions 만 전개)
+      - name: Bootstrap local actions (no git)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $repo='${{ github.repository }}'
+          $ref ='${{ github.sha }}'
+          $zip = Join-Path $env:RUNNER_TEMP 'repo.zip'
+          $tmp = Join-Path $env:RUNNER_TEMP 'repo'
+          if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          $Headers=@{
+            Authorization="Bearer $env:GH_TOKEN"
+            "X-GitHub-Api-Version"="2022-11-28"
+            "User-Agent"="bootstrap-actions"
+            Accept="application/vnd.github+json"
+          }
+          $owner,$name = $repo.Split('/')
+          $url = "https://api.github.com/repos/$owner/$name/zipball/$ref"
+          Invoke-WebRequest -Uri $url -Headers $Headers -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $tmp -Force
+          $root = Get-ChildItem -Directory $tmp | Select-Object -First 1
+          $dst  = Join-Path $env:GITHUB_WORKSPACE '.github'
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Copy-Item -Path (Join-Path $root.FullName '.github\actions') -Destination $dst -Recurse -Force
+          Remove-Item $zip -Force
+
+      # 1) (이제 존재함) zip-fetch 로 전체 소스 전개
       - uses: ./.github/actions/zip-fetch
         with:
           ref: ${{ github.event.inputs.sha || github.sha }}
 
+      # 2) 메인 실행
       - name: AK Dispatch
         shell: pwsh
         run: |
@@ -44,13 +74,14 @@ jobs:
             -Pr "${{ github.event.inputs.pr }}" `
             -Sha "${{ github.event.inputs.sha }}"
 
-      # 실행 로그는 항상 zip으로 보존(유일 이름, 409 방지)
+      # 3) 로그 업로드(409 방지: 고유 이름)
       - uses: ./.github/actions/publish-logs
         if: always()
         with:
           logdir: logs
           name: ak-logs
 
+      # 4) (선택) PR 코멘트
       - name: Comment to PR (optional)
         if: ${{ github.event.inputs.pr != '' }}
         uses: actions/github-script@v7
