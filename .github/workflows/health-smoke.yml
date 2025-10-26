@@ -23,7 +23,9 @@ concurrency:
 
 jobs:
   ping:
-    runs-on: self-hosted
+    runs-on: [self-hosted, ghmon-safe]
+    # PR(특히 fork)로는 self-hosted 실행 금지
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
     env:
       GH_TOKEN: ${{ github.token }}
 
