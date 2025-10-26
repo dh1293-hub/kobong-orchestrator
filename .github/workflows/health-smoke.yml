@@ -7,13 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       base5182:
-        description: "GHMON base (default http://localhost:5182)"
+        description: "GHMON base (예: http://203.0.113.10:5182 또는 https://ghmon.example.com)"
         required: false
-        default: "http://localhost:5182"
+        default: ""
       base5199:
-        description: "GHMON MOCK base (default http://localhost:5199)"
+        description: "GHMON MOCK base (예: http://203.0.113.10:5199)"
         required: false
-        default: "http://localhost:5199"
+        default: ""
 
 permissions:
   contents: read
@@ -24,12 +24,15 @@ concurrency:
 
 jobs:
   ping:
-    runs-on: self-hosted
+    runs-on: windows-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      # 입력 비워두면 시크릿으로 폴백 (레포 시크릿에 미리 넣어두면 편함)
+      DEF5182: ${{ secrets.GHMON_BASE_5182 }}
+      DEF5199: ${{ secrets.GHMON_BASE_5199 }}
 
     steps:
-      # 0) 로컬 액션 부트스트랩 (checkout 없이 .github/actions 만 전개)
+      # 0) 로컬 액션 부트스트랩 (.github/actions만 전개)
       - name: Bootstrap local actions (no git)
         shell: pwsh
         run: |
@@ -56,28 +59,37 @@ jobs:
           Copy-Item -Path (Join-Path $root.FullName '.github\actions') -Destination $dst -Recurse -Force
           Remove-Item $zip -Force
 
-      # 1) Git 미사용: zip-fetch 액션으로 소스 전개
+      # 1) (옵션) 전개 — 필요시 소스가져오기. 없어도 동작엔 지장 없음
       - uses: ./.github/actions/zip-fetch
 
-      # 2) 헬스 체크
-      - name: Ping GHMON 5182 / 5199
+      # 2) 헬스 체크 (입력→시크릿 순 폴백)
+      - name: Ping GHMON 5182 / 5199 (hosted)
         shell: pwsh
-        env:
-          B1: ${{ github.event.inputs.base5182 }}
-          B2: ${{ github.event.inputs.base5199 }}
         run: |
           $ErrorActionPreference='Continue'
-          function Test-Health($base){
-            try { (Invoke-RestMethod "$base/api/ghmon/health" -TimeoutSec 5).ok } catch { $false }
-          }
-          $ok1 = Test-Health $env:B1
-          $ok2 = Test-Health $env:B2
-          if (-not (Test-Path logs)) { New-Item -ItemType Directory -Force -Path logs | Out-Null }
-          "$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss')) 5182=$ok1 5199=$ok2" |
-            Tee-Object -FilePath "logs/health-smoke.log" -Append
-          if(-not ($ok1 -and $ok2)){ Write-Error "health failed"; exit 1 }
+          $in1 = '${{ github.event.inputs.base5182 }}'
+          $in2 = '${{ github.event.inputs.base5199 }}'
+          $B1 = if ([string]::IsNullOrWhiteSpace($in1)) { $env:DEF5182 } else { $in1 }
+          $B2 = if ([string]::IsNullOrWhiteSpace($in2)) { $env:DEF5199 } else { $in2 }
 
-      # 3) ✅ 끝에 로그 업로드 (409 방지·유일 이름)
+          if (-not $B1 -or -not $B2) {
+            Write-Error "base URLs are not set. Provide inputs or set secrets GHMON_BASE_5182 / GHMON_BASE_5199."
+            exit 2
+          }
+
+          function Test-Health($base){
+            try { (Invoke-RestMethod "$base/api/ghmon/health" -TimeoutSec 8).ok } catch { $false }
+          }
+          $ok1 = Test-Health $B1
+          $ok2 = Test-Health $B2
+
+          if (-not (Test-Path logs)) { New-Item -ItemType Directory -Force -Path logs | Out-Null }
+          "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] 5182=$ok1  5199=$ok2  B1=$B1  B2=$B2" |
+            Tee-Object -FilePath "logs/health-smoke.log" -Append
+
+          if (-not ($ok1 -and $ok2)) { Write-Error "health failed"; exit 1 }
+
+      # 3) 로그 업로드(유일 이름, 409 방지)
       - uses: ./.github/actions/publish-logs
         if: always()
         with:
