@@ -32,12 +32,21 @@ function Write-KLC([string]$Level='INFO',[string]$Action='dispatch',[string]$Out
   if($Exit -ne 0){ exit $Exit }
 }
 
-switch ($Command) {
-  'scan'    { & $PSScriptRoot/ak-scan.ps1    -Pr $Pr -Sha $Sha; break }
-  'rewrite' { & $PSScriptRoot/ak-rewrite.ps1 -Pr $Pr -Sha $Sha -ConfirmApply:$ConfirmApply; break }
-  'fixloop' { & $PSScriptRoot/ak-fixloop.ps1 -Pr $Pr -Sha $Sha -ConfirmApply:$ConfirmApply; break }
-  'test'    { & $PSScriptRoot/ak-test.ps1    -Pr $Pr -Sha $Sha; break }
-  default   { Write-KLC 'ERROR' 'dispatch' 'FAILURE' "Unknown: $Command" 13 }
+switch -Regex ($Command.Trim()) {
+  '^help$'          {
+                      # 사용 가능 명령을 콘솔에 친절히 표시
+                      'help|scan|test|rewrite|fixloop|fix'
+                      break
+                    }
+  '^scan$'          { & $PSScriptRoot/ak-scan.ps1    -Pr $Pr -Sha $Sha; break }
+  '^test$'          { & $PSScriptRoot/ak-test.ps1    -Pr $Pr -Sha $Sha; break }
+  '^rewrite$'       { & $PSScriptRoot/ak-rewrite.ps1 -Pr $Pr -Sha $Sha -ConfirmApply:$ConfirmApply; break }
+
+  # fix = fixloop 별칭
+  '^(fix|fixloop)$' { & $PSScriptRoot/ak-fixloop.ps1 -Pr $Pr -Sha $Sha -ConfirmApply:$ConfirmApply; break }
+
+  default           { Write-KLC 'ERROR' 'dispatch' 'FAILURE' ("Unknown: " + $Command) 13 }
 }
-Write-KLC 'INFO' 'dispatch' 'SUCCESS' "done:$Command"
+Write-KLC 'INFO' 'dispatch' 'SUCCESS' ("done:" + $Command)
 exit 0
+
