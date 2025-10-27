@@ -1,11 +1,8 @@
 name: Lint GitHub Actions
-
 on:
-  pull_request:
   push:
-    paths:
-      - ".github/workflows/*.yml"
-      - ".github/workflows/*.yaml"
+    paths: [".github/workflows/*.yml", ".github/workflows/*.yaml"]
+  pull_request:
 
 permissions:
   contents: read
@@ -15,7 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Git safe directory (silence 128)
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: reviewdog/action-actionlint@v1
         with:
-          reporter: github-check       # 주석/체크로 리포팅
-          actionlint_flags: -color     # 옵션(선택)
+          reporter: github-check
+          actionlint_flags: -color
+
