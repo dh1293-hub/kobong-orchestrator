@@ -1,4 +1,4 @@
 ADDED
 CHANGED
-scripts/g5/klc-aggregate.ps1
+.github/workflows/weekly-auto-release-smoke.yml
 REMOVED
