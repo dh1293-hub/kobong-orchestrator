@@ -6,7 +6,7 @@
 
 ![Stable tag](https://img.shields.io/badge/tag-stable-blue)
 
-[![health/smoke](https://github.com/dh1293-hub/kobong-orchestrator/actions/workflows/health-smoke.yml/badge.svg)](https://github.com/dh1293-hub/kobong-orchestrator/actions/workflows/health-smoke.yml)
+[![health/smoke](https://github.com/dh1293-hub/kobong-orchestrator/actions/workflows/health-smoke.yml/badge.svg)](…/health-smoke.yml)
 
 [➡ 운영 시작 가이드(위키)](../../wiki/운영-시작-가이드-(GitHub-Monitoring))
 
