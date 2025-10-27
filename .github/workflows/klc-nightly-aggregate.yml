@@ -1,32 +1,60 @@
---- a/.github/workflows/klc-nightly-aggregate.yml
-+++ b/.github/workflows/klc-nightly-aggregate.yml
+*** Begin Patch
+*** Update File: .github/workflows/klc-nightly-aggregate.yml
 @@
- name: KLC Nightly Aggregate
+-name: KLC Nightly Aggregate
+-
 -on:
 -  schedule:
--    - cron: "0 16 * * *"
+-    - cron: '0 15 * * *'   # 매일 00:00 KST (UTC+9) 기준
 -  workflow_dispatch:
+-
+-permissions:
+-  contents: read
+-
+-concurrency:
+-  group: klc-nightly-aggregate
+-  cancel-in-progress: true
+-
+-jobs:
+-  aggregate:
+-    runs-on: ubuntu-latest
+-
+-    steps:
+-      - name: Checkout
+-        uses: actions/checkout@v4
+-        with:
+-          fetch-depth: 0
+-
+-      # PowerShell 스크립트를 돌린다면
+-      - name: Aggregate KLC
+-        shell: pwsh
+-        run: ./scripts/g5/klc-aggregate.ps1 -Mode nightly
+-
+-      # 액션을 호출한다면 (위 step 대신 아래 형태)
+-      # - name: Aggregate KLC
+-      #   uses: <org>/<action>@<version>
+-      #   with:
+-      #     foo: bar
++name: KLC Nightly Aggregate
++
 +on:
 +  schedule:
-+    - cron: "0 16 * * *"   # 매일 01:00 KST (예시)
++    - cron: '0 15 * * *'   # 매일 00:00 KST (UTC+9) 기준
 +  workflow_dispatch:
 +
 +permissions:
 +  contents: read
-+  actions: read
- 
- jobs:
-   aggregate:
--    runs-on: ubuntu-latest
++
++concurrency:
++  group: klc-nightly-aggregate
++  cancel-in-progress: true
++
++jobs:
++  aggregate:
 +    runs-on: ubuntu-latest
-+    env:
-+      SRC_DIR: ${{ runner.temp }}/src-unzip
-     steps:
--      - name: Download source
--        with:
--          token: ${{ secrets.GITHUB_TOKEN }}
--          ref: ${{ github.sha }}
++    steps:
 +      - name: Download source (zipball) to workspace
++        id: fetch
 +        shell: pwsh
 +        env:
 +          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -35,19 +63,18 @@
 +        run: |
 +          $ErrorActionPreference='Stop'
 +          $zip = Join-Path $env:RUNNER_TEMP 'src.zip'
-+          $tmp = "${{ env.SRC_DIR }}"
-+          Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
-+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-+          $Headers = @{ Authorization = "Bearer $env:GH_TOKEN"; "X-GitHub-Api-Version" = "2022-11-28" }
-+          $Uri = "https://api.github.com/repos/$env:REPO/zipball/$env:SHA"
-+          Invoke-WebRequest -Headers $Headers -Uri $Uri -OutFile $zip
-+          Expand-Archive -Path $zip -DestinationPath $tmp -Force
-+          # 압축 내부는 1개 루트 폴더. 그 안을 SRC_DIR 최상위로 승격
-+          $inner = Get-ChildItem $tmp | ? { $_.PSIsContainer } | Select-Object -First 1
-+          if ($inner) { Get-ChildItem $inner.FullName -Force | Move-Item -Destination $tmp -Force }
-+          Remove-Item $inner.FullName -Recurse -Force -ErrorAction SilentlyContinue
++          $dst = Join-Path $env:RUNNER_TEMP 'src-unzip'
++          Remove-Item -Recurse -Force $dst -ErrorAction SilentlyContinue
++          New-Item -ItemType Directory -Force -Path $dst | Out-Null
++          $url = "https://api.github.com/repos/$env:REPO/zipball/$env:SHA"
++          Invoke-WebRequest -Headers @{ Authorization="Bearer $env:GH_TOKEN"; 'X-GitHub-Api-Version'='2022-11-28' } `
++            -Uri $url -OutFile $zip
++          Expand-Archive -Path $zip -DestinationPath $dst -Force
++          $root = Get-ChildItem $dst | Select-Object -First 1
++          "root=$($root.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 +
 +      - name: Aggregate KLC
 +        shell: pwsh
-+        working-directory: ${{ env.SRC_DIR }}
-+        run: ./scripts/g5/klc-aggregate.ps1 -Mode nightly -Root "${{ env.SRC_DIR }}"
++        working-directory: ${{ steps.fetch.outputs.root }}
++        run: ./scripts/g5/klc-aggregate.ps1 -Mode nightly
+*** End Patch
