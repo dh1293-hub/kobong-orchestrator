@@ -18,70 +18,53 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       REPO: ${{ github.repository }}
-      SHA: ${{ github.sha }}
+      SHA:  ${{ github.sha }}
 
     steps:
-      # ✅ 이후 스텝에서 어떤 바이너리가 git을 호출해도 무조건 0으로 종료
-      - name: Shadow system git (suppress any git 128)
+      # 1) 체크아웃 + git 환경 고정 (128 방지)
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # 전체 히스토리
+      - name: Prepare git
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/nogit"
-          cat > "$RUNNER_TEMP/nogit/git" <<'EOS'
-          #!/usr/bin/env bash
-          echo "[nogit] git suppressed: $*" >&2
-          exit 0
-          EOS
-          chmod +x "$RUNNER_TEMP/nogit/git"
-          # PATH 맨 앞에 래퍼를 추가(현재/이후 스텝에 적용)
-          export PATH="$RUNNER_TEMP/nogit:$PATH"
-          echo "$RUNNER_TEMP/nogit" >> "$GITHUB_PATH"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --local user.name  "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          # 원격에 토큰이 잡혀 있음(Checkout 기본). 태그 목록 확보
+          git fetch --tags --force
 
-      - name: Create unique smoke tag (no git)
+      # 2) 다음 v0.0.X 태그 생성(annotated) → 진짜 git push
+      - name: Create and push tag
         id: tag
         shell: bash
         run: |
           set -euo pipefail
-          # 존재하는 v0.0.X 중 최대값 기준 다음 번호 할당
-          last=$(gh api repos/"$REPO"/tags --paginate -q '.[].name' \
-                   | sed -n 's/^v0\.0\.\([0-9]\+\)$/\1/p' \
-                   | sort -n | tail -1 || true)
-          next=${last:-0}
-          for _ in 1 2 3 4 5; do
-            cand="v0.0.$((++next))"
-            if ! gh api repos/"$REPO"/git/refs/tags/"$cand" >/dev/null 2>&1; then
-              TAG="$cand"; break
-            fi
-          done
+          # 기존 v0.0.X 중 가장 큰 번호 +1
+          last=$(git tag -l 'v0.0.*' | sed -n 's/^v0\.0\.\([0-9]\+\)$/\1/p' | sort -n | tail -1)
+          next=${last:-0}; next=$((next+1))
+          TAG="v0.0.${next}"
+          git tag -a "$TAG" -m "smoke(auto-release): $TAG" "$SHA"
+          git push origin "refs/tags/$TAG"
           echo "TAG=$TAG" | tee -a "$GITHUB_ENV"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-          # Annotated tag 오브젝트 생성 → refs/tags/<TAG> 생성(=git push 대체)
-          now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          tagobj=$(gh api repos/"$REPO"/git/tags \
-                    -f tag="$TAG" \
-                    -f message="smoke(auto-release): $TAG" \
-                    -f object="$SHA" \
-                    -f type=commit \
-                    -f tagger.name="github-actions[bot]" \
-                    -f tagger.email="github-actions[bot]@users.noreply.github.com" \
-                    -f tagger.date="$now" \
-                    -q .sha)
-          gh api repos/"$REPO"/git/refs -f ref="refs/tags/$TAG" -f sha="$tagobj" >/dev/null
-          echo "Created tag: $TAG"
-
+      # 3) 릴리즈 생성 대기 (릴리즈 워크플로가 태그를 잡아 생성해야 PASS)
       - name: Wait for release to appear
         id: wait_release
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           tag="${TAG:?missing}"
           ok=0
-          for _ in $(seq 1 48); do   # 최대 8분(10초 × 48회)
-            if gh api repos/"$REPO"/releases/tags/"$tag" >/dev/null 2>&1; then
+          for i in $(seq 1 60); do   # 최대 10분(10초 × 60회)
+            if gh release view "$tag" >/dev/null 2>&1; then
               ok=1; break
             fi
             sleep 10
@@ -90,26 +73,31 @@ jobs:
             echo "::error::release not detected for tag $tag"
             exit 1
           fi
-          rid=$(gh api repos/"$REPO"/releases/tags/"$tag" -q .id)
+          rid=$(gh release view "$tag" --json id -q .id)
           echo "rid=$rid" >> "$GITHUB_OUTPUT"
           echo "Release detected: $rid"
 
+      # 4) 정리(항상): 릴리즈/태그 제거
       - name: Cleanup release and tag (always)
         if: always()
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           tag="${TAG:-}"
           if [ -n "$tag" ]; then
-            if gh api repos/"$REPO"/releases/tags/"$tag" >/dev/null 2>&1; then
-              rid=$(gh api repos/"$REPO"/releases/tags/"$tag" -q .id)
-              gh api -X DELETE repos/"$REPO"/releases/"$rid" || true
+            if gh release view "$tag" >/dev/null 2>&1; then
+              rid=$(gh release view "$tag" --json id -q .id)
+              gh release delete "$tag" -y || true
               echo "deleted release $rid"
             fi
-            gh api -X DELETE repos/"$REPO"/git/refs/tags/"$tag" || true
+            git push origin ":refs/tags/$tag" || true
             echo "deleted tag $tag"
           fi
 
+      # 5) 요약
       - name: Summary
         if: always()
         shell: bash
