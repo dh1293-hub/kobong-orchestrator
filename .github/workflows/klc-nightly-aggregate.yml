@@ -1,21 +1,34 @@
 name: KLC Nightly Aggregate
+
 on:
   schedule:
-    - cron: "0 0 * * *"   # UTC 00:00
+    - cron: '0 15 * * *'   # 매일 00:00 KST (UTC+9) 기준
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: klc-nightly-aggregate
+  cancel-in-progress: true
+
 jobs:
-  klc-agg:
-    runs-on: windows-latest
+  aggregate:
+    runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up PowerShell 7
-        with: { pwsh-version: "7.4.x" }
-      - name: Aggregate KLC lines
-        shell: pwsh
-        run: |
-          pwsh -NoProfile -File scripts/g5/klc-aggregate.ps1
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          name: klc-nightly
-          path: _klc/*.csv
+          fetch-depth: 0
+
+      # PowerShell 스크립트를 돌린다면
+      - name: Aggregate KLC
+        shell: pwsh
+        run: ./scripts/g5/klc-aggregate.ps1 -Mode nightly
+
+      # 액션을 호출한다면 (위 step 대신 아래 형태)
+      # - name: Aggregate KLC
+      #   uses: <org>/<action>@<version>
+      #   with:
+      #     foo: bar
