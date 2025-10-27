@@ -1,31 +1,22 @@
-# scripts/g5/klc-aggregate.ps1 — KLC one-liner 집계
-param([string]$Root = (Split-Path -Parent $PSScriptRoot))
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
-$targets = @(
-  Join-Path $Root "automation_logs",
-  Join-Path $Root "logs"
-)
-$rx = 'KLC\s*\|\s*traceId=.*?\|\s*durationMs=.*?\|\s*exitCode=.*?\|\s*anchorHash=\d+'
-$rows = New-Object System.Collections.Generic.List[object]
-foreach($t in $targets){
-  if(-not (Test-Path $t)) { continue }
-  Get-ChildItem -Recurse -File -Path $t -ErrorAction SilentlyContinue |
-    ForEach-Object {
-      $txt = Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue
-      if([string]::IsNullOrWhiteSpace($txt)) { return }
-      $m = [regex]::Matches($txt,$rx,[System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-      foreach($mm in $m){
-        $rows.Add([pscustomobject]@{
-          File = $_.FullName
-          Line = $mm.Value.Trim()
-          Ts   = (Get-Item $_.FullName).LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
-        })
-      }
-    }
-}
-$outDir = Join-Path $Root "_klc"
-New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-$csv = Join-Path $outDir ("klc_agg_" + (Get-Date -Format 'yyyyMMdd_HHmmss') + ".csv")
-$rows | Export-Csv -NoTypeInformation -Encoding UTF8 -Path $csv
-Write-Host "[OK] KLC rows: $($rows.Count) → $csv"
+--- a/scripts/g5/klc-aggregate.ps1
++++ b/scripts/g5/klc-aggregate.ps1
+@@
+- param([string]$Mode)
++ param(
++   [ValidateSet('nightly','adhoc')] [string]$Mode = 'nightly',
++   [string]$Root = ''
++ )
++ Set-StrictMode -Version Latest
++ $ErrorActionPreference='Stop'
++ $PSDefaultParameterValues['Out-File:Encoding']='utf8'
++
++ if ([string]::IsNullOrWhiteSpace($Root)) {
++   # GitHub Actions에서도 동작하게: 소스 추출 폴더 또는 워크스페이스
++   $Root = $env:SRC_DIR
++   if ([string]::IsNullOrWhiteSpace($Root)) { $Root = $env:GITHUB_WORKSPACE }
++ }
++ $Root = (Resolve-Path $Root).Path  # ← 배열 방지(항상 단일 문자열)
+ 
+- $logDir = Join-Path $Root 'automation_logs'
++ $logDir = Join-Path -Path $Root -ChildPath 'automation_logs'
+  New-Item -ItemType Directory -Force -Path $logDir | Out-Null
