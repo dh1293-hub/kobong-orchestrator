@@ -1,0 +1,22 @@
+name: KLC Nightly Aggregate
+on:
+  schedule:
+    - cron: "0 0 * * *"   # UTC 00:00
+  workflow_dispatch:
+jobs:
+  klc-agg:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PowerShell 7
+        with: { pwsh-version: "7.4.x" }
+      - name: Aggregate KLC lines
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File scripts/g5/klc-aggregate.ps1
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: klc-nightly
+          path: _klc/*.csv
+
