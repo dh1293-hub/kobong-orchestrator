@@ -17,8 +17,9 @@ jobs:
     runs-on: windows-latest
     env:
       GH_TOKEN: ${{ github.token }}
+
     steps:
-      # 0) 로컬 액션 부트스트랩 (checkout 없이 .github/actions만 전개)
+      # 0) 로컬 액션 부트스트랩 (.github/actions만 전개)
       - name: Bootstrap local actions (no git)
         shell: pwsh
         run: |
@@ -84,7 +85,7 @@ jobs:
             }
           }
 
-      # 5) ✅ 로그 업로드(유일 이름, 409 방지)
+      # 5) 로그 업로드(유일 이름 → 409 방지)
       - uses: ./.github/actions/publish-logs
         if: always()
         with:
