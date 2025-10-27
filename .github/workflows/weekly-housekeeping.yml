@@ -1,35 +1,40 @@
+# .github/workflows/weekly-housekeeping.yml
 name: Weekly Housekeeping
+
 on:
   schedule:
-    - cron: "0 1 * * 1"  # 매주 월 10:00 KST
+    - cron: '0 15 * * 0'  # 매주 일요일 00:00 KST (UTC 토 15:00)
   workflow_dispatch:
+    inputs:
+      apply:
+        description: "실제 정리 적용(true) / 드라이런(false)"
+        type: boolean
+        default: false
+        required: false
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: weekly-housekeeping
+  cancel-in-progress: true
+
 jobs:
   clean:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - name: Delete remote g5/* branches older than 14d
-        env: { GH_TOKEN: ${{ github.token }} }
-        run: |
-          set -e
-          REPO="${{ github.repository }}"
-          gh api repos/$REPO/branches --paginate --jq '.[] | select(.name|test("^g5/")) | .name' > branches.txt
-          while read B; do
-            # 최근 커밋 14일 초과 시 삭제(보호 예외)
-            LAST=$(gh api repos/$REPO/commits/$B --jq '.commit.committer.date' || echo "")
-            if [ -n "$LAST" ]; then
-              python - <<'PY'
-import os,sys,datetime
-from dateutil import parser
-d=parser.isoparse(os.environ.get("LAST")); 
-if (datetime.datetime.now(datetime.timezone.utc)-d).days>14: print("DEL")
-PY
-              if [ "$?" = "0" ]; then
-                git push origin --delete "$B" || true
-              fi
-            fi
-          done < branches.txt
-      - name: Keep artifacts 30d (noop if default)
-        run: echo "Retention is managed at repo settings; manual prune optional."
+      - name: Checkout
+        uses: actions/checkout@v4  # 표준 체크아웃 액션
+        with:
+          fetch-depth: 0
+      # ⚠️ 실제 정리 스크립트 경로/옵션은 레포 기준으로 조정
+      - name: Housekeeping (dry-run)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply != 'true' }}
+        shell: pwsh
+        run: ./scripts/g5/repo-curate-and-commit.ps1 -Mode housekeeping -WhatIf
 
+      - name: Housekeeping (apply)
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.apply == 'true' }}
+        shell: pwsh
+        run: ./scripts/g5/repo-curate-and-commit.ps1 -Mode housekeeping
