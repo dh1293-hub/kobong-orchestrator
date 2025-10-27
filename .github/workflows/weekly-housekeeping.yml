@@ -1,19 +1,12 @@
-# .github/workflows/weekly-housekeeping.yml
 name: Weekly Housekeeping
 
 on:
   schedule:
-    - cron: '0 15 * * 0'  # 매주 일요일 00:00 KST (UTC 토 15:00)
-  workflow_dispatch:
-    inputs:
-      apply:
-        description: "실제 정리 적용(true) / 드라이런(false)"
-        type: boolean
-        default: false
-        required: false
+    - cron: '0 15 * * 0'   # 매주 일요일 00:00 KST (UTC 토 15:00)
+  workflow_dispatch: {}     # 입력 없이 수동 실행
 
 permissions:
-  contents: write
+  contents: write           # push할 거면 write 필요
   actions: read
 
 concurrency:
@@ -24,17 +17,20 @@ jobs:
   clean:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4  # 표준 체크아웃 액션
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      # ⚠️ 실제 정리 스크립트 경로/옵션은 레포 기준으로 조정
-      - name: Housekeeping (dry-run)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply != 'true' }}
-        shell: pwsh
-        run: ./scripts/g5/repo-curate-and-commit.ps1 -Mode housekeeping -WhatIf
 
-      - name: Housekeeping (apply)
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.apply == 'true' }}
+      # git 사용 전 환경 고정 (128 회피)
+      - name: Git prepare
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
+
+      # 실제 정리 스크립트 (경로/옵션 맞게 수정)
+      - name: Housekeeping
         shell: pwsh
         run: ./scripts/g5/repo-curate-and-commit.ps1 -Mode housekeeping
+
