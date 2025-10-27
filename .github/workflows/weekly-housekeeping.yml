@@ -1,70 +1,56 @@
-name: Weekly Housekeeping
-
-on:
-  schedule:
-    - cron: '0 15 * * 0'   # 매주 일요일 00:00 KST (UTC 토 15:00)
-  workflow_dispatch:
-    inputs:
-      apply:
-        description: "실제 삭제 실행(true) / 드라이런(false)"
-        type: boolean
-        default: false
-        required: false
-
-permissions:
-  contents: write   # refs 삭제에 필요
-
-concurrency:
-  group: weekly-housekeeping
-  cancel-in-progress: true
-
-jobs:
-  clean:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Dry-run: list old g5/* branches (>=14d)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.apply != true }}
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-        run: |
-          $ErrorActionPreference='Stop'
-          $days = 14
-          $now = Get-Date
-          $names = gh api repos/$env:REPO/branches --paginate -q '.[].name'
-          foreach ($n in $names) {
-            if ($n -notlike 'g5/*') { continue }
-            $sha  = gh api repos/$env:REPO/branches/$n -q '.commit.sha'
-            $date = gh api repos/$env:REPO/commits/$sha -q '.commit.committer.date'
-            $dt   = [datetime]::Parse($date)
-            $age  = ($now - $dt).TotalDays
-            if ($age -ge $days) {
-              Write-Host "[DRY] $n  ($([math]::Round($age,1)) days)"
-            }
-          }
-
-      - name: Apply: delete old g5/* branches (>=14d)
-        if: ${{ github.event_name != 'workflow_dispatch' || inputs.apply == true }}
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-        run: |
-          $ErrorActionPreference='Stop'
-          $days = 14
-          $now = Get-Date
-          $names = gh api repos/$env:REPO/branches --paginate -q '.[].name'
-          foreach ($n in $names) {
-            if ($n -notlike 'g5/*') { continue }
-            $sha  = gh api repos/$env:REPO/branches/$n -q '.commit.sha'
-            $date = gh api repos/$env:REPO/commits/$sha -q '.commit.committer.date'
-            $dt   = [datetime]::Parse($date)
-            $age  = ($now - $dt).TotalDays
-            if ($age -ge $days) {
-              gh api -X DELETE repos/$env:REPO/git/refs/heads/$n
-              Write-Host "deleted $n  ($([math]::Round($age,1)) days)"
-            }
-          }
-
-
+--- a/.github/workflows/weekly-housekeeping.yml
++++ b/.github/workflows/weekly-housekeeping.yml
+@@
+ name: Weekly Housekeeping
+-on: workflow_dispatch
++on:
++  workflow_dispatch:
++  schedule:
++    - cron: "5 3 * * 1"   # 매주 월 12:05 KST (03:05 UTC)
++
++permissions:
++  actions: write
++  contents: read
+ 
+ jobs:
+   clean:
+     runs-on: ubuntu-latest
+-    steps:
+-      - name: clean
+-        run: |
+-          git fetch --prune --all
+-          git gc --prune=now --aggressive
++    steps:
++      - name: Prune old workflow runs (>=30d, completed)
++        shell: pwsh
++        env:
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++          REPO: ${{ github.repository }}
++        run: |
++          $ErrorActionPreference='Stop'
++          $headers=@{ Authorization="Bearer $env:GH_TOKEN"; "X-GitHub-Api-Version"="2022-11-28" }
++          $runs = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/actions/runs?per_page=100&status=completed"
++          $cut = (Get-Date).ToUniversalTime().AddDays(-30)
++          foreach($r in $runs.workflow_runs){
++            if([datetime]$r.updated_at -lt $cut){
++              Invoke-RestMethod -Headers $headers -Method Delete -Uri $r.url
++              "deleted run $($r.id) $($r.updated_at)"
++            }
++          }
++
++      - name: Prune old artifacts (>=14d)
++        shell: pwsh
++        env:
++          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++          REPO: ${{ github.repository }}
++        run: |
++          $ErrorActionPreference='Stop'
++          $headers=@{ Authorization="Bearer $env:GH_TOKEN"; "X-GitHub-Api-Version"="2022-11-28" }
++          $arts = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/actions/artifacts?per_page=100"
++          $cut = (Get-Date).ToUniversalTime().AddDays(-14)
++          foreach($a in $arts.artifacts){
++            if([datetime]$a.created_at -lt $cut){
++              Invoke-RestMethod -Headers $headers -Method Delete -Uri "https://api.github.com/repos/$env:REPO/actions/artifacts/$($a.id)"
++              "deleted artifact $($a.name)"
++            }
++          }
