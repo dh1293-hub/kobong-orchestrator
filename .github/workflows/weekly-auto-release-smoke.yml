@@ -1,49 +1,108 @@
-name: Weekly Auto-Release Smoke
+name: Weekly Auto Release Smoke
+
 on:
   schedule:
-    - cron: "0 0 * * 0"
-  workflow_dispatch: {}
+    - cron: '0 0 * * 0'   # 매주 일요일 00:00 UTC (KST 09:00)
+  workflow_dispatch:
+
 permissions:
-  contents: write
+  contents: write   # 태그/릴리즈 생성·삭제에 필요
+
+concurrency:
+  group: weekly-auto-release-smoke
+  cancel-in-progress: true
 
 jobs:
   smoke:
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Push v0.0.X smoke tag
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create unique smoke tag (no git)
+        id: tag
         shell: bash
         run: |
           set -euo pipefail
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name  "github-actions[bot]"
-          git fetch --tags
-          base="v0.0."; i=0
-          while git tag -l | grep -qx "${base}${i}"; do i=$((i+1)); done
-          tag="${base}${i}"
-          sha="$(git rev-parse HEAD)"
-          git tag -a "$tag" "$sha" -m "smoke(auto-release): $tag"
-          git push origin "$tag"
-          echo "TAG=$tag" >> "$GITHUB_ENV"
+          # 1) 다음 v0.0.X 후보 계산 (API 기반, git 미사용)
+          last=$(gh api repos/"$REPO"/tags --paginate -q '.[].name' \
+                   | sed -n 's/^v0\.0\.\([0-9]\+\)$/\1/p' \
+                   | sort -n | tail -1 || true)
+          next=${last:-0}
+          for i in $(seq 1 5); do
+            cand="v0.0.$((++next))"
+            if ! gh api repos/"$REPO"/git/refs/tags/"$cand" >/dev/null 2>&1; then
+              TAG="$cand"; break
+            fi
+          done
+          echo "TAG=$TAG" | tee -a "$GITHUB_ENV"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for release, then clean up
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 2) Annotated tag 오브젝트 생성 → refs/tags/<TAG> 생성 (git push 대체)
+          now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          tagobj=$(gh api repos/"$REPO"/git/tags \
+                    -f tag="$TAG" \
+                    -f message="smoke(auto-release): $TAG" \
+                    -f object="$SHA" \
+                    -f type=commit \
+                    -f tagger.name="github-actions[bot]" \
+                    -f tagger.email="github-actions[bot]@users.noreply.github.com" \
+                    -f tagger.date="$now" \
+                    -q .sha)
+          gh api repos/"$REPO"/git/refs -f ref="refs/tags/$TAG" -f sha="$tagobj" >/dev/null
+          echo "Created tag: $TAG"
+
+      - name: Wait for release to appear
+        id: wait_release
         shell: bash
         run: |
           set -euo pipefail
-          tag="${TAG}"
+          tag="${TAG:?missing}"
           ok=0
-          for _ in $(seq 1 36); do
-            if gh release view "$tag" >/dev/null 2>&1; then ok=1; break; fi
-            sleep 5
+          for i in $(seq 1 48); do   # 최대 8분(10초 × 48회)
+            if gh api repos/"$REPO"/releases/tags/"$tag" >/dev/null 2>&1; then
+              ok=1; break
+            fi
+            sleep 10
           done
           if [ "$ok" -ne 1 ]; then
-            echo "No release found for $tag; proceeding to cleanup."
+            echo "::error::release not detected for tag $tag"
+            exit 1
           fi
-          gh release delete "$tag" -y >/dev/null 2>&1 || true
-          git push origin ":refs/tags/$tag" || true
+          rid=$(gh api repos/"$REPO"/releases/tags/"$tag" -q .id)
+          echo "rid=$rid" >> "$GITHUB_OUTPUT"
+          echo "Release detected: $rid"
 
+      - name: Cleanup release and tag (always)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${TAG:-}"
+          if [ -n "$tag" ]; then
+            # 릴리즈가 있으면 삭제
+            if gh api repos/"$REPO"/releases/tags/"$tag" >/dev/null 2>&1; then
+              rid=$(gh api repos/"$REPO"/releases/tags/"$tag" -q .id)
+              gh api -X DELETE repos/"$REPO"/releases/"$rid" || true
+              echo "deleted release $rid"
+            fi
+            # 태그 ref 삭제
+            gh api -X DELETE repos/"$REPO"/git/refs/tags/"$tag" || true
+            echo "deleted tag $tag"
+          fi
+          true
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Auto-release smoke"
+            echo "- Tag: \`$TAG\`"
+            echo "- Result: $([ "${{ job.status }}" = "success" ] && echo '✅ PASS' || echo '❌ FAIL')"
+          } >> "$GITHUB_STEP_SUMMARY"
