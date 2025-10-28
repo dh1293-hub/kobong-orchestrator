@@ -1,69 +1,160 @@
-name: psanalyze
+name: PSScriptAnalyzer
+
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: monitor | soft | hard
+        required: false
+        default: soft
+        type: choice
+        options: [monitor, soft, hard]
+      warn_threshold:
+        description: "Fail if warnings > N (empty = ignore). Example: 10"
+        required: false
+        type: string
 
 permissions:
   contents: read
   security-events: write
 
 jobs:
-  analyze:
+  psanalyze:
+    # 라벨 기반 면제: PR에 'psa-skip' 라벨이 있으면 전체 잡을 건너뜀
+    if: ${{ github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'psa-skip') }}
     runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Run PSScriptAnalyzer (errors only, non-blocking)
-        id: pssa
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Decide mode & thresholds
+        id: cfg
         shell: pwsh
         run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference='Continue'
-          try {
-            # 패키지
-            Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -AllowClobber | Out-Null
-          } catch {}
-          $files = Get-ChildItem -Path . -Recurse -Include *.ps1,*.psm1,*.psd1 | Select-Object -ExpandProperty FullName
-          if(-not $files){ Write-Host "No PowerShell files found."; }
+          $mode = '${{ github.event.inputs.mode }}'
+          if ([string]::IsNullOrWhiteSpace($mode)) { $mode = 'soft' }
+          $wtxt = '${{ github.event.inputs.warn_threshold }}'
+          if (-not $wtxt -or ($wtxt -notmatch '^\d+$')) { $wtxt = '' }
+          "mode=$mode"           | Out-File $env:GITHUB_OUTPUT -Append
+          "warn_threshold=$wtxt" | Out-File $env:GITHUB_OUTPUT -Append
 
-          $result = @()
-          if($files){ $result = Invoke-ScriptAnalyzer -Path $files -Recurse -Severity Error }
-          # 유효한 SARIF(2.1.0) 생성: 위반 있으면 채워 넣고, 없으면 빈 results 배열
-          $runs = @{
-            tool = @{ driver = @{ name='PSScriptAnalyzer'; informationUri='https://github.com/PowerShell/PSScriptAnalyzer' } }
-            results = @()
+      - name: Collect target files
+        id: files
+        shell: pwsh
+        run: |
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+          $all = Get-ChildItem -Recurse -File -Include *.ps1,*.psm1,*.psd1 | ForEach-Object FullName
+          $changed = @()
+          if ('${{ github.event_name }}' -eq 'pull_request') {
+            $base='${{ github.event.pull_request.base.sha }}'
+            $head='${{ github.event.pull_request.head.sha }}'
+            $changed = (git diff --name-only $base $head) | Where-Object { $_ -match '\.(ps1|psm1|psd1)$' } | ForEach-Object { Resolve-Path $_ }
           }
-          if($result){
-            $runs.results = @(
-              $result | ForEach-Object {
-                @{
-                  ruleId = $_.RuleName
-                  level  = 'error'
-                  message = @{ text = $_.Message }
-                  locations = @(@{
-                    physicalLocation = @{
-                      artifactLocation = @{ uri = ($_.ScriptPath ?? '').Replace('\','/') }
-                      region = @{ startLine = $_.Line; startColumn = $_.Column }
-                    }
-                  })
-                }
-              }
-            )
+          $mode='${{ steps.cfg.outputs.mode }}'
+          if ($mode -eq 'soft' -and $changed.Count -gt 0) { $targets = $changed } else { $targets = $all }
+          if (-not $targets) {
+            "targets=" | Out-File $env:GITHUB_OUTPUT -Append
+            "# PSScriptAnalyzer Summary`n- Mode: $mode`n- Targets: 0 (skipped)`n- Reason: no PowerShell files" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+            exit 0
           }
+          $targets -join "`n" | Set-Content targets.txt
+          "targets=$(Get-Content targets.txt -Raw)" | Out-File $env:GITHUB_OUTPUT -Append
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+
+      - name: Run analyzer
+        id: scan
+        if: steps.files.outputs.targets != ''
+        shell: pwsh
+        run: |
+          $targets = Get-Content targets.txt
+          $settings = ''
+          if (Test-Path './settings.psd1') { $settings = (Resolve-Path './settings.psd1').Path }
+          $params = @{
+            Path     = $targets
+            Recurse  = $true
+            Severity = @('Error','Warning')
+            Verbose  = $false
+          }
+          if ($settings) { $params['Settings'] = $settings }
+
+          $results = Invoke-ScriptAnalyzer @params
+
+          $err  = ($results | Where-Object Severity -eq 'Error').Count
+          $warn = ($results | Where-Object Severity -eq 'Warning').Count
+          "errors=$err" | Out-File $env:GITHUB_OUTPUT -Append
+          "warnings=$warn" | Out-File $env:GITHUB_OUTPUT -Append
+          "used_settings=$settings" | Out-File $env:GITHUB_OUTPUT -Append
+
+          # SARIF(minimal) 생성
           $sarif = @{
-            version='2.1.0'
-            '$schema'='https://json.schemastore.org/sarif-2.1.0.json'
-            runs=@($runs)
-          } | ConvertTo-Json -Depth 8 -Compress
-          Set-Content -Path results.sarif -Value $sarif -Encoding UTF8
-          Write-Host "[OK] results.sarif generated. Count=$($runs.results.Count)"
+            version = "2.1.0"
+            runs = @(@{
+              tool = @{ driver = @{ name = "PSScriptAnalyzer" } }
+              results = @(
+                $results | ForEach-Object {
+                  @{
+                    ruleId  = $_.RuleName
+                    level   = (($_.Severity -eq 'Error') ? 'error' : 'warning')
+                    message = @{ text = $_.Message }
+                    locations = @(@{
+                      physicalLocation = @{
+                        artifactLocation = @{ uri = $_.ScriptPath }
+                        region = @{ startLine = $_.Line }
+                      }
+                    })
+                  }
+                }
+              )
+            })
+          } | ConvertTo-Json -Depth 6
+          $sarif | Out-File results.sarif -Encoding utf8
 
-      - name: Upload SARIF to Code Scanning
+      - name: Upload SARIF
+        if: steps.files.outputs.targets != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: results.sarif
 
-      - name: Always succeed (non-blocking)
-        if: always()
+      - name: Gate (errors + warning threshold)
+        if: steps.files.outputs.targets != ''
         shell: pwsh
-        run: echo "psanalyze is non-blocking by design."
+        run: |
+          $mode   = '${{ steps.cfg.outputs.mode }}'
+          $err    = [int]'${{ steps.scan.outputs.errors }}'
+          $warn   = [int]'${{ steps.scan.outputs.warnings }}'
+          $wth    = '${{ steps.cfg.outputs.warn_threshold }}'
+          $useSet = '${{ steps.scan.outputs.used_settings }}'
+          $fail   = $false
+          $reasons = @()
+
+          switch ($mode) {
+            'monitor' { }
+            'soft'    { if ($err -gt 0) { $fail = $true; $reasons += "$err error(s)" } }
+            'hard'    { if ($err -gt 0) { $fail = $true; $reasons += "$err error(s)" } }
+          }
+
+          if ($wth -and ($warn -gt [int]$wth)) {
+            $fail = $true
+            $reasons += "warnings $warn > threshold $wth"
+          }
+
+          $targetCount = (Get-Content targets.txt).Count
+          $summary = @()
+          $summary += "### PSScriptAnalyzer Summary"
+          $summary += "- Mode: $mode"
+          $summary += "- Targets: $targetCount"
+          if ($useSet) { $summary += "- Settings: $useSet" } else { $summary += "- Settings: (default)" }
+          $summary += "- Errors: $err"
+          $summary += "- Warnings: $warn"
+          if ($wth)   { $summary += "- Warn threshold: $wth" }
+          $summary += "- Gate: " + ($(if ($fail) { "❌ FAIL ($($reasons -join '; '))" } else { "✅ PASS" }))
+          $summary -join "`n" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+
+          if ($fail) { throw "PSScriptAnalyzer gate failed: $($reasons -join '; ')." }
