@@ -1,70 +1,120 @@
-name: psanalyze
+name: PSScriptAnalyzer
+
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: monitor | soft | hard
+        required: false
+        default: soft
+        type: choice
+        options: [monitor, soft, hard]
 
 permissions:
   contents: read
   security-events: write
 
 jobs:
-  analyze:
+  psanalyze:
     runs-on: windows-latest
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run PSScriptAnalyzer (errors only, non-blocking)
-        id: pssa
+      - name: Decide mode
+        id: m
         shell: pwsh
         run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference='Continue'
-          try {
-            # 패키지
-            Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -AllowClobber | Out-Null
-          } catch {}
-          $files = Get-ChildItem -Path . -Recurse -Include *.ps1,*.psm1,*.psd1 | Select-Object -ExpandProperty FullName
-          if(-not $files){ Write-Host "No PowerShell files found."; }
+          $mode = '${{ github.event.inputs.mode }}'
+          if ([string]::IsNullOrWhiteSpace($mode)) { $mode = 'soft' }
+          "mode=$mode" | Out-File $env:GITHUB_OUTPUT -Append
 
-          $result = @()
-          if($files){ $result = Invoke-ScriptAnalyzer -Path $files -Recurse -Severity Error }
-          # 유효한 SARIF(2.1.0) 생성: 위반 있으면 채워 넣고, 없으면 빈 results 배열
-          $runs = @{
-            tool = @{ driver = @{ name='PSScriptAnalyzer'; informationUri='https://github.com/PowerShell/PSScriptAnalyzer' } }
-            results = @()
+      # 변경된 PS 파일만 뽑기 (PR이면 base..head, 아니면 HEAD만)
+      - name: Collect target files
+        id: files
+        shell: pwsh
+        run: |
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+          $all = Get-ChildItem -Recurse -File -Include *.ps1,*.psm1,*.psd1 | % FullName
+          $changed = @()
+          if ('${{ github.event_name }}' -eq 'pull_request') {
+            $base='${{ github.event.pull_request.base.sha }}'
+            $head='${{ github.event.pull_request.head.sha }}'
+            $changed = (git diff --name-only $base $head) | ? { $_ -match '\.(ps1|psm1|psd1)$' } | % { Resolve-Path $_ }
           }
-          if($result){
-            $runs.results = @(
-              $result | ForEach-Object {
-                @{
-                  ruleId = $_.RuleName
-                  level  = 'error'
-                  message = @{ text = $_.Message }
-                  locations = @(@{
-                    physicalLocation = @{
-                      artifactLocation = @{ uri = ($_.ScriptPath ?? '').Replace('\','/') }
-                      region = @{ startLine = $_.Line; startColumn = $_.Column }
-                    }
-                  })
-                }
-              }
-            )
+          $mode='${{ steps.m.outputs.mode }}'
+          if ($mode -eq 'soft' -and $changed.Count -gt 0) {
+            $targets = $changed
+          } else {
+            $targets = $all
           }
+          if (-not $targets) { "targets=" | Out-File $env:GITHUB_OUTPUT -Append; exit 0 }
+          $targets -join "`n" | Set-Content targets.txt
+          "targets=$(Get-Content targets.txt -Raw)" | Out-File $env:GITHUB_OUTPUT -Append
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+
+      - name: Run analyzer
+        id: scan
+        if: steps.files.outputs.targets != ''
+        shell: pwsh
+        run: |
+          $targets = Get-Content targets.txt
+          # 필요하면 리포 루트에 settings.psd1 두고 -Settings 경로 지정
+          $results = Invoke-ScriptAnalyzer -Path $targets -Recurse -Severity Error, Warning -Verbose:$false
+          # 요약
+          $err  = ($results | ? { $_.Severity -eq 'Error' }).Count
+          $warn = ($results | ? { $_.Severity -eq 'Warning' }).Count
+          "errors=$err" | Out-File $env:GITHUB_OUTPUT -Append
+          "warnings=$warn" | Out-File $env:GITHUB_OUTPUT -Append
+          # SARIF(간단) 생성
           $sarif = @{
-            version='2.1.0'
-            '$schema'='https://json.schemastore.org/sarif-2.1.0.json'
-            runs=@($runs)
-          } | ConvertTo-Json -Depth 8 -Compress
-          Set-Content -Path results.sarif -Value $sarif -Encoding UTF8
-          Write-Host "[OK] results.sarif generated. Count=$($runs.results.Count)"
+            version = "2.1.0"
+            runs = @(@{
+              tool = @{ driver = @{ name = "PSScriptAnalyzer" } }
+              results = @(
+                $results | ForEach-Object {
+                  @{
+                    ruleId  = $_.RuleName
+                    level   = (($_.Severity -eq 'Error') ? 'error' : 'warning')
+                    message = @{ text = $_.Message }
+                    locations = @(@{
+                      physicalLocation = @{
+                        artifactLocation = @{ uri = $_.ScriptPath }
+                        region = @{ startLine = $_.Line }
+                      }
+                    })
+                  }
+                }
+              )
+            })
+          } | ConvertTo-Json -Depth 6
+          $sarif | Out-File results.sarif -Encoding utf8
 
-      - name: Upload SARIF to Code Scanning
+      - name: Upload SARIF
+        if: steps.files.outputs.targets != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: results.sarif
 
-      - name: Always succeed (non-blocking)
-        if: always()
+      - name: Gate (fail when needed)
+        if: steps.files.outputs.targets != ''
         shell: pwsh
-        run: echo "psanalyze is non-blocking by design."
+        run: |
+          $mode='${{ steps.m.outputs.mode }}'
+          $errors = [int]'${{ steps.scan.outputs.errors }}'
+          $warnings = [int]'${{ steps.scan.outputs.warnings }}'
+          $fail = $false
+          switch ($mode) {
+            'monitor' { $fail = $false }
+            'soft'    { if ($errors -gt 0) { $fail = $true } }
+            'hard'    { if ($errors -gt 0) { $fail = $true } } # 원하면 Warning도 포함 가능
+          }
+          "# PSScriptAnalyzer Summary`n- Mode: $mode`n- Errors: $errors`n- Warnings: $warnings" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+          if ($fail) { Write-Error "PSScriptAnalyzer gate failed: $errors error(s)." ; exit 1 }
 
