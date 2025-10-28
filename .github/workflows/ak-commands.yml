@@ -6,106 +6,109 @@
 # ✔ YAML 구조 오류 및 commitStatus 오류 정정
 # -------------------------------------------
 
-name: AK Commands (ChatOps)
+name: ak-commands
+
 on:
+  issue_comment:
+    types: [created]
   workflow_dispatch:
     inputs:
-      cmd:
-        description: '실행할 커맨드 (bash 기반)'
+      pr:
+        description: PR number
         required: true
-      args:
-        description: '인수 (공백으로 구분)'
-        required: false
-        default: ''
+      command:
+        description: AK command
+        required: true
+        type: choice
+        options: [scan, test, rewrite, fixloop]
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: write
+
+concurrency:
+  group: ak-${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.issue.number }}-${{ github.event_name == 'workflow_dispatch' && inputs.command || 'cmd' }}
+  cancel-in-progress: false
 
 jobs:
-  no-tracked-logs:
-    name: Guard logs/ (no tracked logs)
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      statuses: write
-
+  run-ak:
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: false
-
-      - name: Scan tracked files under logs/
-        id: scan
+      - name: Resolve inputs
+        id: resolve
         shell: bash
         run: |
-          set -euo pipefail
-          files="$(git ls-files -- 'logs/*' ':!logs/.gitkeep' || true)"
-          if [ -n "$files" ]; then
-            echo "has_tracked=true" >> "$GITHUB_OUTPUT"
-            echo "$files" > tracked.txt
-          else
-            echo "has_tracked=false" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "pr=${{ inputs.pr }}" >> "$GITHUB_OUTPUT"
+            echo "cmd=${{ inputs.command }}" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          body=$(printf "%s" "${{ github.event.comment.body }}")
+          cmd=$(printf "%s" "$body" | sed -n 's!.*/ak[[:space:]]\+\([a-z0-9-]\+\).*!\1!p')
+          echo "pr=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
+          echo "cmd=$cmd" >> "$GITHUB_OUTPUT"
 
-      - name: Mark status (fail)
-        if: steps.scan.outputs.has_tracked == 'true'
-        uses: actions/github-script@v7
+      - name: Checkout PR head
+        uses: actions/checkout@v4
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const files = fs.readFileSync('tracked.txt', 'utf8').trim().split('\n');
-            const preview = files.length ? files[0] + (files.length > 1 ? ' …' : '') : '';
-            await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: context.sha,
-              state: 'failure',
-              context: 'guard-logs-ignored/no-tracked-logs',
-              description: preview || 'Tracked files under logs/'
-            });
-            core.setFailed(`❌ Tracked log files detected: ${preview}`);
+        
+          ref: refs/pull/${{ github.event.issue.number }}/head
+          repository: ${{ github.repository }}
+          ref: refs/pull/${{ steps.resolve.outputs.pr }}/head
+              a9ec5fd26ec71c2ca43a908cf77911e40986a86d
+          fetch-depth: 1
 
-      - name: Mark status (success)
-        if: steps.scan.outputs.has_tracked == 'false'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: context.sha,
-              state: 'success',
-              context: 'guard-logs-ignored/no-tracked-logs',
-              description: 'No tracked files under logs/'
-            });
+      - name: Bootstrap ak logs
+        run: |
+          mkdir -p logs
+          printf '{"timestamp":"%s","level":"INFO","action":"bootstrap","message":"init"}\n' "$(date -Iseconds)" >> logs/ak7.jsonl
 
-  run-command:
-    name: Run Command
-    runs-on: ubuntu-latest
-    needs: [ no-tracked-logs ]
-    if: needs.no-tracked-logs.result == 'success'
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: 입력 확인
+      - name: Hydrate scripts from main if missing
         shell: bash
         run: |
-          echo "입력 커맨드: ${{ github.event.inputs.cmd }}"
-          echo "입력 인수:   ${{ github.event.inputs.args }}"
+          if [ ! -d scripts/g5 ] || [ ! -f scripts/g5/ak-dispatch.ps1 ]; then
+            echo "::notice::scripts/g5 missing; hydrating from origin/main"
+            git fetch --depth=1 origin main
+            git checkout origin/main -- scripts/g5/
+          fi
+          ls -la scripts/g5
 
-      - name: 명령 실행
-        shell: bash
-        env:
-          CMD: ${{ github.event.inputs.cmd }}
-          ARGS: ${{ github.event.inputs.args }}
+      - name: Dispatch
+        shell: pwsh
         run: |
-          set -euo pipefail
-          echo "▶ ${CMD} ${ARGS}"
-          ${CMD} ${ARGS}
-          echo "✅ 명령 실행 완료"
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
+            -Command "${{ steps.resolve.outputs.cmd }}" `
+            -Sha "${{ github.sha }}" `
+            -Pr "${{ steps.resolve.outputs.pr }}"
+
+      - name: List ak logs (debug)
+        if: always()
+        run: |
+          echo "::group::ls -la logs"; ls -la logs || true; echo "::endgroup::"
+          echo "::group::tail logs/ak7.jsonl"; tail -n +1 logs/ak7.jsonl || true; echo "::endgroup::"
+
+      - name: Upload ak logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ak7-logs
+          path: logs/ak7.jsonl
+          retention-days: 5
+
+      - name: Comment back (optional)
+        if: ${{ github.event_name == 'issue_comment' || github.event_name == 'workflow_dispatch' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = '${{ steps.resolve.outputs.pr }}';
+            const cmd = '${{ steps.resolve.outputs.cmd }}';
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `✅ /ak **${cmd}** started for PR #${pr}\n\nRun: ${url}`;
+            if (context.eventName === 'issue_comment') {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: Number(pr), body });
+            } else {
+              core.summary.addHeading('/ak').addRaw(body).write();
+            }
+
