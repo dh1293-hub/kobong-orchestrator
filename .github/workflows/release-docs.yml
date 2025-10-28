@@ -1,60 +1,79 @@
---- a/.github/workflows/release-docs.yml
-+++ b/.github/workflows/release-docs.yml
-@@
-   jobs:
--    docs:
-+    docs:
-       runs-on: ubuntu-latest
-       permissions:
-         contents: write
-       steps:
-+        # [G5] Idempotency guard (release body sentinel for docs)
-+        - name: Guard · skip if docs already published
-+          id: guard
-+          env:
-+            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-+            DOCS_SENTINEL: "<!-- __G5_SENTINEL:RELEASE_DOCS_v1 -->"
-+          shell: bash
-+          run: |
-+            set -euo pipefail
-+            tag="${{ inputs.tag || '' }}"
-+            if [ -z "${tag}" ]; then tag="${GITHUB_REF_NAME:-}"; fi
-+            if [ -z "${tag}" ]; then tag="$(gh release list --limit 1 --json tagName -q '.[0].tagName' || true)"; fi
-+            echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-+            body="$(gh release view "${tag}" --json body -q .body || echo '')"
-+            if echo "${body}" | grep -q "${DOCS_SENTINEL}"; then
-+              echo "skip=true"  >> "$GITHUB_OUTPUT"
-+              echo "### Docs publish\n- Tag: \`${tag}\`\n- Result: **SKIP** (sentinel exists)" >> "$GITHUB_STEP_SUMMARY"
-+              exit 0
-+            fi
-+            echo "skip=false" >> "$GITHUB_OUTPUT"
-+
-         # (기존) 빌드/패키징/업로드 스텝들 …
- 
--        - name: Mark release with docs info
-+        - name: Mark release with docs info
-+          if: steps.guard.outputs.skip != 'true'
-           env:
-             GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-           shell: bash
-           run: |
-             set -euo pipefail
--            tag="${{ inputs.tag }}"
-+            tag="${{ steps.guard.outputs.tag }}"
-             {
-               echo ""
-               echo "## Docs"
-               echo "- published: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-+              echo "${DOCS_SENTINEL}"
-             } >> docs-release-append.md
-             gh release edit "${tag}" --notes-file docs-release-append.md
- 
-+        - name: Summary (Job)
-+          shell: bash
-+          run: |
-+            tag="${{ steps.guard.outputs.tag }}"
-+            if [ "${{ steps.guard.outputs.skip }}" = "true" ]; then
-+              echo "### Docs publish\n- Tag: \`${tag}\`\n- Result: **SKIP**" >> "$GITHUB_STEP_SUMMARY"
-+            else
-+              echo "### Docs publish\n- Tag: \`${tag}\`\n- Result: **PASS** (published)" >> "$GITHUB_STEP_SUMMARY"
-+            fi
+name: Release Docs
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to update (optional)
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-docs
+  cancel-in-progress: true
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Idempotency guard (skip if docs already marked)
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCS_SENTINEL: "<!-- __G5_SENTINEL:RELEASE_DOCS_v1 -->"
+          TAG_FROM_EVENT: ${{ github.event.release.tag_name }}
+          TAG_INPUT: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${TAG_FROM_EVENT:-}"
+          if [ -z "$tag" ] && [ -n "${TAG_INPUT:-}" ]; then tag="${TAG_INPUT}"; fi
+          if [ -z "$tag" ]; then tag="$(gh release list --limit 1 --json tagName -q '.[0].tagName' || true)"; fi
+          if [ -z "$tag" ]; then echo "::error::no release tag detected"; exit 1; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          body="$(gh release view "$tag" --json body -q .body || echo '')"
+          if echo "$body" | grep -q "$DOCS_SENTINEL"; then
+            echo "skip=true"  >> "$GITHUB_OUTPUT"
+            printf "### Docs publish\n- Tag: \`%s\`\n- Result: **SKIP** (sentinel exists)\n" "$tag" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      # ↓ 필요 시 여기에 실제 문서 빌드/업로드 스텝을 배치하세요.
+      - name: (Optional) Build & attach docs
+        if: steps.guard.outputs.skip != 'true'
+        shell: bash
+        run: |
+          echo "Your docs build & upload steps go here."
+
+      - name: Mark release notes with docs sentinel
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCS_SENTINEL: "<!-- __G5_SENTINEL:RELEASE_DOCS_v1 -->"
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.guard.outputs.tag }}"
+          {
+            echo ""
+            echo "## Docs"
+            echo "- published: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "${DOCS_SENTINEL}"
+          } >> docs-release-append.md
+          gh release edit "$tag" --notes-file docs-release-append.md
+
+      - name: Summary
+        shell: bash
+        run: |
+          tag="${{ steps.guard.outputs.tag }}"
+          if [ "${{ steps.guard.outputs.skip }}" = "true" ]; then
+            printf "### Docs publish\n- Tag: \`%s\`\n- Result: **SKIP**\n" "$tag" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf "### Docs publish\n- Tag: \`%s\`\n- Result: **PASS** (published)\n" "$tag" >> "$GITHUB_STEP_SUMMARY"
+          fi
