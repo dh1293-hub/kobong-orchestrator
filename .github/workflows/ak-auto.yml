@@ -1,145 +1,197 @@
-name: ak-auto
+name: AK Auto
 
 on:
   pull_request_target:
-    types: [labeled, opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, labeled]
   workflow_dispatch:
     inputs:
       pr:
-        description: "PR number to run on"
+        description: 'PR number (optional for manual run)'
         required: false
-        type: string
+  # 이 워크플로 파일 수정/로그 변경 시, 로그 가드 전용으로 push도 돌립니다.
+  push:
+    paths:
+      - '.github/workflows/ak-auto.yml'
+      - 'logs/**'
 
 permissions:
   contents: read
   issues: write
   pull-requests: write
+  statuses: write
 
+# ─────────────────────────────────────────────
+# 1) 공통 로그 가드 (logs/* 은 추적 금지, .gitkeep만 허용)
+# ─────────────────────────────────────────────
 jobs:
-  auto:
+  no-tracked-logs:
+    name: no-tracked-logs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      # PR 번호 결정
-      - name: Resolve PR number
-        id: pr
-        uses: actions/github-script@v7
         with:
-          script: |
-            const pr = core.getInput('pr') || context.payload.pull_request?.number || context.payload.issue?.number;
-            if(!pr) core.setFailed('No PR number'); else core.setOutput('num', String(pr));
+          fetch-depth: 0
+          submodules: false
 
-      # ak:auto 라벨 확인(없으면 안내 후 종료)
-      - name: Check ak:auto present
-        id: gate
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const pr = Number('${{ steps.pr.outputs.num }}');
-            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
-            const ok = labels.some(l => l.name.toLowerCase()==='ak:auto');
-            if(!ok){
-              await github.rest.issues.createComment({
-                owner, repo, issue_number: pr,
-                body: "🔔 자동 실행 라벨 **`ak:auto`** 가 없어 대기합니다. 라벨 추가 후 자동으로 실행됩니다."
-              });
-            }
-            core.setOutput('enabled', ok ? 'true' : 'false');
-
-      - name: Short-circuit when ak:auto missing
-        if: steps.gate.outputs.enabled != 'true'
-        run: exit 0
-
-      # 안내 코멘트
-      - name: Announce start
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const pr = Number('${{ steps.pr.outputs.num }}');
-            await github.rest.issues.createComment({
-              owner, repo, issue_number: pr,
-              body: "🤖 **AUTO-Kobong**: Help → Test → Scan → Preview 순서로 전자동 실행합니다. (DEV: 24h apply 허용, OWNER 전용)"
-            });
-
-      # ===== 시퀀스 =====
-      - name: /ak help
+      - name: Scan for tracked logs
+        id: scan
         shell: bash
         run: |
-          set +e
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'help' -Pr '${{ steps.pr.outputs.num }}'
-          exit 0
+          set -euo pipefail
+          mapfile -t files < <(git ls-files 'logs/*' ':!:logs/.gitkeep' || true)
+          if [ ${#files[@]} -gt 0 ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Tracked files under logs/"
+              printf '%s\n' "${files[@]}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: /ak test
-        shell: bash
-        run: |
-          set +e
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'test' -Pr '${{ steps.pr.outputs.num }}'
-          code=$?; if [ -z "$code" ]; then code=0; fi
-          if [ "$code" -ge 10 ]; then exit "$code"; else exit 0; fi
-
-      - name: /ak scan --all
-        shell: bash
-        run: |
-          set +e
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'scan' -RawArgs '--all' -Pr '${{ steps.pr.outputs.num }}'
-          code=$?; if [ -z "$code" ]; then code=0; fi
-          if [ "$code" -ge 10 ]; then exit "$code"; else exit 0; fi
-
-      - name: /ak fixloop preview (always green)
-        shell: bash
-        continue-on-error: true
-        run: |
-          set +e
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'fixloop' -RawArgs 'preview' -Pr '${{ steps.pr.outputs.num }}' || true
-          exit 0
-
-      # ===== 조건부 apply (DEV: 24h 허용) =====
-      - name: Decide apply
-        id: apply
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const pr = Number('${{ steps.pr.outputs.num }}');
-            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
-            const applyLabel = labels.some(l => l.name.toLowerCase()==='ak:auto-apply');
-            // DEV: 야간 제한 제거 → 라벨만 있으면 실행
-            core.setOutput('do', applyLabel ? 'true' : 'false');
-            core.setOutput('night','false')
-
-      - name: Night notice
-        if: ${{ false }}
-        run: "echo 'DEV mode: night guard disabled'"
-
-      - name: /ak fixloop apply (OWNER only)
-        if: ${{ steps.apply.outputs.do == 'true' && github.actor == github.repository_owner }}
-        shell: bash
-        run: |
-          set +e
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'fixloop' -RawArgs 'apply' -Pr '${{ steps.pr.outputs.num }}'
-          code=$?; if [ -z "$code" ]; then code=0; fi
-          if [ "$code" -ge 10 ]; then exit "$code"; else exit 0; fi
-
-      # 요약 댓글
-      - name: Comment summary
+      - name: Set commit status (guard-logs-ignored/no-tracked-logs)
         if: always()
         uses: actions/github-script@v7
-        env:
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          CHECKS_URL: ${{ github.server_url }}/${{ github.repository }}/pull/${{ steps.pr.outputs.num }}/checks
-          STATUS: ${{ job.status }}
-          KB_URL: ${{ github.server_url }}/${{ github.repository }}/blob/main/.kobong/reports/ERROR-KB.md
         with:
           script: |
-            const {owner, repo} = context.repo;
-            const pr = Number('${{ steps.pr.outputs.num }}');
-            const body = [
-              `**AUTO-Kobong** finished: **${process.env.STATUS.toUpperCase()}**`,
-              `- Actions Run: ${process.env.RUN_URL}`,
-              `- PR Checks  : ${process.env.CHECKS_URL}`,
-              `- Error KB   : ${process.env.KB_URL}`
-            ].join("\n");
-            await github.rest.issues.createComment({ owner, repo, issue_number: pr, body });
+            const found = '${{ steps.scan.outputs.found }}' === 'true';
+            const state = found ? 'failure' : 'success';
+            const desc  = found ? 'logs/ contains tracked files (except .gitkeep)' : 'OK: no tracked logs';
+            await github.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state,
+              context: 'guard-logs-ignored/no-tracked-logs',
+              description: desc,
+            });
+
+      - name: Fail build if tracked logs found
+        if: steps.scan.outputs.found == 'true'
+        shell: bash
+        run: |
+          echo "Error: Tracked files under logs/:"
+          git ls-files 'logs/*' ':!:logs/.gitkeep' || true
+          exit 1
+
+  # ───────────────────────────────────────────
+  # 2) 라벨 기반 자동 실행 (PR 타겟/수동 실행만)
+  # ───────────────────────────────────────────
+  auto:
+    needs: no-tracked-logs
+    if: >
+      ${{
+        (github.event_name == 'pull_request_target' || github.event_name == 'workflow_dispatch')
+        && needs.no-tracked-logs.result != 'failure'
+      }}
+    runs-on: windows-latest
+    concurrency:
+      group: ak-auto-${{ github.event.pull_request.number || inputs.pr || github.sha }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Resolve PR number
+        id: resolve
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch' -and '${{ inputs.pr }}' -ne '') {
+            $num = '${{ inputs.pr }}'
+          } else {
+            $num = '${{ github.event.pull_request.number }}'
+          }
+          if (-not $num) { throw 'PR number is required for ak-auto'; }
+          "num=$num" | Out-File -Append $env:GITHUB_OUTPUT
+
+      - name: Require label ak:auto
+        id: label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = Number('${{ steps.resolve.outputs.num }}');
+            const {data: labels} = await github.issues.listLabelsOnIssue({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: pr
+            });
+            const has = labels.some(l => l.name === 'ak:auto');
+            core.setOutput('has', has ? 'true' : 'false');
+
+      - name: Announce when label missing
+        if: steps.label.outputs.has != 'true' && github.event_name == 'pull_request_target'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: 'ℹ️ Add the `ak:auto` label to enable automatic actions.'
+            });
+
+      - name: Stop when label missing
+        if: steps.label.outputs.has != 'true'
+        run: exit 0
+
+      - name: Checkout default branch (safe)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          submodules: false
+
+      - name: Ensure dispatcher script
+        id: ensure
+        shell: pwsh
+        run: |
+          $path = "scripts/g5/ak-dispatch.ps1"
+          if (-not (Test-Path $path)) { throw "Missing $path" }
+          "path=$path" | Out-File -Append $env:GITHUB_OUTPUT
+
+      - name: Run automation (help/test/scan/fixloop preview)
+        shell: pwsh
+        run: |
+          $pr  = '${{ steps.resolve.outputs.num }}'
+          $sha = '${{ github.event.pull_request.head.sha || github.sha }}'
+          pwsh -NoProfile -File $env:GITHUB_WORKSPACE/${{ steps.ensure.outputs.path }} -Command 'help'           -Pr $pr -Sha $sha
+          pwsh -NoProfile -File $env:GITHUB_WORKSPACE/${{ steps.ensure.outputs.path }} -Command 'test'           -Pr $pr -Sha $sha
+          pwsh -NoProfile -File $env:GITHUB_WORKSPACE/${{ steps.ensure.outputs.path }} -Command 'scan --all'     -Pr $pr -Sha $sha
+          pwsh -NoProfile -File $env:GITHUB_WORKSPACE/${{ steps.ensure.outputs.path }} -Command 'fixloop preview' -Pr $pr -Sha $sha
+
+      - name: Apply fixloop (label: ak:auto-apply)
+        id: apply-flag
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = Number('${{ steps.resolve.outputs.num }}');
+            const {data: labels} = await github.issues.listLabelsOnIssue({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: pr
+            });
+            const ok = labels.some(l => l.name === 'ak:auto-apply');
+            core.setOutput('do', ok ? 'true' : 'false');
+
+      - name: Do apply
+        if: steps.apply-flag.outputs.do == 'true'
+        shell: pwsh
+        run: |
+          $pr  = '${{ steps.resolve.outputs.num }}'
+          $sha = '${{ github.event.pull_request.head.sha || github.sha }}'
+          pwsh -NoProfile -File $env:GITHUB_WORKSPACE/${{ steps.ensure.outputs.path }} -Command 'fixloop apply' -Pr $pr -Sha $sha
+
+      - name: Upload ak logs (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ak-logs
+          if-no-files-found: ignore
+          path: |
+            logs/ak7.jsonl
+            logs/*.log
+
+      - name: Summary comment
+        if: always() && github.event_name == 'pull_request_target'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            await github.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body: `### AK Auto summary\n• Run: ${url}\n• Outcome: see checks.`
+            })
