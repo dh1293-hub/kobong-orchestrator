@@ -1,98 +1,60 @@
-# NO-SHELL
-name: Release Docs (README badge)
-
-on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag to process (e.g., v0.1.5). Leave empty to use latest v*."
-        required: false
-        default: ""
-  push:
-    tags:
-      - "v*"
-
-permissions:
-  contents: write
-  pull-requests: write
-
-jobs:
-  update-readme-badge:
-    runs-on: ubuntu-latest
-    concurrency:
-      group: release-docs-${{ github.ref_name || github.run_id }}
-      cancel-in-progress: false
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - name: Update README badge
-        id: update
-        env:
-          TAG_IN: ${{ github.event.inputs.tag }}
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $tag = $env:TAG_IN
-          if ([string]::IsNullOrWhiteSpace($tag)) {
-            $tag = (git tag --list "v*" --sort=-v:refname | Select-Object -First 1)
-            if ([string]::IsNullOrWhiteSpace($tag)) { throw "No semver tag found (v*)" }
-          }
-
-          $remote = git config --get remote.origin.url
-          if ($remote -match 'github\.com[:/](?<o>[^/]+)/(?<r>[^/.]+)') { $owner=$Matches.o; $repo=$Matches.r } else { throw "remote parse failed" }
-
-          $badge = ("[![Release](https://img.shields.io/github/v/release/{0}/{1}?display_name=tag&sort=semver)](https://github.com/{0}/{1}/releases/tag/{2})" -f $owner,$repo,$tag)
-
-          $path = 'README.md'
-          $orig = (Test-Path $path) ? (Get-Content $path -Raw -Encoding utf8) : ''
-
-          $ownEsc=[regex]::Escape($owner); $repEsc=[regex]::Escape($repo)
-          $pattern = '\[!\[Release\]\(https://img\.shields\.io/github/v/release/{0}/{1}\?display_name=tag&sort=semver\)\]\(https://github\.com/{0}/{1}/releases/tag/[^)]+\)' -f $ownEsc,$repEsc
-          $rx = [regex]::new($pattern)
-          if ($orig -match $pattern) {
-            $updated = $rx.Replace($orig, { param([System.Text.RegularExpressions.Match]$m) $badge }, 1)
-          } elseif ($orig -match '^# .+') {
-            $updated = $orig -replace '^(# .+\R?)', "`$0$badge`n"
-          } else {
-            $updated = $badge + "`n`n" + $orig
-          }
-
-          $updated | Out-File $path -Encoding utf8
-          if (git diff --quiet) {
-            "did_change=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            "tag=$tag"        | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            exit 0
-          }
-
-          git config user.name  "github-actions"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          $head = "docs/readme-badge-$tag"
-          git checkout -b $head
-          git add README.md
-          git commit -m ("docs(readme): update release badge ({0})" -f $tag)
-          git push --set-upstream origin $head
-
-          "did_change=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "tag=$tag"        | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-
-      - name: Open PR and enable auto-merge
-        if: steps.update.outputs.did_change == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.BOT_PR_PAT != '' && secrets.BOT_PR_PAT || github.token }}
-          TAG: ${{ steps.update.outputs.tag }}
-        shell: bash
-        run: |
-          set -e
-          head="docs/readme-badge-${TAG}"
-          if ! gh pr create --title "docs(readme): update release badge (${TAG})" --body "- Auto-updated Release badge." --base main --head "$head"; then
-            echo "::warning::PR create failed (likely policy blocking GitHub Actions bot). Leaving branch $head for manual review."
-            exit 0
-          fi
-          pr=$(gh pr view "$head" --json number -q .number || echo "")
-          if [ -n "$pr" ]; then
-            gh pr merge "$pr" --auto --squash --delete-branch || true
-          fi
+--- a/.github/workflows/release-docs.yml
++++ b/.github/workflows/release-docs.yml
+@@
+   jobs:
+-    docs:
++    docs:
+       runs-on: ubuntu-latest
+       permissions:
+         contents: write
+       steps:
++        # [G5] Idempotency guard (release body sentinel for docs)
++        - name: Guard · skip if docs already published
++          id: guard
++          env:
++            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++            DOCS_SENTINEL: "<!-- __G5_SENTINEL:RELEASE_DOCS_v1 -->"
++          shell: bash
++          run: |
++            set -euo pipefail
++            tag="${{ inputs.tag || '' }}"
++            if [ -z "${tag}" ]; then tag="${GITHUB_REF_NAME:-}"; fi
++            if [ -z "${tag}" ]; then tag="$(gh release list --limit 1 --json tagName -q '.[0].tagName' || true)"; fi
++            echo "tag=${tag}" >> "$GITHUB_OUTPUT"
++            body="$(gh release view "${tag}" --json body -q .body || echo '')"
++            if echo "${body}" | grep -q "${DOCS_SENTINEL}"; then
++              echo "skip=true"  >> "$GITHUB_OUTPUT"
++              echo "### Docs publish\n- Tag: \`${tag}\`\n- Result: **SKIP** (sentinel exists)" >> "$GITHUB_STEP_SUMMARY"
++              exit 0
++            fi
++            echo "skip=false" >> "$GITHUB_OUTPUT"
++
+         # (기존) 빌드/패키징/업로드 스텝들 …
+ 
+-        - name: Mark release with docs info
++        - name: Mark release with docs info
++          if: steps.guard.outputs.skip != 'true'
+           env:
+             GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+           shell: bash
+           run: |
+             set -euo pipefail
+-            tag="${{ inputs.tag }}"
++            tag="${{ steps.guard.outputs.tag }}"
+             {
+               echo ""
+               echo "## Docs"
+               echo "- published: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
++              echo "${DOCS_SENTINEL}"
+             } >> docs-release-append.md
+             gh release edit "${tag}" --notes-file docs-release-append.md
+ 
++        - name: Summary (Job)
++          shell: bash
++          run: |
++            tag="${{ steps.guard.outputs.tag }}"
++            if [ "${{ steps.guard.outputs.skip }}" = "true" ]; then
++              echo "### Docs publish\n- Tag: \`${tag}\`\n- Result: **SKIP**" >> "$GITHUB_STEP_SUMMARY"
++            else
++              echo "### Docs publish\n- Tag: \`${tag}\`\n- Result: **PASS** (published)" >> "$GITHUB_STEP_SUMMARY"
++            fi
