@@ -1,4 +1,4 @@
 ADDED
+AUTO-Kobong/AUTO-Kobong-메뉴얼.md
 CHANGED
-.github/workflows/psanalyze.yml
 REMOVED
