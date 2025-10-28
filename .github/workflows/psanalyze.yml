@@ -163,6 +163,25 @@ jobs:
           sarif_file: results.sarif
           category: pssa
 
+      - name: Findings → Job Summary (top 100)
+        if: steps.files.outputs.count != '0'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path results.sarif)) { exit 0 }
+          $sarif = Get-Content results.sarif -Raw | ConvertFrom-Json
+          $rows = foreach ($r in $sarif.runs[0].results) {
+            $lvl = $r.level.ToUpper()
+            $rule = $r.ruleId
+            $loc = $r.locations[0].physicalLocation
+            $file = $loc.artifactLocation.uri
+            $line = $loc.region.startLine
+            "{0} | {1} | {2}:{3}" -f $lvl, $rule, $file, $line
+          }
+          if ($rows) {
+            "#### PSScriptAnalyzer Findings (level | rule | file:line)" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+            $rows | Sort-Object | Select-Object -First 100 | ForEach-Object { "- $_" } | Out-File $env:GITHUB_STEP_SUMMARY -Append
+          }
+
 
       - name: Gate (errors + warning threshold)
         if: steps.files.outputs.count != '0'
