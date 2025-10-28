@@ -1,0 +1,187 @@
+name: PSScriptAnalyzer
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: monitor | soft | hard
+        required: false
+        default: soft
+        type: choice
+        options: [monitor, soft, hard]
+      warn_threshold:
+        description: "Fail if warnings > N (empty = ignore). Example: 10"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  psanalyze:
+    # 라벨 기반 면제: PR에 psa-skip 라벨이 있으면 건너뜀
+    if: ${{ github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'psa-skip') }}
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout (full history for PR base)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # ⬅ shallow로 인한 "bad object" 방지
+
+      - name: Decide mode & thresholds
+        id: cfg
+        shell: pwsh
+        run: |
+          $mode = '${{ github.event.inputs.mode }}'
+          if ([string]::IsNullOrWhiteSpace($mode)) { $mode = 'soft' }
+          $wtxt = '${{ github.event.inputs.warn_threshold }}'
+          if (-not $wtxt -or ($wtxt -notmatch '^\d+$')) { $wtxt = '' }
+          "mode=$mode"           | Out-File $env:GITHUB_OUTPUT -Append
+          "warn_threshold=$wtxt" | Out-File $env:GITHUB_OUTPUT -Append
+
+      - name: Collect target files
+        id: files
+        shell: pwsh
+        run: |
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+
+          # 전체 후보(일부 폴더 제외: .git, .githooks 등)
+          $all = Get-ChildItem -Recurse -File -Include *.ps1,*.psm1,*.psd1 |
+                 Where-Object {
+                   $_.FullName -notmatch '\\\.git(\\|$)' -and
+                   $_.FullName -notmatch '\\\.githooks(\\|$)'
+                 } |
+                 Select-Object -ExpandProperty FullName
+
+          # 변경 파일(풀리퀘일 때만)
+          $changed = @()
+          if ('${{ github.event_name }}' -eq 'pull_request') {
+            $base='${{ github.event.pull_request.base.sha }}'
+            $head='${{ github.event.pull_request.head.sha }}'
+            $changed = (git diff --name-only $base $head) |
+                       Where-Object { $_ -match '\.(ps1|psm1|psd1)$' } |
+                       ForEach-Object { (Resolve-Path $_).Path }
+          }
+
+          $mode='${{ steps.cfg.outputs.mode }}'
+          if ($mode -eq 'soft' -and $changed.Count -gt 0) { $targets = $changed } else { $targets = $all }
+
+          if (-not $targets -or $targets.Count -eq 0) {
+            "count=0" | Out-File $env:GITHUB_OUTPUT -Append
+            "# PSScriptAnalyzer Summary`n- Mode: $mode`n- Targets: 0 (skipped)`n- Reason: no PowerShell files" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+            exit 0
+          }
+
+          # 대상 목록은 파일로만 보관(멀티라인 GITHUB_OUTPUT 금지)
+          [string[]]$targets | Set-Content targets.txt -Encoding utf8
+          "count=$($targets.Count)" | Out-File $env:GITHUB_OUTPUT -Append
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+
+      - name: Run analyzer (robust per-file)
+        id: scan
+        if: steps.files.outputs.count != '0'
+        shell: pwsh
+        run: |
+          # settings.psd1 자동 감지
+          $settings = ''
+          if (Test-Path './settings.psd1') { $settings = (Resolve-Path './settings.psd1').Path }
+
+          # 대상 목록 읽기
+          [string[]]$targets = Get-Content targets.txt | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
+
+          # 파일별로 별도 호출 (Path 배열 전달 이슈 회피)
+          $all = @()
+          foreach ($t in $targets) {
+            $p = @{
+              Path     = $t
+              Recurse  = $true
+              Severity = @('Error','Warning')
+              Verbose  = $false
+            }
+            if ($settings) { $p['Settings'] = $settings }
+            $r = Invoke-ScriptAnalyzer @p
+            if ($r) { $all += $r }
+          }
+
+          $err  = ($all | Where-Object Severity -eq 'Error').Count
+          $warn = ($all | Where-Object Severity -eq 'Warning').Count
+          "errors=$err"        | Out-File $env:GITHUB_OUTPUT -Append
+          "warnings=$warn"     | Out-File $env:GITHUB_OUTPUT -Append
+          "used_settings=$settings" | Out-File $env:GITHUB_OUTPUT -Append
+
+          # SARIF(minimal) 생성
+          $sarif = @{
+            version = "2.1.0"
+            runs = @(@{
+              tool = @{ driver = @{ name = "PSScriptAnalyzer" } }
+              results = @(
+                $all | ForEach-Object {
+                  @{
+                    ruleId  = $_.RuleName
+                    level   = (($_.Severity -eq 'Error') ? 'error' : 'warning')
+                    message = @{ text = $_.Message }
+                    locations = @(@{
+                      physicalLocation = @{
+                        artifactLocation = @{ uri = $_.ScriptPath }
+                        region = @{ startLine = $_.Line }
+                      }
+                    })
+                  }
+                }
+              )
+            })
+          } | ConvertTo-Json -Depth 6
+          $sarif | Out-File results.sarif -Encoding utf8
+
+
+      - name: Upload SARIF
+        if: steps.files.outputs.count != '0'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+
+      - name: Gate (errors + warning threshold)
+        if: steps.files.outputs.count != '0'
+        shell: pwsh
+        run: |
+          $mode   = '${{ steps.cfg.outputs.mode }}'
+          $err    = [int]'${{ steps.scan.outputs.errors }}'
+          $warn   = [int]'${{ steps.scan.outputs.warnings }}'
+          $wth    = '${{ steps.cfg.outputs.warn_threshold }}'
+          $useSet = '${{ steps.scan.outputs.used_settings }}'
+          $fail   = $false
+          $reasons = @()
+
+          switch ($mode) {
+            'monitor' { }
+            'soft'    { if ($err -gt 0) { $fail = $true; $reasons += "$err error(s)" } }
+            'hard'    { if ($err -gt 0) { $fail = $true; $reasons += "$err error(s)" } } # 필요시 Warning도 포함
+          }
+
+          if ($wth -and ($warn -gt [int]$wth)) {
+            $fail = $true
+            $reasons += "warnings $warn > threshold $wth"
+          }
+
+          $count = [int]'${{ steps.files.outputs.count }}'
+          $summary = @()
+          $summary += "### PSScriptAnalyzer Summary"
+          $summary += "- Mode: $mode"
+          $summary += "- Targets: $count"
+          if ($useSet) { $summary += "- Settings: $useSet" } else { $summary += "- Settings: (default)" }
+          $summary += "- Errors: $err"
+          $summary += "- Warnings: $warn"
+          if ($wth)   { $summary += "- Warn threshold: $wth"
+          }
+          $summary += "- Gate: " + ($(if ($fail) { "❌ FAIL ($($reasons -join '; '))" } else { "✅ PASS" }))
+          $summary -join "`n" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+
+          if ($fail) { throw "PSScriptAnalyzer gate failed: $($reasons -join '; ')." }
