@@ -142,6 +142,7 @@ jobs:
           $sarif | Out-File results.sarif -Encoding utf8
 
 
+
       - name: Upload SARIF
         if: steps.files.outputs.count != '0'
         uses: github/codeql-action/upload-sarif@v3
