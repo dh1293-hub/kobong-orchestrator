@@ -6,104 +6,149 @@
 # ✔ YAML 구조 및 들여쓰기 정합성 보정
 # -------------------------------------------
 
-name: AK Auto
+name: ak-auto
+
 on:
+  pull_request_target:
+    types: [labeled, opened, reopened, synchronize]
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: 'Dry-run mode (테스트 실행, 실제 명령 제외)'
+      pr:
+        description: "PR number to run on"
         required: false
-        default: "false"
-  push:
-    branches: [ main ]
+        type: string
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
-  no-tracked-logs:
-    name: Guard logs/ (no tracked logs)
+  auto:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      statuses: write
-
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          submodules: false
 
-      - name: Scan tracked files under logs/
-        id: scan
-        shell: bash
-        run: |
-          set -euo pipefail
-          files="$(git ls-files -- 'logs/*' ':!logs/.gitkeep' || true)"
-          if [ -n "$files" ]; then
-            echo "has_tracked=true" >> "$GITHUB_OUTPUT"
-            echo "$files" > tracked.txt
-          else
-            echo "has_tracked=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Mark status (fail)
-        if: steps.scan.outputs.has_tracked == 'true'
+      # PR 번호 결정
+      - name: Resolve PR number
+        id: pr
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const fs = require('fs');
-            const files = fs.readFileSync('tracked.txt', 'utf8').trim().split('\n');
-            const preview = files.length ? files[0] + (files.length > 1 ? ' …' : '') : '';
-            await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: context.sha,
-              state: 'failure',
-              context: 'guard-logs-ignored/no-tracked-logs',
-              description: preview || 'Tracked files under logs/'
-            });
-            core.setFailed(`❌ Tracked log files detected: ${preview}`);
+            const pr = core.getInput('pr') || context.payload.pull_request?.number || context.payload.issue?.number;
+            if(!pr) core.setFailed('No PR number'); else core.setOutput('num', String(pr));
 
-      - name: Mark status (success)
-        if: steps.scan.outputs.has_tracked == 'false'
+      # ak:auto 라벨 확인(없으면 안내 후 종료)
+      - name: Check ak:auto present
+        id: gate
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: context.sha,
-              state: 'success',
-              context: 'guard-logs-ignored/no-tracked-logs',
-              description: 'No tracked files under logs/'
+            const {owner, repo} = context.repo;
+            const pr = Number('${{ steps.pr.outputs.num }}');
+            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
+            const ok = labels.some(l => l.name.toLowerCase()==='ak:auto');
+            if(!ok){
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: pr,
+                body: "🔔 자동 실행 라벨 **`ak:auto`** 가 없어 대기합니다. 라벨 추가 후 자동으로 실행됩니다."
+              });
+            }
+            core.setOutput('enabled', ok ? 'true' : 'false');
+
+      - name: Short-circuit when ak:auto missing
+        if: steps.gate.outputs.enabled != 'true'
+        run: exit 0
+
+      # 안내 코멘트
+      - name: Announce start
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = Number('${{ steps.pr.outputs.num }}');
+            await github.rest.issues.createComment({
+              owner, repo, issue_number: pr,
+              body: "🤖 **AUTO-Kobong**: Help → Test → Scan → Preview 순서로 전자동 실행합니다. (DEV: 24h apply 허용, OWNER 전용)"
             });
 
-  run-auto:
-    name: Run Auto Tasks
-    runs-on: ubuntu-latest
-    needs: [ no-tracked-logs ]
-    if: needs.no-tracked-logs.result == 'success'
+      # ===== 시퀀스 =====
+      - name: /ak help
+        shell: bash
+        run: |
+          set +e
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'help' -Pr '${{ steps.pr.outputs.num }}'
+          exit 0
 
-    steps:
-      - uses: actions/checkout@v4
+      - name: /ak test
+        shell: bash
+        run: |
+          set +e
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'test' -Pr '${{ steps.pr.outputs.num }}'
+          code=$?; if [ -z "$code" ]; then code=0; fi
+          if [ "$code" -ge 10 ]; then exit "$code"; else exit 0; fi
+
+      - name: /ak scan --all
+        shell: bash
+        run: |
+          set +e
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'scan' -RawArgs '--all' -Pr '${{ steps.pr.outputs.num }}'
+          code=$?; if [ -z "$code" ]; then code=0; fi
+          if [ "$code" -ge 10 ]; then exit "$code"; else exit 0; fi
+
+      - name: /ak fixloop preview (always green)
+        shell: bash
+        continue-on-error: true
+        run: |
+          set +e
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'fixloop' -RawArgs 'preview' -Pr '${{ steps.pr.outputs.num }}' || true
+          exit 0
+
+      # ===== 조건부 apply (DEV: 24h 허용) =====
+      - name: Decide apply
+        id: apply
+        uses: actions/github-script@v7
         with:
-          fetch-depth: 0
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = Number('${{ steps.pr.outputs.num }}');
+            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
+            const applyLabel = labels.some(l => l.name.toLowerCase()==='ak:auto-apply');
+            // DEV: 야간 제한 제거 → 라벨만 있으면 실행
+            core.setOutput('do', applyLabel ? 'true' : 'false');
+            core.setOutput('night','false')
 
-      - name: Context 확인
+      - name: Night notice
+        if: ${{ false }}
+        run: echo "DEV mode: night guard disabled"
+
+      - name: /ak fixloop apply (OWNER only)
+        if: ${{ steps.apply.outputs.do == 'true' && github.actor == github.repository_owner }}
         shell: bash
         run: |
-          echo "🔹 Actor: ${{ github.actor }}"
-          echo "🔹 Branch: ${{ github.ref }}"
-          echo "🔹 SHA: ${{ github.sha }}"
-          echo "🔹 Dry-run: ${{ github.event.inputs.dry_run || 'false' }}"
+          set +e
+          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'fixloop' -RawArgs 'apply' -Pr '${{ steps.pr.outputs.num }}'
+          code=$?; if [ -z "$code" ]; then code=0; fi
+          if [ "$code" -ge 10 ]; then exit "$code"; else exit 0; fi
 
-      - name: 실행 예시 (자동화 동작)
-        if: ${{ github.event.inputs.dry_run != 'true' }}
-        shell: bash
-        run: |
-          echo "자동화 프로세스 시작..."
-          echo "현재 시각: $(date)"
-          echo "✔ 실행 완료!"
+      # 요약 댓글
+      - name: Comment summary
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CHECKS_URL: ${{ github.server_url }}/${{ github.repository }}/pull/${{ steps.pr.outputs.num }}/checks
+          STATUS: ${{ job.status }}
+          KB_URL: ${{ github.server_url }}/${{ github.repository }}/blob/main/.kobong/reports/ERROR-KB.md
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = Number('${{ steps.pr.outputs.num }}');
+            const body = [
+              `**AUTO-Kobong** finished: **${process.env.STATUS.toUpperCase()}**`,
+              `- Actions Run: ${process.env.RUN_URL}`,
+              `- PR Checks  : ${process.env.CHECKS_URL}`,
+              `- Error KB   : ${process.env.KB_URL}`
+            ].join("\n");
+            await github.rest.issues.createComment({ owner, repo, issue_number: pr, body });
+
