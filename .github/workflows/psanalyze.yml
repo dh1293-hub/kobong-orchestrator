@@ -11,7 +11,7 @@ on:
         type: choice
         options: [monitor, soft, hard]
       warn_threshold:
-        description: "Fail if warnings > N (empty=ignore). e.g. 10"
+        description: "Fail if warnings > N (empty = ignore)"
         required: false
         type: string
 
@@ -21,18 +21,16 @@ permissions:
 
 jobs:
   psanalyze:
-    # 'psa-skip' 라벨이 있으면 전체 잡을 스킵
+    # 라벨로 완전 스킵 가능
     if: ${{ github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'psa-skip') }}
     runs-on: windows-latest
 
     steps:
-      # 1) 코드 체크아웃(풀 히스토리: PR base 비교용)
       - name: Checkout (full history for PR base)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 2) 모드·임계치
       - name: Decide mode & thresholds
         id: cfg
         shell: pwsh
@@ -44,12 +42,12 @@ jobs:
           "mode=$mode"           | Out-File $env:GITHUB_OUTPUT -Append
           "warn_threshold=$wtxt" | Out-File $env:GITHUB_OUTPUT -Append
 
-      # 3) 대상 파일 수집
       - name: Collect target files
         id: files
         shell: pwsh
         run: |
           git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+
           $all = Get-ChildItem -Recurse -File -Include *.ps1,*.psm1,*.psd1 |
                  Where-Object {
                    $_.FullName -notmatch '\\\.git(\\|$)' -and
@@ -77,15 +75,13 @@ jobs:
           [string[]]$targets | Set-Content targets.txt -Encoding utf8
           "count=$($targets.Count)" | Out-File $env:GITHUB_OUTPUT -Append
 
-      # 4) 모듈 설치
       - name: Install PSScriptAnalyzer
         shell: pwsh
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
 
-      # 5) 분석 실행(파일별 호출, SARIF 생성)
-      - name: Run analyzer (per-file, deep SARIF, relative paths)
+      - name: Run analyzer (per-file → SARIF, relative paths)
         id: scan
         if: steps.files.outputs.count != '0'
         shell: pwsh
@@ -106,31 +102,48 @@ jobs:
               $rel = $abs.StartsWith($root) ? $abs.Substring($root.Length).TrimStart('\','/') : $abs
               $rel = $rel -replace '\\','/'
               $all += [pscustomobject]@{
-                ruleId=$i.RuleName; level=$(if ($i.Severity -eq 'Error') {'error'} else {'warning'})
-                message=@{ text=$i.Message }
-                locations=@(@{ physicalLocation=@{ artifactLocation=@{ uri=$rel }; region=@{ startLine=$i.Line } } })
+                ruleId   = $i.RuleName
+                level    = ($(if ($i.Severity -eq 'Error') {'error'} else {'warning'}))
+                message  = @{ text = $i.Message }
+                locations = @(@{
+                  physicalLocation = @{
+                    artifactLocation = @{ uri = $rel }
+                    region = @{ startLine = $i.Line }
+                  }
+                })
               }
             }
           }
 
-          $err  = ($all | Where-Object { $_.level -eq 'error' }).Count
+          # 에러/경고 카운트 출력
+          $err  = ($all | Where-Object { $_.level -eq 'error'   }).Count
           $warn = ($all | Where-Object { $_.level -eq 'warning' }).Count
           "errors=$err"            | Out-File $env:GITHUB_OUTPUT -Append
           "warnings=$warn"         | Out-File $env:GITHUB_OUTPUT -Append
           "used_settings=$settings"| Out-File $env:GITHUB_OUTPUT -Append
 
-          $pssaVer = (Get-Module PSScriptAnalyzer).Version.ToString()
-          $sarif = @{
-            version="2.1.0"
-            runs=@(@{
-              tool=@{ driver=@{ name="PSScriptAnalyzer"; version=$pssaVer } }
-              invocations=@(@{ executionSuccessful=$true })
-              results=$all
-            })
-          } | ConvertTo-Json -Depth 50
-          [IO.File]::WriteAllText("results.sarif", $sarif, [Text.Encoding]::UTF8)
+          # 규칙 메타(선택) 추가 → 업로드 도구가 좋아함
+          $rules = $all.ruleId | Sort-Object -Unique | ForEach-Object { @{ id = $_ } }
 
-      # 6) SARIF 업로드(반드시 uses 전용 step, run/shell 금지)
+          $pssaVer = (Get-Module PSScriptAnalyzer).Version.ToString()
+          $sarifObj = [ordered]@{
+            version = "2.1.0"
+            runs    = @(@{
+              tool = @{ driver = @{
+                  name="PSScriptAnalyzer"; version=$pssaVer;
+                  informationUri="https://github.com/PowerShell/PSScriptAnalyzer";
+                  rules=$rules
+              } }
+              results = $all
+            })
+          }
+
+          # SARIF 생성 + **사전 검증**(JSON 문법)
+          $sarifJson = $sarifObj | ConvertTo-Json -Depth 100
+          $sarifJson | Set-Content -Path results.sarif -Encoding utf8
+          # 파싱 검증(문법 오류 시 명확히 실패)
+          Get-Content results.sarif -Raw | ConvertFrom-Json | Out-Null
+
       - name: Upload SARIF (non-blocking)
         if: steps.files.outputs.count != '0'
         uses: github/codeql-action/upload-sarif@v3
@@ -139,12 +152,10 @@ jobs:
           category: pssa
         continue-on-error: true
 
-      # 7) 요약 출력
       - name: Findings → Job Summary (top 100)
         if: steps.files.outputs.count != '0'
         shell: pwsh
         run: |
-          if (-not (Test-Path results.sarif)) { exit 0 }
           $sarif = Get-Content results.sarif -Raw | ConvertFrom-Json
           $rows = foreach ($r in $sarif.runs[0].results) {
             $lvl = $r.level.ToUpper()
@@ -159,12 +170,11 @@ jobs:
             $rows | Sort-Object | Select-Object -First 100 | ForEach-Object { "- $_" } | Out-File $env:GITHUB_STEP_SUMMARY -Append
           }
 
-      # 8) 게이트
-      - name: Gate (errors + warning threshold)
+      - name: Gate (errors + optional warning threshold)
         if: steps.files.outputs.count != '0'
         shell: pwsh
         run: |
-          $mode   = '${{ steps.cfg.outputs.mode }}'
+          $mode   = '${{ steps.cfg.outputs.mode }}'                  # monitor | soft | hard
           $err    = [int]'${{ steps.scan.outputs.errors }}'
           $warn   = [int]'${{ steps.scan.outputs.warnings }}'
           $wth    = '${{ steps.cfg.outputs.warn_threshold }}'
@@ -173,11 +183,13 @@ jobs:
           $reasons = @()
 
           switch ($mode) {
-            'monitor' { }
+            'monitor' { }                                           # 항상 통과
             'soft'    { if ($err -gt 0) { $fail = $true; $reasons += "$err error(s)" } }
-            'hard'    { if ($err -gt 0) { $fail = $true; $reasons += "$err error(s)" } }
+            'hard'    { if ($err -gt 0) { $fail = $true; $reasons += "$err error(s)" } } # 경고는 임계치로만
           }
-          if ($wth -and ($warn -gt [int]$wth)) { $fail = $true; $reasons += "warnings $warn > threshold $wth" }
+          if ($wth -and ($warn -gt [int]$wth)) {
+            $fail = $true; $reasons += "warnings $warn > threshold $wth"
+          }
 
           $count = [int]'${{ steps.files.outputs.count }}'
           $summary = @()
@@ -192,4 +204,3 @@ jobs:
           $summary -join "`n" | Out-File $env:GITHUB_STEP_SUMMARY -Append
 
           if ($fail) { throw "PSScriptAnalyzer gate failed: $($reasons -join '; ')." }
-
