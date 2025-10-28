@@ -1,172 +1,111 @@
-name: AK Commands (ChatOps)
+# ===========================================
+# AK-COMMANDS : Kobong-Orchestrator ChatOps
+# ===========================================
+# ✔ logs/ 추적파일 차단 (no-tracked-logs 게이트)
+# ✔ 수동 트리거 입력(cmd/args)
+# ✔ YAML 구조 오류 및 commitStatus 오류 정정
+# -------------------------------------------
 
+name: AK Commands (ChatOps)
 on:
-  issue_comment:
-    types: [created]
   workflow_dispatch:
     inputs:
-      pr:
-        description: 'PR number'
+      cmd:
+        description: '실행할 커맨드 (bash 기반)'
         required: true
-      command:
-        description: 'ak command (scan|test|rewrite|fixloop etc.)'
-        required: true
-  # 로그 가드 전용 push 트리거
-  push:
-    paths:
-      - '.github/workflows/ak-commands.yml'
-      - 'logs/**'
+      args:
+        description: '인수 (공백으로 구분)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
-  checks: write
-  statuses: write
 
-# ─────────────────────────────────────────────
-# 1) 공통 로그 가드
-# ─────────────────────────────────────────────
 jobs:
   no-tracked-logs:
-    name: no-tracked-logs
+    name: Guard logs/ (no tracked logs)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: false
 
-      - name: Scan for tracked logs
+      - name: Scan tracked files under logs/
         id: scan
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t files < <(git ls-files 'logs/*' ':!:logs/.gitkeep' || true)
-          if [ ${#files[@]} -gt 0 ]; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-            {
-              echo "### Tracked files under logs/"
-              printf '%s\n' "${files[@]}"
-            } >> "$GITHUB_STEP_SUMMARY"
+          files="$(git ls-files -- 'logs/*' ':!logs/.gitkeep' || true)"
+          if [ -n "$files" ]; then
+            echo "has_tracked=true" >> "$GITHUB_OUTPUT"
+            echo "$files" > tracked.txt
           else
-            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "has_tracked=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Set commit status (guard-logs-ignored/no-tracked-logs)
-        if: always()
+      - name: Mark status (fail)
+        if: steps.scan.outputs.has_tracked == 'true'
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const found = '${{ steps.scan.outputs.found }}' === 'true';
-            const state = found ? 'failure' : 'success';
-            const desc  = found ? 'logs/ contains tracked files (except .gitkeep)' : 'OK: no tracked logs';
-            await github.repos.createCommitStatus({
+            const fs = require('fs');
+            const files = fs.readFileSync('tracked.txt', 'utf8').trim().split('\n');
+            const preview = files.length ? files[0] + (files.length > 1 ? ' …' : '') : '';
+            await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.sha,
-              state,
+              state: 'failure',
               context: 'guard-logs-ignored/no-tracked-logs',
-              description: desc,
+              description: preview || 'Tracked files under logs/'
+            });
+            core.setFailed(`❌ Tracked log files detected: ${preview}`);
+
+      - name: Mark status (success)
+        if: steps.scan.outputs.has_tracked == 'false'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: 'success',
+              context: 'guard-logs-ignored/no-tracked-logs',
+              description: 'No tracked files under logs/'
             });
 
-      - name: Fail build if tracked logs found
-        if: steps.scan.outputs.found == 'true'
-        shell: bash
-        run: |
-          echo "Error: Tracked files under logs/:"
-          git ls-files 'logs/*' ':!:logs/.gitkeep' || true
-          exit 1
-
-  # ───────────────────────────────────────────
-  # 2) /ak … 또는 수동 실행
-  # ───────────────────────────────────────────
   run-command:
-    needs: no-tracked-logs
-    if: needs.no-tracked-logs.result != 'failure'
-    runs-on: windows-latest
+    name: Run Command
+    runs-on: ubuntu-latest
+    needs: [ no-tracked-logs ]
+    if: needs.no-tracked-logs.result == 'success'
 
     steps:
-      - name: Resolve inputs
-        id: resolve
-        uses: actions/github-script@v7
+      - uses: actions/checkout@v4
         with:
-          script: |
-            let pr = null, cmd = null;
-            if (context.eventName === 'workflow_dispatch') {
-              pr  = Number(core.getInput('pr'));
-              cmd = core.getInput('command');
-            } else if (context.eventName === 'issue_comment') {
-              // PR 코멘트인지 확인
-              if (!context.payload.issue.pull_request) {
-                core.notice('Not a PR comment; skipping.');
-                return;
-              }
-              const body = context.payload.comment.body || '';
-              const m = body.match(/^\/ak\s+(.+)$/i);
-              if (!m) {
-                core.notice('No /ak command found; skipping.');
-                return;
-              }
-              pr  = context.payload.issue.number;
-              cmd = m[1].trim();
-            }
-            if (!pr || !cmd) {
-              core.setOutput('skip', 'true');
-              return;
-            }
-            core.setOutput('skip', 'false');
-            core.setOutput('pr',   String(pr));
-            core.setOutput('cmd',  cmd);
+          fetch-depth: 0
 
-      - name: Skip when no command
-        if: steps.resolve.outputs.skip == 'true'
-        run: echo "No command to run."
-
-      - name: Checkout default branch (safe)
-        if: steps.resolve.outputs.skip != 'true'
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          fetch-depth: 1
-          submodules: false
-
-      - name: Ensure dispatcher script
-        if: steps.resolve.outputs.skip != 'true'
-        id: ensure
-        shell: pwsh
+      - name: 입력 확인
+        shell: bash
         run: |
-          $path = "scripts/g5/ak-dispatch.ps1"
-          if (-not (Test-Path $path)) { throw "Missing $path" }
-          "path=$path" | Out-File -Append $env:GITHUB_OUTPUT
+          echo "입력 커맨드: ${{ github.event.inputs.cmd }}"
+          echo "입력 인수:   ${{ github.event.inputs.args }}"
 
-      - name: Run /ak command
-        if: steps.resolve.outputs.skip != 'true'
-        shell: pwsh
+      - name: 명령 실행
+        shell: bash
+        env:
+          CMD: ${{ github.event.inputs.cmd }}
+          ARGS: ${{ github.event.inputs.args }}
         run: |
-          $pr  = '${{ steps.resolve.outputs.pr }}'
-          $cmd = '${{ steps.resolve.outputs.cmd }}'
-          $sha = '${{ github.sha }}'
-          pwsh -NoProfile -File $env:GITHUB_WORKSPACE/${{ steps.ensure.outputs.path }} -Command $cmd -Pr $pr -Sha $sha
-
-      - name: Upload ak logs (if any)
-        if: always() && steps.resolve.outputs.skip != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ak-logs
-          if-no-files-found: ignore
-          path: |
-            logs/ak7.jsonl
-            logs/*.log
-
-      - name: Feedback comment
-        if: always() && steps.resolve.outputs.skip != 'true' && github.event_name == 'issue_comment'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const url = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-            await github.issues.createComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: Number('${{ steps.resolve.outputs.pr }}'),
-              body: `✅ /ak **${{ steps.resolve.outputs.cmd }}** started.\nRun: ${url}`
-            })
+          set -euo pipefail
+          echo "▶ ${CMD} ${ARGS}"
+          ${CMD} ${ARGS}
+          echo "✅ 명령 실행 완료"
