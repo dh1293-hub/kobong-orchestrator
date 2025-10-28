@@ -1,64 +1,84 @@
---- a/.github/workflows/klc-append-release.yml
-+++ b/.github/workflows/klc-append-release.yml
-@@
-   jobs:
--    append:
-+    append:
-       runs-on: ubuntu-latest
-       permissions:
-         contents: write
-         deployments: write
-       steps:
-+        # [G5] Idempotency guard (release body sentinel)
-+        - name: Guard · skip if summary already appended
-+          id: guard
-+          env:
-+            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-+            SENTINEL: "<!-- __G5_SENTINEL:KLC_SUMMARY_v1 -->"
-+          shell: bash
-+          run: |
-+            set -euo pipefail
-+            tag="${{ inputs.tag || '' }}"
-+            if [ -z "${tag}" ]; then tag="${GITHUB_REF_NAME:-}"; fi
-+            if [ -z "${tag}" ]; then tag="$(gh release list --limit 1 --json tagName -q '.[0].tagName' || true)"; fi
-+            echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-+            body="$(gh release view "${tag}" --json body -q .body || echo '')"
-+            if echo "${body}" | grep -q "${SENTINEL}"; then
-+              echo "skip=true"  >> "$GITHUB_OUTPUT"
-+              echo "### KLC append\n- Tag: \`${tag}\`\n- Result: **SKIP** (sentinel exists)" >> "$GITHUB_STEP_SUMMARY"
-+              exit 0
-+            fi
-+            echo "skip=false" >> "$GITHUB_OUTPUT"
-+
-         # (기존) KLC 요약 생성/가져오기 스텝들 …
- 
--        - name: Append KLC summary to release
-+        - name: Append KLC summary to release
-+          if: steps.guard.outputs.skip != 'true'
-           env:
-             GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-           shell: bash
-           run: |
-             set -euo pipefail
--            tag="${{ inputs.tag }}"
-+            tag="${{ steps.guard.outputs.tag }}"
-             {
-               echo ""
-               echo "## KLC Summary"
-               echo ""
-               # 아래는 기존 KLC 산출물(한 줄 요약 + 상세) 반영 위치
-               # 예) echo "- ${KLC_LINE}" ; cat artifacts/klc-details.md
-+              echo ""
-+              echo "${{ env.SENTINEL }}"
-             } >> klc-release-append.md
-             gh release edit "${tag}" --notes-file klc-release-append.md
- 
-+        - name: Summary (Job)
-+          shell: bash
-+          run: |
-+            tag="${{ steps.guard.outputs.tag }}"
-+            if [ "${{ steps.guard.outputs.skip }}" = "true" ]; then
-+              echo "### KLC append\n- Tag: \`${tag}\`\n- Result: **SKIP**" >> "$GITHUB_STEP_SUMMARY"
-+            else
-+              echo "### KLC append\n- Tag: \`${tag}\`\n- Result: **PASS** (appended)" >> "$GITHUB_STEP_SUMMARY"
-+            fi
+name: KLC Append Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to edit (optional)
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: klc-append-release
+  cancel-in-progress: true
+
+jobs:
+  append:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Idempotency guard (skip if already appended)
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SENTINEL: "<!-- __G5_SENTINEL:KLC_SUMMARY_v1 -->"
+          TAG_FROM_EVENT: ${{ github.event.release.tag_name }}
+          TAG_INPUT: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${TAG_FROM_EVENT:-}"
+          if [ -z "$tag" ] && [ -n "${TAG_INPUT:-}" ]; then tag="${TAG_INPUT}"; fi
+          if [ -z "$tag" ]; then tag="$(gh release list --limit 1 --json tagName -q '.[0].tagName' || true)"; fi
+          if [ -z "$tag" ]; then echo "::error::no release tag detected"; exit 1; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          body="$(gh release view "$tag" --json body -q .body || echo '')"
+          if echo "$body" | grep -q "$SENTINEL"; then
+            echo "skip=true"  >> "$GITHUB_OUTPUT"
+            printf "### KLC append\n- Tag: \`%s\`\n- Result: **SKIP** (sentinel exists)\n" "$tag" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - name: Generate KLC line
+        if: steps.guard.outputs.skip != 'true'
+        id: gen
+        shell: bash
+        run: |
+          set -euo pipefail
+          trace=$(uuidgen | tr '[:upper:]' '[:lower:]')
+          anchor="release-append"
+          line="KLC | $trace | exitCode=0 | anchor=$anchor"
+          echo "KLC_LINE=$line" >> "$GITHUB_ENV"
+          echo "$line"
+
+      - name: Append to release notes
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SENTINEL: "<!-- __G5_SENTINEL:KLC_SUMMARY_v1 -->"
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.guard.outputs.tag }}"
+          {
+            echo ""
+            echo "## KLC Summary"
+            echo "- ${KLC_LINE}"
+            echo "${SENTINEL}"
+          } >> klc-release-append.md
+          gh release edit "$tag" --notes-file klc-release-append.md
+
+      - name: Summary
+        shell: bash
+        run: |
+          tag="${{ steps.guard.outputs.tag }}"
+          if [ "${{ steps.guard.outputs.skip }}" = "true" ]; then
+            printf "### KLC append\n- Tag: \`%s\`\n- Result: **SKIP**\n" "$tag" >> "$GITHUB_STEP_SUMMARY"
+          else
+            printf "### KLC append\n- Tag: \`%s\`\n- Result: **PASS** (appended)\n" "$tag" >> "$GITHUB_STEP_SUMMARY"
+          fi
