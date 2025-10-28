@@ -7,105 +7,105 @@
 # -------------------------------------------
 
 name: AK Commands (ChatOps)
-
 on:
   workflow_dispatch:
     inputs:
       cmd:
-        description: "실행할 커맨드 (예: bash, pwsh, gh …)"
+        description: '실행할 커맨드 (bash 기반)'
         required: true
-        type: string
       args:
-        description: "인수(그대로 전달; 공백/따옴표 포함 가능)"
+        description: '인수 (공백으로 구분)'
         required: false
-        default: ""
-        type: string
+        default: ''
 
 permissions:
   contents: read
 
 jobs:
-  guard-logs:
+  no-tracked-logs:
     name: Guard logs/ (no tracked logs)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
           submodules: false
 
-      - name: Fail if tracked files exist in logs/
+      - name: Scan tracked files under logs/
+        id: scan
         shell: bash
         run: |
           set -euo pipefail
-          cd "$GITHUB_WORKSPACE"
-          mapfile -t tracked < <(git ls-files 'logs/*' ':!:logs/.gitkeep' || true)
-          if (( ${#tracked[@]} > 0 )); then
-            printf '%s\n' "${tracked[@]}" | sed 's/^/ - /' | tee /tmp/tracked.txt
-            echo "::error::Tracked files under logs/:"
-            cat /tmp/tracked.txt
-            exit 1
+          files="$(git ls-files -- 'logs/*' ':!logs/.gitkeep' || true)"
+          if [ -n "$files" ]; then
+            echo "has_tracked=true" >> "$GITHUB_OUTPUT"
+            echo "$files" > tracked.txt
+          else
+            echo "has_tracked=false" >> "$GITHUB_OUTPUT"
           fi
-          echo "OK: logs/ 에 추적 중인 파일이 없습니다(.gitkeep 제외)."
 
-  run:
+      - name: Mark status (fail)
+        if: steps.scan.outputs.has_tracked == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const files = fs.readFileSync('tracked.txt', 'utf8').trim().split('\n');
+            const preview = files.length ? files[0] + (files.length > 1 ? ' …' : '') : '';
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: 'failure',
+              context: 'guard-logs-ignored/no-tracked-logs',
+              description: preview || 'Tracked files under logs/'
+            });
+            core.setFailed(`❌ Tracked log files detected: ${preview}`);
+
+      - name: Mark status (success)
+        if: steps.scan.outputs.has_tracked == 'false'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: 'success',
+              context: 'guard-logs-ignored/no-tracked-logs',
+              description: 'No tracked files under logs/'
+            });
+
+  run-command:
     name: Run Command
     runs-on: ubuntu-latest
-    needs: guard-logs
-    env:
-      # gh CLI가 필요할 때 자동 사용
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    needs: [ no-tracked-logs ]
+    if: needs.no-tracked-logs.result == 'success'
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 1
-          submodules: false
+          fetch-depth: 0
 
       - name: 입력 확인
         shell: bash
         run: |
-          echo "입력 커맨드 : ${{ inputs.cmd }}"
-          echo "입력 인수   : ${{ inputs.args }}"
+          echo "입력 커맨드: ${{ github.event.inputs.cmd }}"
+          echo "입력 인수:   ${{ github.event.inputs.args }}"
 
       - name: 명령 실행
-        id: exec
         shell: bash
         env:
-          CMD_IN: ${{ inputs.cmd }}
-          ARGS_IN: ${{ inputs.args }}
+          CMD: ${{ github.event.inputs.cmd }}
+          ARGS: ${{ github.event.inputs.args }}
         run: |
           set -euo pipefail
-
-          cmd="${CMD_IN}"
-          args="${ARGS_IN}"
-
-          if [[ -z "${cmd}" ]]; then
-            echo "::error::cmd 가 비어있습니다."
-            exit 2
-          fi
-
-          # 인용(quoting) 문제를 피하기 위해 임시 스크립트로 실행
-          script="$(mktemp)"
-          {
-            echo '#!/usr/bin/env bash'
-            echo 'set -euo pipefail'
-            echo "echo \"▶ ${cmd} ${args}\""
-            if [[ "${cmd}" == "pwsh" ]]; then
-              # pwsh의 경우 사용자가 -Command/-File 을 args에 포함해 전달합니다.
-              echo "pwsh ${args}"
-            else
-              # bash/gh/기타는 그대로 실행
-              echo "${cmd} ${args}"
-            fi
-          } >"${script}"
-          chmod +x "${script}"
-          "${script}"
-
-      - name: 완료
-        if: always()
-        shell: bash
-        run: echo "결론:${{ steps.exec.conclusion }}"
-
+          echo "▶ ${CMD} ${ARGS}"
+          ${CMD} ${ARGS}
+          echo "✅ 명령 실행 완료"
