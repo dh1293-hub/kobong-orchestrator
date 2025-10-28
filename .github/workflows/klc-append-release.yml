@@ -20,23 +20,42 @@ concurrency:
 jobs:
   append:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      SENTINEL: "<!-- __G5_SENTINEL:KLC_SUMMARY_v1 -->"
     steps:
       - name: Idempotency guard (skip if already appended)
         id: guard
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SENTINEL: "<!-- __G5_SENTINEL:KLC_SUMMARY_v1 -->"
           TAG_FROM_EVENT: ${{ github.event.release.tag_name }}
           TAG_INPUT: ${{ inputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
+          # 1) 어떤 태그로 작업할지 결정 (이벤트→입력→최신 릴리즈→최근 태그)
           tag="${TAG_FROM_EVENT:-}"
-          if [ -z "$tag" ] && [ -n "${TAG_INPUT:-}" ]; then tag="${TAG_INPUT}"; fi
-          if [ -z "$tag" ]; then tag="$(gh release list --limit 1 --json tagName -q '.[0].tagName' || true)"; fi
-          if [ -z "$tag" ]; then echo "::error::no release tag detected"; exit 1; fi
+          if [ -z "$tag" ] && [ -n "${TAG_INPUT:-}" ]; then tag="$TAG_INPUT"; fi
+          if [ -z "$tag" ]; then
+            tag="$(gh api -H 'X-GitHub-Api-Version:2022-11-28' \
+                   "repos/${REPO}/releases/latest" -q .tag_name 2>/dev/null || true)"
+          fi
+          if [ -z "$tag" ]; then
+            tag="$(gh api -H 'X-GitHub-Api-Version:2022-11-28' \
+                   "repos/${REPO}/tags?per_page=1" -q '.[0].name' 2>/dev/null || true)"
+          fi
+          if [ -z "$tag" ]; then
+            echo "::error::no release/tag detected; pass an input 'tag' or publish a release."; exit 1
+          fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          body="$(gh release view "$tag" --json body -q .body || echo '')"
+
+          # 2) 릴리즈 존재 확인(+본문 조회) — repo를 명시(-R)하여 .git 의존 제거
+          if ! gh release view -R "$REPO" "$tag" >/dev/null 2>&1; then
+            echo "::error::release '$tag' not found in $REPO"; exit 1
+          fi
+          body="$(gh release view -R "$REPO" "$tag" --json body -q .body || echo '')"
+
+          # 3) 이미 붙어 있으면 Skip (멱등)
           if echo "$body" | grep -q "$SENTINEL"; then
             echo "skip=true"  >> "$GITHUB_OUTPUT"
             printf "### KLC append\n- Tag: \`%s\`\n- Result: **SKIP** (sentinel exists)\n" "$tag" >> "$GITHUB_STEP_SUMMARY"
@@ -58,9 +77,6 @@ jobs:
 
       - name: Append to release notes
         if: steps.guard.outputs.skip != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SENTINEL: "<!-- __G5_SENTINEL:KLC_SUMMARY_v1 -->"
         shell: bash
         run: |
           set -euo pipefail
@@ -71,7 +87,7 @@ jobs:
             echo "- ${KLC_LINE}"
             echo "${SENTINEL}"
           } >> klc-release-append.md
-          gh release edit "$tag" --notes-file klc-release-append.md
+          gh release edit -R "$REPO" "$tag" --notes-file klc-release-append.md
 
       - name: Summary
         shell: bash
