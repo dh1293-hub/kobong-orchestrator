@@ -1,17 +1,13 @@
 @{
-  # 일단 제외할 룰(점진 정리 목표)
   ExcludeRules = @(
-    # 'PSAvoidUsingWrite-Host',      # 필요시 해제
+    # 필요시 임시 제외할 규칙들 나열
+    # 'PSAvoidUsingWrite-Host'
   )
-
   Rules = @{
-    # 강하게 막을 것들
-    PSAvoidUsingInvokeExpression       = @{ Severity = 'Error' }
-    PSAvoidUsingPlainTextForPassword   = @{ Severity = 'Error' }
-    PSUseSupportsShouldProcess         = @{ Severity = 'Error' }
-
-    # 과도한 경고는 경고 수준으로
-    PSUseApprovedVerbs                 = @{ Severity = 'Warning' }
-    PSUseBOMForUnicodeEncodedFile      = @{ Severity = 'Warning' }
+    PSAvoidUsingInvokeExpression       = @{ Severity = 'Error' }   # 강하게 유지
+    PSAvoidUsingPlainTextForPassword   = @{ Severity = 'Error' }   # 강하게 유지
+    PSUseSupportsShouldProcess         = @{ Severity = 'Error' }   # 강하게 유지
+    PSUseApprovedVerbs                 = @{ Severity = 'Warning' } # 경고로 완화
+    PSUseBOMForUnicodeEncodedFile      = @{ Severity = 'Warning' } # 경고로 완화
   }
 }
