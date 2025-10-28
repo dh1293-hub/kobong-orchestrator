@@ -112,7 +112,7 @@ jobs:
 
       - name: Night notice
         if: ${{ false }}
-        run: echo "DEV mode: night guard disabled"
+        run: "echo 'DEV mode: night guard disabled'"
 
       - name: /ak fixloop apply (OWNER only)
         if: ${{ steps.apply.outputs.do == 'true' && github.actor == github.repository_owner }}
