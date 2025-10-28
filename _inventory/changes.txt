@@ -1,4 +1,4 @@
 ADDED
 CHANGED
-.github/workflows/klc-append-release.yml
+.github/workflows/release-docs.yml
 REMOVED
