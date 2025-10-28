@@ -30,17 +30,24 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: false
 
       - name: Decide mode & thresholds
         id: cfg
         shell: pwsh
         run: |
-          $mode = '${{ github.event.inputs.mode }}'
-          if ([string]::IsNullOrWhiteSpace($mode)) { $mode = 'soft' }
-          $wtxt = '${{ github.event.inputs.warn_threshold }}'
-          if (-not $wtxt -or ($wtxt -notmatch '^\d+$')) { $wtxt = '' }
+          $isPR = '${{ github.event_name }}' -eq 'pull_request'
+          $isMain = '${{ github.ref }}' -eq 'refs/heads/main'
+          if ($isPR) {
+          $mode = 'soft'; $wtxt = ''         # PR은 경고로 막지 않음
+          } elseif ($isMain) {
+          $mode = 'hard'; $wtxt = '10'       # main은 엄격
+          } else {
+          $mode = 'soft'; $wtxt = ''         # 기타는 완화
+          }
           "mode=$mode"           | Out-File $env:GITHUB_OUTPUT -Append
           "warn_threshold=$wtxt" | Out-File $env:GITHUB_OUTPUT -Append
+
 
       - name: Collect target files
         id: files
