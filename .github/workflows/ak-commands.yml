@@ -12,12 +12,13 @@ on:
   workflow_dispatch:
     inputs:
       cmd:
-        description: '실행할 커맨드 (bash | pwsh | gh | 기타)'
+        description: "실행할 커맨드 (예: bash, pwsh, gh …)"
         required: true
         type: string
       args:
-        description: '인수(쉘에서 치는 그대로)'
+        description: "인수(그대로 전달; 공백/따옴표 포함 가능)"
         required: false
+        default: ""
         type: string
 
 permissions:
@@ -25,31 +26,42 @@ permissions:
 
 jobs:
   guard-logs:
+    name: Guard logs/ (no tracked logs)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           submodules: false
-      - name: Ensure no tracked files under logs/ (except .gitkeep)
+
+      - name: Fail if tracked files exist in logs/
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t tracked < <(git ls-files 'logs/*' | grep -v '^logs/.gitkeep$' || true)
-          if (( ${#tracked[@]} )); then
-            printf '::error::Tracked files under logs/: %s\n' "${tracked[@]}"
+          cd "$GITHUB_WORKSPACE"
+          mapfile -t tracked < <(git ls-files 'logs/*' ':!:logs/.gitkeep' || true)
+          if (( ${#tracked[@]} > 0 )); then
+            printf '%s\n' "${tracked[@]}" | sed 's/^/ - /' | tee /tmp/tracked.txt
+            echo "::error::Tracked files under logs/:"
+            cat /tmp/tracked.txt
             exit 1
           fi
+          echo "OK: logs/ 에 추적 중인 파일이 없습니다(.gitkeep 제외)."
 
-  run-command:
-    needs: guard-logs
+  run:
+    name: Run Command
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    needs: guard-logs
+    env:
+      # gh CLI가 필요할 때 자동 사용
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           submodules: false
 
       - name: 입력 확인
@@ -58,52 +70,42 @@ jobs:
           echo "입력 커맨드 : ${{ inputs.cmd }}"
           echo "입력 인수   : ${{ inputs.args }}"
 
-      - name: Run Command
+      - name: 명령 실행
+        id: exec
         shell: bash
         env:
-          # ❗️절대 'cmd=' 같은 접두어 넣지 않음
-          CMD: ${{ inputs.cmd }}
-          ARGS: ${{ inputs.args }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CMD_IN: ${{ inputs.cmd }}
+          ARGS_IN: ${{ inputs.args }}
         run: |
           set -euo pipefail
 
-          if [[ -z "${CMD}" ]]; then
-            echo "::error::CMD is empty"; exit 1
+          cmd="${CMD_IN}"
+          args="${ARGS_IN}"
+
+          if [[ -z "${cmd}" ]]; then
+            echo "::error::cmd 가 비어있습니다."
+            exit 2
           fi
 
-          case "${CMD}" in
-            pwsh|powershell|pwsh.exe)
-              if [[ -z "${ARGS}" ]]; then
-                echo "::error::pwsh에는 ARGS가 필요합니다 (예: -NoProfile -Command \"...\" 또는 -File path.ps1)"; exit 1
-              fi
-              pwsh -NoProfile ${ARGS}
-              ;;
+          # 인용(quoting) 문제를 피하기 위해 임시 스크립트로 실행
+          script="$(mktemp)"
+          {
+            echo '#!/usr/bin/env bash'
+            echo 'set -euo pipefail'
+            echo "echo \"▶ ${cmd} ${args}\""
+            if [[ "${cmd}" == "pwsh" ]]; then
+              # pwsh의 경우 사용자가 -Command/-File 을 args에 포함해 전달합니다.
+              echo "pwsh ${args}"
+            else
+              # bash/gh/기타는 그대로 실행
+              echo "${cmd} ${args}"
+            fi
+          } >"${script}"
+          chmod +x "${script}"
+          "${script}"
 
-            bash|sh|/bin/bash)
-              if [[ -z "${ARGS}" ]]; then
-                echo "::error::bash에는 ARGS가 필요합니다 (예: -lc 'echo ok')"; exit 1
-              fi
-              # 사용자가 -lc를 안 넣어도 최소 실행되게 보정
-              if [[ "${ARGS}" =~ ^-l?c[[:space:]] ]]; then
-                bash ${ARGS}
-              else
-                bash -lc "${ARGS}"
-              fi
-              ;;
+      - name: 완료
+        if: always()
+        shell: bash
+        run: echo "결론:${{ steps.exec.conclusion }}"
 
-            gh)
-              export GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
-              if [[ -z "${GH_TOKEN}" ]]; then
-                echo "::error::GH_TOKEN not set"; exit 4
-              fi
-              gh ${ARGS}
-              ;;
-
-            *)
-              # 일반 커맨드
-              ${CMD} ${ARGS}
-              ;;
-          esac
-
-          echo "✅ 명령 실행 완료"
