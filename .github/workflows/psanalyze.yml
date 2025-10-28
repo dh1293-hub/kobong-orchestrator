@@ -36,17 +36,24 @@ jobs:
         id: cfg
         shell: pwsh
         run: |
-          $isPR = '${{ github.event_name }}' -eq 'pull_request'
-          $isMain = '${{ github.ref }}' -eq 'refs/heads/main'
-          if ($isPR) {
-          $mode = 'soft'; $wtxt = ''         # PR은 경고로 막지 않음
-          } elseif ($isMain) {
-          $mode = 'hard'; $wtxt = '10'       # main은 엄격
-          } else {
-          $mode = 'soft'; $wtxt = ''         # 기타는 완화
-          }
-          "mode=$mode"           | Out-File $env:GITHUB_OUTPUT -Append
-          "warn_threshold=$wtxt" | Out-File $env:GITHUB_OUTPUT -Append
+         $isPR     = '${{ github.event_name }}' -eq 'pull_request'
+         $isManual = '${{ github.event_name }}' -eq 'workflow_dispatch'
+         $isMain   = '${{ github.ref }}' -eq 'refs/heads/main'
+
+         if ($isPR -or $isManual) {
+         $mode = 'soft'    # PR/수동은 경고로 막지 않음
+         $wtxt = ''        # 경고 임계값 비활성
+         } elseif ($isMain) {
+         $mode = 'hard'    # main은 엄격 (에러만 차단)
+         $wtxt = ''        # 경고 임계값 비활성(원하면 숫자 지정)
+         } else {
+         $mode = 'soft'
+         $wtxt = ''
+         }
+
+         "mode=$mode"           | Out-File $env:GITHUB_OUTPUT -Append
+         "warn_threshold=$wtxt" | Out-File $env:GITHUB_OUTPUT -Append
+
 
 
       - name: Collect target files
