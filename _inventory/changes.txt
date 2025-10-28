@@ -1,4 +1,4 @@
 ADDED
 CHANGED
 REMOVED
-scripts/g5/UI/stop-GHMON.ps1
+AUTO-Kobong-Monitoring/unlock_log_node.ps1
