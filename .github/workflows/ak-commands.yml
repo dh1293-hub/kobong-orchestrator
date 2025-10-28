@@ -1,4 +1,4 @@
-name: ak-commands
+name: AK Commands (ChatOps)
 
 on:
   issue_comment:
@@ -6,98 +6,167 @@ on:
   workflow_dispatch:
     inputs:
       pr:
-        description: PR number
+        description: 'PR number'
         required: true
       command:
-        description: AK command
+        description: 'ak command (scan|test|rewrite|fixloop etc.)'
         required: true
-        type: choice
-        options: [scan, test, rewrite, fixloop]
+  # 로그 가드 전용 push 트리거
+  push:
+    paths:
+      - '.github/workflows/ak-commands.yml'
+      - 'logs/**'
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
   issues: write
+  pull-requests: write
   checks: write
+  statuses: write
 
-concurrency:
-  group: ak-${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.issue.number }}-${{ github.event_name == 'workflow_dispatch' && inputs.command || 'cmd' }}
-  cancel-in-progress: false
-
+# ─────────────────────────────────────────────
+# 1) 공통 로그 가드
+# ─────────────────────────────────────────────
 jobs:
-  run-ak:
-    runs-on: ubuntu-24.04
+  no-tracked-logs:
+    name: no-tracked-logs
+    runs-on: ubuntu-latest
     steps:
-      - name: Resolve inputs
-        id: resolve
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Scan for tracked logs
+        id: scan
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "pr=${{ inputs.pr }}" >> "$GITHUB_OUTPUT"
-            echo "cmd=${{ inputs.command }}" >> "$GITHUB_OUTPUT"
-            exit 0
+          set -euo pipefail
+          mapfile -t files < <(git ls-files 'logs/*' ':!:logs/.gitkeep' || true)
+          if [ ${#files[@]} -gt 0 ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Tracked files under logs/"
+              printf '%s\n' "${files[@]}"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
           fi
-          body=$(printf "%s" "${{ github.event.comment.body }}")
-          cmd=$(printf "%s" "$body" | sed -n 's!.*/ak[[:space:]]\+\([a-z0-9-]\+\).*!\1!p')
-          echo "pr=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
-          echo "cmd=$cmd" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout PR head
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-          ref: refs/pull/${{ steps.resolve.outputs.pr }}/head
-          fetch-depth: 1
-
-
-      - name: Bootstrap ak logs
-        run: |
-          mkdir -p logs
-          printf '{"timestamp":"%s","level":"INFO","action":"bootstrap","message":"init"}\n' "$(date -Iseconds)" >> logs/ak7.jsonl
-
-      - name: Hydrate scripts from main if missing
-        shell: bash
-        run: |
-          if [ ! -d scripts/g5 ] || [ ! -f scripts/g5/ak-dispatch.ps1 ]; then
-            echo "::notice::scripts/g5 missing; hydrating from origin/main"
-            git fetch --depth=1 origin main
-            git checkout origin/main -- scripts/g5/
-          fi
-          ls -la scripts/g5
-
-      - name: Dispatch
-        shell: pwsh
-        run: |
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
-            -Command "${{ steps.resolve.outputs.cmd }}" `
-            -Sha "${{ github.sha }}" `
-            -Pr "${{ steps.resolve.outputs.pr }}"
-
-      - name: List ak logs (debug)
+      - name: Set commit status (guard-logs-ignored/no-tracked-logs)
         if: always()
-        run: |
-          echo "::group::ls -la logs"; ls -la logs || true; echo "::endgroup::"
-          echo "::group::tail logs/ak7.jsonl"; tail -n +1 logs/ak7.jsonl || true; echo "::endgroup::"
-
-      - name: Upload ak logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ak7-logs
-          path: logs/ak7.jsonl
-          retention-days: 5
-
-      - name: Comment back (optional)
-        if: ${{ github.event_name == 'issue_comment' || github.event_name == 'workflow_dispatch' }}
         uses: actions/github-script@v7
         with:
           script: |
-            const pr = '${{ steps.resolve.outputs.pr }}';
-            const cmd = '${{ steps.resolve.outputs.cmd }}';
-            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const body = `✅ /ak **${cmd}** started for PR #${pr}\n\nRun: ${url}`;
-            if (context.eventName === 'issue_comment') {
-              await github.rest.issues.createComment({ ...context.repo, issue_number: Number(pr), body });
-            } else {
-              core.summary.addHeading('/ak').addRaw(body).write();
+            const found = '${{ steps.scan.outputs.found }}' === 'true';
+            const state = found ? 'failure' : 'success';
+            const desc  = found ? 'logs/ contains tracked files (except .gitkeep)' : 'OK: no tracked logs';
+            await github.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state,
+              context: 'guard-logs-ignored/no-tracked-logs',
+              description: desc,
+            });
+
+      - name: Fail build if tracked logs found
+        if: steps.scan.outputs.found == 'true'
+        shell: bash
+        run: |
+          echo "Error: Tracked files under logs/:"
+          git ls-files 'logs/*' ':!:logs/.gitkeep' || true
+          exit 1
+
+  # ───────────────────────────────────────────
+  # 2) /ak … 또는 수동 실행
+  # ───────────────────────────────────────────
+  run-command:
+    needs: no-tracked-logs
+    if: needs.no-tracked-logs.result != 'failure'
+    runs-on: windows-latest
+
+    steps:
+      - name: Resolve inputs
+        id: resolve
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let pr = null, cmd = null;
+            if (context.eventName === 'workflow_dispatch') {
+              pr  = Number(core.getInput('pr'));
+              cmd = core.getInput('command');
+            } else if (context.eventName === 'issue_comment') {
+              // PR 코멘트인지 확인
+              if (!context.payload.issue.pull_request) {
+                core.notice('Not a PR comment; skipping.');
+                return;
+              }
+              const body = context.payload.comment.body || '';
+              const m = body.match(/^\/ak\s+(.+)$/i);
+              if (!m) {
+                core.notice('No /ak command found; skipping.');
+                return;
+              }
+              pr  = context.payload.issue.number;
+              cmd = m[1].trim();
             }
+            if (!pr || !cmd) {
+              core.setOutput('skip', 'true');
+              return;
+            }
+            core.setOutput('skip', 'false');
+            core.setOutput('pr',   String(pr));
+            core.setOutput('cmd',  cmd);
+
+      - name: Skip when no command
+        if: steps.resolve.outputs.skip == 'true'
+        run: echo "No command to run."
+
+      - name: Checkout default branch (safe)
+        if: steps.resolve.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          submodules: false
+
+      - name: Ensure dispatcher script
+        if: steps.resolve.outputs.skip != 'true'
+        id: ensure
+        shell: pwsh
+        run: |
+          $path = "scripts/g5/ak-dispatch.ps1"
+          if (-not (Test-Path $path)) { throw "Missing $path" }
+          "path=$path" | Out-File -Append $env:GITHUB_OUTPUT
+
+      - name: Run /ak command
+        if: steps.resolve.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          $pr  = '${{ steps.resolve.outputs.pr }}'
+          $cmd = '${{ steps.resolve.outputs.cmd }}'
+          $sha = '${{ github.sha }}'
+          pwsh -NoProfile -File $env:GITHUB_WORKSPACE/${{ steps.ensure.outputs.path }} -Command $cmd -Pr $pr -Sha $sha
+
+      - name: Upload ak logs (if any)
+        if: always() && steps.resolve.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ak-logs
+          if-no-files-found: ignore
+          path: |
+            logs/ak7.jsonl
+            logs/*.log
+
+      - name: Feedback comment
+        if: always() && steps.resolve.outputs.skip != 'true' && github.event_name == 'issue_comment'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            await github.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: Number('${{ steps.resolve.outputs.pr }}'),
+              body: `✅ /ak **${{ steps.resolve.outputs.cmd }}** started.\nRun: ${url}`
+            })
