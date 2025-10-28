@@ -1,4 +1,4 @@
 ADDED
-AUTO-Kobong/AUTO-Kobong-메뉴얼.md
+.github/workflows/ak-auto.yml
 CHANGED
 REMOVED
