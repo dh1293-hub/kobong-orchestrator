@@ -1,30 +1,33 @@
-# .github/workflows/ak-auto.yml
-name: AK Auto
+# ===========================================
+# AK-AUTO : Kobong-Orchestrator 자동화 실행
+# ===========================================
+# ✔ logs/ 추적파일 차단 (no-tracked-logs 게이트)
+# ✔ 실행 전후 Context 출력
+# ✔ YAML 구조 및 들여쓰기 정합성 보정
+# -------------------------------------------
 
+name: AK Auto
 on:
-  push:
-    branches: [ "main" ]
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "자동화 작업을 실제로 실행하지 않고 검증만 수행"
+        description: 'Dry-run mode (테스트 실행, 실제 명령 제외)'
         required: false
         default: "false"
-
-concurrency:
-  group: ak-auto-${{ github.ref }}
-  cancel-in-progress: true
+  push:
+    branches: [ main ]
 
 permissions:
   contents: read
 
 jobs:
   no-tracked-logs:
-    name: guard-logs-ignored
+    name: Guard logs/ (no tracked logs)
     runs-on: ubuntu-latest
     permissions:
       contents: read
       statuses: write
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,22 +40,22 @@ jobs:
         run: |
           set -euo pipefail
           files="$(git ls-files -- 'logs/*' ':!logs/.gitkeep' || true)"
-          if [ -n "${files}" ]; then
+          if [ -n "$files" ]; then
             echo "has_tracked=true" >> "$GITHUB_OUTPUT"
-            printf '%s\n' "${files}" > tracked.txt
+            echo "$files" > tracked.txt
           else
             echo "has_tracked=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Set commit status (no-tracked-logs = failure)
+      - name: Mark status (fail)
         if: steps.scan.outputs.has_tracked == 'true'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const files = fs.readFileSync('tracked.txt','utf8').trim().split('\n');
-            const preview = files.length ? `${files[0]}${files.length>1?' …':''}` : '';
+            const files = fs.readFileSync('tracked.txt', 'utf8').trim().split('\n');
+            const preview = files.length ? files[0] + (files.length > 1 ? ' …' : '') : '';
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -61,9 +64,9 @@ jobs:
               context: 'guard-logs-ignored/no-tracked-logs',
               description: preview || 'Tracked files under logs/'
             });
-            core.setFailed('Tracked files exist under logs/');
+            core.setFailed(`❌ Tracked log files detected: ${preview}`);
 
-      - name: Set commit status (no-tracked-logs = success)
+      - name: Mark status (success)
         if: steps.scan.outputs.has_tracked == 'false'
         uses: actions/github-script@v7
         with:
@@ -78,21 +81,29 @@ jobs:
               description: 'No tracked files under logs/'
             });
 
-  auto:
-    name: run-automation
+  run-auto:
+    name: Run Auto Tasks
     runs-on: ubuntu-latest
     needs: [ no-tracked-logs ]
     if: needs.no-tracked-logs.result == 'success'
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: false
 
-      - name: Show context
+      - name: Context 확인
         shell: bash
         run: |
-          echo "dry_run: ${{ github.event.inputs.dry_run || 'false' }}"
-          echo "ref: ${{ github.ref }}"
-          echo "sha: ${{ github.sha }}"
-          echo "actor: ${{ github.actor }}"
+          echo "🔹 Actor: ${{ github.actor }}"
+          echo "🔹 Branch: ${{ github.ref }}"
+          echo "🔹 SHA: ${{ github.sha }}"
+          echo "🔹 Dry-run: ${{ github.event.inputs.dry_run || 'false' }}"
+
+      - name: 실행 예시 (자동화 동작)
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        shell: bash
+        run: |
+          echo "자동화 프로세스 시작..."
+          echo "현재 시각: $(date)"
+          echo "✔ 실행 완료!"
