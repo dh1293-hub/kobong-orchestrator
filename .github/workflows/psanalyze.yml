@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   psanalyze:
-    # 라벨 기반 면제: PR에 psa-skip 라벨이 있으면 건너뜀
+    # PR에 'psa-skip' 라벨이 있으면 전체 잡을 건너뜀
     if: ${{ github.event_name != 'pull_request' || !contains(github.event.pull_request.labels.*.name, 'psa-skip') }}
     runs-on: windows-latest
 
@@ -29,7 +29,7 @@ jobs:
       - name: Checkout (full history for PR base)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # ⬅ shallow로 인한 "bad object" 방지
+          fetch-depth: 0
 
       - name: Decide mode & thresholds
         id: cfg
@@ -48,15 +48,15 @@ jobs:
         run: |
           git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
 
-          # 전체 후보(일부 폴더 제외: .git, .githooks 등)
+          # 후보 수집 (.git, .githooks 제외)
           $all = Get-ChildItem -Recurse -File -Include *.ps1,*.psm1,*.psd1 |
                  Where-Object {
                    $_.FullName -notmatch '\\\.git(\\|$)' -and
                    $_.FullName -notmatch '\\\.githooks(\\|$)'
                  } |
-                 Select-Object -ExpandProperty FullName
+                 ForEach-Object FullName
 
-          # 변경 파일(풀리퀘일 때만)
+          # PR이면 변경 파일만
           $changed = @()
           if ('${{ github.event_name }}' -eq 'pull_request') {
             $base='${{ github.event.pull_request.base.sha }}'
@@ -75,7 +75,6 @@ jobs:
             exit 0
           }
 
-          # 대상 목록은 파일로만 보관(멀티라인 GITHUB_OUTPUT 금지)
           [string[]]$targets | Set-Content targets.txt -Encoding utf8
           "count=$($targets.Count)" | Out-File $env:GITHUB_OUTPUT -Append
 
@@ -85,7 +84,7 @@ jobs:
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
 
-            - name: Run analyzer (robust per-file, deep SARIF, relative paths)
+      - name: Run analyzer (per-file, deep SARIF, relative paths)
         id: scan
         if: steps.files.outputs.count != '0'
         shell: pwsh
@@ -94,12 +93,11 @@ jobs:
           $settings = ''
           if (Test-Path './settings.psd1') { $settings = (Resolve-Path './settings.psd1').Path }
 
-          # 대상 파일 목록
+          # 대상 파일
           [string[]]$targets = Get-Content targets.txt | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
 
-          # 리포 루트(상대경로 변환용)
-          $root = (Resolve-Path $env:GITHUB_WORKSPACE).Path
-          $root = $root.TrimEnd('\','/')
+          # 리포 루트(상대경로 변환)
+          $root = (Resolve-Path $env:GITHUB_WORKSPACE).Path.TrimEnd('\','/')
 
           $all = @()
           foreach ($t in $targets) {
@@ -113,18 +111,13 @@ jobs:
 
             $r = Invoke-ScriptAnalyzer @p
             foreach ($i in $r) {
-              # 절대경로 → 리포 상대경로 (Code Scanning 매핑용)
               $abs = (Resolve-Path $i.ScriptPath).Path
-              if ($abs.StartsWith($root)) {
-                $rel = $abs.Substring($root.Length).TrimStart('\','/')
-              } else {
-                $rel = $abs  # 어쩔 수 없으면 절대경로 유지
-              }
+              $rel = $abs.StartsWith($root) ? $abs.Substring($root.Length).TrimStart('\','/') : $abs
               $rel = $rel -replace '\\','/'
 
               $all += [pscustomobject]@{
                 ruleId   = $i.RuleName
-                level    = ($(if ($i.Severity -eq 'Error') {'error'} else {'warning'}))
+                level    = $(if ($i.Severity -eq 'Error') {'error'} else {'warning'})
                 message  = @{ text = $i.Message }
                 locations = @(@{
                   physicalLocation = @{
@@ -142,7 +135,7 @@ jobs:
           "warnings=$warn"         | Out-File $env:GITHUB_OUTPUT -Append
           "used_settings=$settings"| Out-File $env:GITHUB_OUTPUT -Append
 
-          # SARIF 생성 (깊이 충분히)
+          # SARIF (깊이 충분히)
           $pssaVer = (Get-Module PSScriptAnalyzer).Version.ToString()
           $sarif = @{
             version = "2.1.0"
@@ -154,14 +147,13 @@ jobs:
           } | ConvertTo-Json -Depth 50
           [IO.File]::WriteAllText("results.sarif", $sarif, [Text.Encoding]::UTF8)
 
-
-            - name: Upload SARIF (non-blocking)
+      - name: Upload SARIF (non-blocking)
         if: steps.files.outputs.count != '0'
-        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: results.sarif
           category: pssa
+        continue-on-error: true
 
       - name: Findings → Job Summary (top 100)
         if: steps.files.outputs.count != '0'
@@ -182,7 +174,6 @@ jobs:
             $rows | Sort-Object | Select-Object -First 100 | ForEach-Object { "- $_" } | Out-File $env:GITHUB_STEP_SUMMARY -Append
           }
 
-
       - name: Gate (errors + warning threshold)
         if: steps.files.outputs.count != '0'
         shell: pwsh
@@ -198,7 +189,7 @@ jobs:
           switch ($mode) {
             'monitor' { }
             'soft'    { if ($err -gt 0) { $fail = $true; $reasons += "$err error(s)" } }
-            'hard'    { if ($err -gt 0) { $fail = $true; $reasons += "$err error(s)" } } # 필요시 Warning도 포함
+            'hard'    { if ($err -gt 0) { $fail = $true; $reasons += "$err error(s)" } } # 경고 차단 원하면 여기에 추가
           }
 
           if ($wth -and ($warn -gt [int]$wth)) {
@@ -214,8 +205,7 @@ jobs:
           if ($useSet) { $summary += "- Settings: $useSet" } else { $summary += "- Settings: (default)" }
           $summary += "- Errors: $err"
           $summary += "- Warnings: $warn"
-          if ($wth)   { $summary += "- Warn threshold: $wth"
-          }
+          if ($wth)   { $summary += "- Warn threshold: $wth" }
           $summary += "- Gate: " + ($(if ($fail) { "❌ FAIL ($($reasons -join '; '))" } else { "✅ PASS" }))
           $summary -join "`n" | Out-File $env:GITHUB_STEP_SUMMARY -Append
 
