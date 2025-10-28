@@ -51,7 +51,11 @@ jobs:
           $all = Get-ChildItem -Recurse -File -Include *.ps1,*.psm1,*.psd1 |
                  Where-Object {
                    $_.FullName -notmatch '\\\.git(\\|$)' -and
-                   $_.FullName -notmatch '\\\.githooks(\\|$)'
+                   $_.FullName -notmatch '\\\.githooks(\\|$)' -and
+                   $_.Name -notmatch '복사본' -and                    # 👈 한글 '복사본' 제외
+                   $_.Name -notmatch '(?i)\bcopy\b' -and              # 👈 copy
+                   $_.Name -notmatch '(?i)\bbackup\b' -and            # 👈 backup
+                   $_.Name -notmatch '\.bak($|\.)'                    # 👈 .bak
                  } | ForEach-Object FullName
 
           $changed = @()
@@ -68,12 +72,13 @@ jobs:
 
           if (-not $targets -or $targets.Count -eq 0) {
             "count=0" | Out-File $env:GITHUB_OUTPUT -Append
-            "# PSScriptAnalyzer Summary`n- Mode: $mode`n- Targets: 0 (skipped)`n- Reason: no PowerShell files" | Out-File $env:GITHUB_STEP_SUMMARY -Append
+            "# PSScriptAnalyzer Summary`n- Mode: $mode`n- Targets: 0 (skipped)" | Out-File $env:GITHUB_STEP_SUMMARY -Append
             exit 0
           }
 
           [string[]]$targets | Set-Content targets.txt -Encoding utf8
           "count=$($targets.Count)" | Out-File $env:GITHUB_OUTPUT -Append
+
 
       - name: Install PSScriptAnalyzer
         shell: pwsh
@@ -81,68 +86,79 @@ jobs:
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
 
-      - name: Run analyzer (per-file → SARIF, relative paths)
+      - name: Run analyzer (per-file → SARIF, robust)
         id: scan
         if: steps.files.outputs.count != '0'
         shell: pwsh
         run: |
-          $settings = ''
-          if (Test-Path './settings.psd1') { $settings = (Resolve-Path './settings.psd1').Path }
+          # 1) settings.psd1: 레포 루트 고정
+          $settings = Join-Path $env:GITHUB_WORKSPACE 'settings.psd1'
+          if (-not (Test-Path $settings)) { $settings = '' }
+          if ($settings) { Write-Host "Settings: $settings" }  # 확인용
 
+          # 대상 목록
           [string[]]$targets = Get-Content targets.txt | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
+
+          # 리포 루트 기준 상대경로 + URI 인코딩 함수
           $root = (Resolve-Path $env:GITHUB_WORKSPACE).Path.TrimEnd('\','/')
+          function Encode-UriPath([string]$rel) {
+            $rel = $rel -replace '\\','/'
+            $seg = $rel -split '/'
+            return ($seg | ForEach-Object { [System.Uri]::EscapeDataString($_) }) -join '/'
+          }
 
           $all = @()
           foreach ($t in $targets) {
             $p = @{ Path=$t; Recurse=$true; Severity=@('Error','Warning'); Verbose=$false }
             if ($settings) { $p['Settings'] = $settings }
+
             $r = Invoke-ScriptAnalyzer @p
             foreach ($i in $r) {
+              # 경로 → 상대경로
               $abs = (Resolve-Path $i.ScriptPath).Path
               $rel = $abs.StartsWith($root) ? $abs.Substring($root.Length).TrimStart('\','/') : $abs
-              $rel = $rel -replace '\\','/'
+              $uri = Encode-UriPath $rel
+
+              # 2) 줄 번호: 없거나 null이면 region 생략(또는 1로 보정)
+              $loc = @{
+                physicalLocation = @{
+                  artifactLocation = @{ uri = $uri }
+                }
+              }
+              if ($i.PSObject.Properties.Name -contains 'Line' -and $i.Line) {
+                $line = [int]$i.Line
+                if ($line -lt 1) { $line = 1 }
+                $loc.physicalLocation.region = @{ startLine = $line }
+              }
+
               $all += [pscustomobject]@{
                 ruleId   = $i.RuleName
-                level    = ($(if ($i.Severity -eq 'Error') {'error'} else {'warning'}))
+                level    = $(if ($i.Severity -eq 'Error') {'error'} else {'warning'})
                 message  = @{ text = $i.Message }
-                locations = @(@{
-                  physicalLocation = @{
-                    artifactLocation = @{ uri = $rel }
-                    region = @{ startLine = $i.Line }
-                  }
-                })
+                locations = @($loc)
               }
             }
           }
 
-          # 에러/경고 카운트 출력
+          # 카운트 출력
           $err  = ($all | Where-Object { $_.level -eq 'error'   }).Count
           $warn = ($all | Where-Object { $_.level -eq 'warning' }).Count
           "errors=$err"            | Out-File $env:GITHUB_OUTPUT -Append
           "warnings=$warn"         | Out-File $env:GITHUB_OUTPUT -Append
           "used_settings=$settings"| Out-File $env:GITHUB_OUTPUT -Append
 
-          # 규칙 메타(선택) 추가 → 업로드 도구가 좋아함
-          $rules = $all.ruleId | Sort-Object -Unique | ForEach-Object { @{ id = $_ } }
-
+          # SARIF 직렬화(깊이 충분히) + JSON 검증
           $pssaVer = (Get-Module PSScriptAnalyzer).Version.ToString()
-          $sarifObj = [ordered]@{
+          $sarif = @{
             version = "2.1.0"
             runs    = @(@{
-              tool = @{ driver = @{
-                  name="PSScriptAnalyzer"; version=$pssaVer;
-                  informationUri="https://github.com/PowerShell/PSScriptAnalyzer";
-                  rules=$rules
-              } }
+              tool = @{ driver = @{ name = "PSScriptAnalyzer"; version = $pssaVer } }
               results = $all
             })
-          }
-
-          # SARIF 생성 + **사전 검증**(JSON 문법)
-          $sarifJson = $sarifObj | ConvertTo-Json -Depth 100
-          $sarifJson | Set-Content -Path results.sarif -Encoding utf8
-          # 파싱 검증(문법 오류 시 명확히 실패)
+          } | ConvertTo-Json -Depth 100
+          $sarif | Set-Content -Path results.sarif -Encoding utf8
           Get-Content results.sarif -Raw | ConvertFrom-Json | Out-Null
+
 
       - name: Upload SARIF (non-blocking)
         if: steps.files.outputs.count != '0'
