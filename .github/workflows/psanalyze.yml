@@ -183,39 +183,53 @@ jobs:
           }
 
 
-      - name: Gate (errors + warning threshold)
+      - name: Gate (critical errors + warning threshold)
         if: steps.files.outputs.count != '0'
         shell: pwsh
         run: |
-          $mode   = '${{ steps.cfg.outputs.mode }}'
-          $err    = [int]'${{ steps.scan.outputs.errors }}'
-          $warn   = [int]'${{ steps.scan.outputs.warnings }}'
-          $wth    = '${{ steps.cfg.outputs.warn_threshold }}'
-          $useSet = '${{ steps.scan.outputs.used_settings }}'
+          $mode   = '${{ steps.cfg.outputs.mode }}'           # monitor | soft | hard
+          $wth    = '${{ steps.cfg.outputs.warn_threshold }}' # warnings threshold
           $fail   = $false
           $reasons = @()
 
+          # SARIF 읽기
+          $sarif = Get-Content results.sarif -Raw | ConvertFrom-Json
+          $res   = $sarif.runs[0].results
+
+          # 전체 카운트
+          $errAll  = ($res | Where-Object { $_.level -eq 'error'   }).Count
+          $warnAll = ($res | Where-Object { $_.level -eq 'warning' }).Count
+
+          # ✅ 여기에 “차단 대상”으로 삼을 **중요 룰**만 나열 (필요시 조정)
+          $criticalRules = @(
+            'PSAvoidUsingInvokeExpression',
+            'PSAvoidUsingPlainTextForPassword',
+            'PSUseSupportsShouldProcess',
+            'PSAvoidUsingConvertToSecureStringWithPlainText'
+          )
+
+          $errCrit = ($res | Where-Object { $_.level -eq 'error' -and $criticalRules -contains $_.ruleId }).Count
+          $errNonCrit = $errAll - $errCrit
+
           switch ($mode) {
-            'monitor' { }
-            'soft'    { if ($err -gt 0) { $fail = $true; $reasons += "$err error(s)" } }
-            'hard'    { if ($err -gt 0) { $fail = $true; $reasons += "$err error(s)" } } # 필요시 Warning도 포함
+            'monitor' { }                                    # 항상 통과
+            'soft'    { if ($errCrit -gt 0) { $fail = $true; $reasons += "$errCrit critical error(s)" } }
+            'hard'    { if ($errAll  -gt 0) { $fail = $true; $reasons += "$errAll error(s)" } }   # 모든 에러 차단
           }
 
-          if ($wth -and ($warn -gt [int]$wth)) {
+          if ($wth -and ($warnAll -gt [int]$wth)) {
             $fail = $true
-            $reasons += "warnings $warn > threshold $wth"
+            $reasons += "warnings $warnAll > threshold $wth"
           }
 
-          $count = [int]'${{ steps.files.outputs.count }}'
+          # 요약
           $summary = @()
           $summary += "### PSScriptAnalyzer Summary"
           $summary += "- Mode: $mode"
-          $summary += "- Targets: $count"
-          if ($useSet) { $summary += "- Settings: $useSet" } else { $summary += "- Settings: (default)" }
-          $summary += "- Errors: $err"
-          $summary += "- Warnings: $warn"
-          if ($wth)   { $summary += "- Warn threshold: $wth"
-          }
+          $summary += "- Errors (critical/non-critical): $errCrit / $errNonCrit"
+          $summary += "- Warnings: $warnAll"
+          $summary += "- Blocking rules: " + ($criticalRules -join ', ')
+          if ($wth) { $summary += "- Warn threshold: $wth" }
           $summary += "- Gate: " + ($(if ($fail) { "❌ FAIL ($($reasons -join '; '))" } else { "✅ PASS" }))
           $summary -join "`n" | Out-File $env:GITHUB_STEP_SUMMARY -Append
 
