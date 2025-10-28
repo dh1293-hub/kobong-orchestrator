@@ -45,13 +45,10 @@ jobs:
       - name: Checkout PR head
         uses: actions/checkout@v4
         with:
-<<<<<<< HEAD
-          ref: refs/pull/${{ github.event.issue.number }}/head
-=======
           repository: ${{ github.repository }}
           ref: refs/pull/${{ steps.resolve.outputs.pr }}/head
->>>>>>> a9ec5fd26ec71c2ca43a908cf77911e40986a86d
           fetch-depth: 1
+
 
       - name: Bootstrap ak logs
         run: |
