@@ -85,7 +85,7 @@ jobs:
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
 
-      - name: Run analyzer (robust per-file)
+            - name: Run analyzer (robust per-file, deep SARIF, relative paths)
         id: scan
         if: steps.files.outputs.count != '0'
         shell: pwsh
@@ -94,10 +94,13 @@ jobs:
           $settings = ''
           if (Test-Path './settings.psd1') { $settings = (Resolve-Path './settings.psd1').Path }
 
-          # 대상 목록 읽기
+          # 대상 파일 목록
           [string[]]$targets = Get-Content targets.txt | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
 
-          # 파일별로 별도 호출 (Path 배열 전달 이슈 회피)
+          # 리포 루트(상대경로 변환용)
+          $root = (Resolve-Path $env:GITHUB_WORKSPACE).Path
+          $root = $root.TrimEnd('\','/')
+
           $all = @()
           foreach ($t in $targets) {
             $p = @{
@@ -107,46 +110,59 @@ jobs:
               Verbose  = $false
             }
             if ($settings) { $p['Settings'] = $settings }
+
             $r = Invoke-ScriptAnalyzer @p
-            if ($r) { $all += $r }
+            foreach ($i in $r) {
+              # 절대경로 → 리포 상대경로 (Code Scanning 매핑용)
+              $abs = (Resolve-Path $i.ScriptPath).Path
+              if ($abs.StartsWith($root)) {
+                $rel = $abs.Substring($root.Length).TrimStart('\','/')
+              } else {
+                $rel = $abs  # 어쩔 수 없으면 절대경로 유지
+              }
+              $rel = $rel -replace '\\','/'
+
+              $all += [pscustomobject]@{
+                ruleId   = $i.RuleName
+                level    = ($(if ($i.Severity -eq 'Error') {'error'} else {'warning'}))
+                message  = @{ text = $i.Message }
+                locations = @(@{
+                  physicalLocation = @{
+                    artifactLocation = @{ uri = $rel }
+                    region = @{ startLine = $i.Line }
+                  }
+                })
+              }
+            }
           }
 
-          $err  = ($all | Where-Object Severity -eq 'Error').Count
-          $warn = ($all | Where-Object Severity -eq 'Warning').Count
-          "errors=$err"        | Out-File $env:GITHUB_OUTPUT -Append
-          "warnings=$warn"     | Out-File $env:GITHUB_OUTPUT -Append
-          "used_settings=$settings" | Out-File $env:GITHUB_OUTPUT -Append
+          $err  = ($all | Where-Object { $_.level -eq 'error' }).Count
+          $warn = ($all | Where-Object { $_.level -eq 'warning' }).Count
+          "errors=$err"            | Out-File $env:GITHUB_OUTPUT -Append
+          "warnings=$warn"         | Out-File $env:GITHUB_OUTPUT -Append
+          "used_settings=$settings"| Out-File $env:GITHUB_OUTPUT -Append
 
-          # SARIF(minimal) 생성
+          # SARIF 생성 (깊이 충분히)
+          $pssaVer = (Get-Module PSScriptAnalyzer).Version.ToString()
           $sarif = @{
             version = "2.1.0"
-            runs = @(@{
-              tool = @{ driver = @{ name = "PSScriptAnalyzer" } }
-              results = @(
-                $all | ForEach-Object {
-                  @{
-                    ruleId  = $_.RuleName
-                    level   = (($_.Severity -eq 'Error') ? 'error' : 'warning')
-                    message = @{ text = $_.Message }
-                    locations = @(@{
-                      physicalLocation = @{
-                        artifactLocation = @{ uri = $_.ScriptPath }
-                        region = @{ startLine = $_.Line }
-                      }
-                    })
-                  }
-                }
-              )
+            runs    = @(@{
+              tool = @{ driver = @{ name = "PSScriptAnalyzer"; version = $pssaVer } }
+              invocations = @(@{ executionSuccessful = $true })
+              results = $all
             })
-          } | ConvertTo-Json -Depth 6
-          $sarif | Out-File results.sarif -Encoding utf8
+          } | ConvertTo-Json -Depth 50
+          [IO.File]::WriteAllText("results.sarif", $sarif, [Text.Encoding]::UTF8)
 
 
-      - name: Upload SARIF
+            - name: Upload SARIF (non-blocking)
         if: steps.files.outputs.count != '0'
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: results.sarif
+          category: pssa
+
 
       - name: Gate (errors + warning threshold)
         if: steps.files.outputs.count != '0'
