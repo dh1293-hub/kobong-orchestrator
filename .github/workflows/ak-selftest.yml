@@ -7,15 +7,18 @@
 # 안전 가드 : 모듈 설치 비대화식, 스모크는 help만(부작용 최소화)
 # 산출물    : Job Summary/콘솔 로그
 # =========================================================
-name: ak-selftest
-
+# (추가/보강) 트리거
 on:
   pull_request:
     paths:
       - scripts/g5/**
+      - .github/workflows/ak-selftest.yml   # ← 워크플로 수정 시에도 실행
   push:
     paths:
       - scripts/g5/**
+      - .github/workflows/ak-selftest.yml   # ← main에 머지돼도 실행
+  workflow_dispatch: {}                      # ← 수동 실행 버튼 활성화
+
 
 # 최소 권한(읽기만)
 permissions:
