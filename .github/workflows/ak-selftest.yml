@@ -9,16 +9,17 @@
 # =========================================================
 name: ak-selftest
 
-"on":
+on:
   pull_request:
     paths:
-      - "scripts/g5/**"
+      - scripts/g5/**
   push:
     paths:
-      - "scripts/g5/**"
+      - scripts/g5/**
 
 # 최소 권한(읽기만)
-permissions: {}
+permissions:
+  contents: read
 
 jobs:
   analyze:
@@ -47,14 +48,15 @@ jobs:
           Write-Output 'PSScriptAnalyzer: no errors'
 
   smoke:
-    name: Smoke (help)
+    name: Smoke help
     runs-on: ubuntu-latest
     needs: analyze
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: "Smoke: ak-dispatch.ps1 -Command help"
+      # ⚠️ 여기서는 name에 콜론(:)을 쓰지 않습니다.
+      - name: Smoke ak-dispatch help
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
