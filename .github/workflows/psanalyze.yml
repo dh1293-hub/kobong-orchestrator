@@ -94,11 +94,31 @@ jobs:
           "count=$($targets.Count)" | Out-File $env:GITHUB_OUTPUT -Append
 
 
-      - name: Install PSScriptAnalyzer
+      - name: Install PSScriptAnalyzer (robust)
         shell: pwsh
         run: |
-          Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          $ErrorActionPreference = 'Stop'
+          # WinPS 5.1일 수 있으니 TLS1.2 강제
+          if ($PSVersionTable.PSEdition -eq 'Desktop') {
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          }
+          # (Windows 전용) NuGet 공급자 보장
+          if ($IsWindows -and -not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+          Install-PackageProvider -Name NuGet -Force -Scope CurrentUser | Out-Null
+          }
+          # PSGallery 없으면 등록, 있으면 신뢰로 변경
+          $pg = Get-PSRepository -Name 'PSGallery' -ErrorAction SilentlyContinue
+          if (-not $pg) {
+          Register-PSRepository -Name 'PSGallery' `
+          -SourceLocation 'https://www.powershellgallery.com/api/v2' `
+          -ScriptSourceLocation 'https://www.powershellgallery.com/api/v2' `
+          -InstallationPolicy Trusted
+          } else {
+          try { Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted } catch {}
+          }
+          # 설치 (라이선스 자동 동의)
+          Install-Module PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
+
 
       - name: Run analyzer (per-file → SARIF, robust)
         id: scan
