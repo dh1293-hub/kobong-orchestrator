@@ -1,35 +1,36 @@
 # ===========================================
-# AK-COMMANDS : Kobong-Orchestrator ChatOps
+# AK-COMMANDS (fixed) : Kobong-Orchestrator ChatOps
+# - PR 코멘트의 '/ak <cmd>' 또는 수동 inputs 로 실행
+# - scripts/g5/ak-dispatch.ps1 를 호출하여 help/test/scan/fixloop 수행
+# - logs/ak7.jsonl 아티팩트 업로드
+# - 동시실행 격리: 레포+PR+cmd 기준
 # ===========================================
-# ✔ logs/ 추적파일 차단 (no-tracked-logs 게이트)
-# ✔ 수동 트리거 입력(cmd/args)
-# ✔ YAML 구조 오류 및 commitStatus 오류 정정
-# -------------------------------------------
-
 name: ak-commands
 
-on:
+"on":
   issue_comment:
     types: [created]
   workflow_dispatch:
     inputs:
       pr:
-        description: PR number
+        description: "Pull request number"
         required: true
       command:
-        description: AK command
+        description: "ak subcommand (help|test|scan|fixloop)"
         required: true
-        type: choice
-        options: [scan, test, rewrite, fixloop]
+      rawargs:
+        description: "Optional raw args for the command"
+        required: false
+        default: ""
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
   issues: write
+  pull-requests: write
   checks: write
 
 concurrency:
-  group: ak-${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.issue.number }}-${{ github.event_name == 'workflow_dispatch' && inputs.command || 'cmd' }}
+  group: ak-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.issue.number }}-${{ github.event_name == 'workflow_dispatch' && inputs.command || 'cmd' }}
   cancel-in-progress: false
 
 jobs:
@@ -43,24 +44,23 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "pr=${{ inputs.pr }}" >> "$GITHUB_OUTPUT"
             echo "cmd=${{ inputs.command }}" >> "$GITHUB_OUTPUT"
+            echo "raw=${{ inputs.rawargs }}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           body=$(printf "%s" "${{ github.event.comment.body }}")
           cmd=$(printf "%s" "$body" | sed -n 's!.*/ak[[:space:]]\+\([a-z0-9-]\+\).*!\1!p')
           echo "pr=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
           echo "cmd=$cmd" >> "$GITHUB_OUTPUT"
+          echo "raw=" >> "$GITHUB_OUTPUT"
 
       - name: Checkout PR head
         uses: actions/checkout@v4
         with:
-        
-          ref: refs/pull/${{ github.event.issue.number }}/head
-          repository: ${{ github.repository }}
           ref: refs/pull/${{ steps.resolve.outputs.pr }}/head
-              a9ec5fd26ec71c2ca43a908cf77911e40986a86d
           fetch-depth: 1
 
       - name: Bootstrap ak logs
+        shell: bash
         run: |
           mkdir -p logs
           printf '{"timestamp":"%s","level":"INFO","action":"bootstrap","message":"init"}\n' "$(date -Iseconds)" >> logs/ak7.jsonl
@@ -78,16 +78,11 @@ jobs:
       - name: Dispatch
         shell: pwsh
         run: |
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 `
-            -Command "${{ steps.resolve.outputs.cmd }}" `
-            -Sha "${{ github.sha }}" `
-            -Pr "${{ steps.resolve.outputs.pr }}"
-
-      - name: List ak logs (debug)
-        if: always()
-        run: |
-          echo "::group::ls -la logs"; ls -la logs || true; echo "::endgroup::"
-          echo "::group::tail logs/ak7.jsonl"; tail -n +1 logs/ak7.jsonl || true; echo "::endgroup::"
+          $ErrorActionPreference='Continue'
+          $cmd    = '${{ steps.resolve.outputs.cmd }}'
+          $pr     = '${{ steps.resolve.outputs.pr }}'
+          $raw    = '${{ steps.resolve.outputs.raw }}'
+          ./scripts/g5/ak-dispatch.ps1 -Command $cmd -Pr $pr -RawArgs $raw
 
       - name: Upload ak logs
         if: always()
@@ -95,9 +90,10 @@ jobs:
         with:
           name: ak7-logs
           path: logs/ak7.jsonl
-          retention-days: 5
+          if-no-files-found: warn
+          retention-days: 7
 
-      - name: Comment back (optional)
+      - name: Post start/result
         if: ${{ github.event_name == 'issue_comment' || github.event_name == 'workflow_dispatch' }}
         uses: actions/github-script@v7
         with:
@@ -107,8 +103,7 @@ jobs:
             const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const body = `✅ /ak **${cmd}** started for PR #${pr}\n\nRun: ${url}`;
             if (context.eventName === 'issue_comment') {
-              await github.rest.issues.createComment({ ...context.repo, issue_number: Number(pr), body });
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: Number(pr), body });
             } else {
               core.summary.addHeading('/ak').addRaw(body).write();
             }
-
