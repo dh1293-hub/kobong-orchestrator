@@ -4,14 +4,14 @@
 # 동작 방식 : pull_request_target(labeled/opened/reopened/synchronize),
 #             또는 workflow_dispatch(pr 입력)
 # 연관 파일 : scripts/g5/ak-dispatch.ps1
-#             .github/workflows/ak-exec.yml (ChatOps 수동 실행기)
 # 안전 가드 : - PR 코드는 zipball로 받고, 실행 스크립트는 항상 main에서 하이드레이트
 #             - Apply는 ak:auto-apply 라벨 + OWNER일 때만
 # 산출물    : PR 코멘트(요약), Artifact: ak7-logs (logs/ak7.jsonl)
+# 상태 라벨 : ak:stage:test-ok / ak:stage:scan-ok / ak:stage:preview-ok
 # =========================================================
 name: ak-auto
 
-on:
+"on":
   pull_request_target:
     types: [labeled, opened, reopened, synchronize]
   workflow_dispatch:
@@ -42,107 +42,38 @@ jobs:
             const prNum = (context.eventName === 'workflow_dispatch')
               ? Number(core.getInput('pr'))
               : context.payload.pull_request.number;
-            const {data: pr} = await github.rest.pulls.get({
-              owner: context.repo.owner, repo: context.repo.repo, pull_number: prNum
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNum
             });
-            core.setOutput('num', prNum.toString());
+            core.setOutput('num', String(prNum));
             core.setOutput('sha', pr.head.sha);
 
---- a/.github/workflows/ak-auto.yml
-+++ b/.github/workflows/ak-auto.yml
-@@
--      - name: /ak test
-+      - name: /ak test
-+        id: step_test
-         if: ${{ steps.gate.outputs.skip != 'true' }}
-         shell: pwsh
-         run: ./scripts/g5/ak-dispatch.ps1 -Command test -Pr '${{ steps.pr.outputs.num }}'
-+
-+      - name: Label stage test-ok
-+        if: ${{ steps.gate.outputs.skip != 'true' && steps.step_test.outcome == 'success' }}
-+        uses: actions/github-script@v7
-+        with:
-+          script: |
-+            const pr = Number('${{ steps.pr.outputs.num }}');
-+            const {owner, repo} = context.repo;
-+            const label = 'ak:stage:test-ok';
-+            try {
-+              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
-+            } catch (e) {
-+              try { await github.rest.issues.createLabel({owner, repo, name: label, color: '0e8a16'}); } catch (_) {}
-+              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
-+            }
-@@
--      - name: /ak scan --all
-+      - name: /ak scan --all
-+        id: step_scan
-         if: ${{ steps.gate.outputs.skip != 'true' }}
-         shell: pwsh
-         run: ./scripts/g5/ak-dispatch.ps1 -Command scan -RawArgs '--all' -Pr '${{ steps.pr.outputs.num }}'
-+
-+      - name: Label stage scan-ok
-+        if: ${{ steps.gate.outputs.skip != 'true' && steps.step_scan.outcome == 'success' }}
-+        uses: actions/github-script@v7
-+        with:
-+          script: |
-+            const pr = Number('${{ steps.pr.outputs.num }}');
-+            const {owner, repo} = context.repo;
-+            const label = 'ak:stage:scan-ok';
-+            try {
-+              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
-+            } catch (e) {
-+              try { await github.rest.issues.createLabel({owner, repo, name: label, color: '1f77b4'}); } catch (_) {}
-+              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
-+            }
-@@
--      - name: /ak fixloop preview
-+      - name: /ak fixloop preview
-+        id: step_preview
-         if: ${{ steps.gate.outputs.skip != 'true' }}
-         shell: pwsh
-         run: |
-           $ErrorActionPreference='Continue'
-           ./scripts/g5/ak-dispatch.ps1 -Command fixloop -RawArgs 'preview' -Pr '${{ steps.pr.outputs.num }}' ; exit 0
-+
-+      - name: Label stage preview-ok
-+        if: ${{ steps.gate.outputs.skip != 'true' && steps.step_preview.outcome == 'success' }}
-+        uses: actions/github-script@v7
-+        with:
-+          script: |
-+            const pr = Number('${{ steps.pr.outputs.num }}');
-+            const {owner, repo} = context.repo;
-+            const label = 'ak:stage:preview-ok';
-+            try {
-+              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
-+            } catch (e) {
-+              try { await github.rest.issues.createLabel({owner, repo, name: label, color: 'fbca04'}); } catch (_) {}
-+              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
-+            }
-
-            
-
-      - name: Check required label ak:auto
+      - name: Gate: require ak:auto label
         id: gate
         uses: actions/github-script@v7
         with:
           script: |
             const pr = Number('${{ steps.pr.outputs.num }}');
             const {owner, repo} = context.repo;
-            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
-            const ok = labels.some(l => (l.name || '').toLowerCase() === 'ak:auto');
-            core.setOutput('skip', ok ? 'false' : 'true');
-            if (!ok) {
+            const { data: labels } = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
+            const has = labels.some(l => (l.name||'').toLowerCase() === 'ak:auto');
+            if (!has) {
               await github.rest.issues.createComment({
                 owner, repo, issue_number: pr,
-                body: 'ℹ️ 이 PR에는 `ak:auto` 라벨이 없어 자동 실행을 건너뜁니다.'
+                body: 'ℹ️ `ak:auto` 라벨이 없어 자동 시퀀스를 건너뜁니다.'
               });
+              core.setOutput('skip','true');
+            } else {
+              core.setOutput('skip','false');
             }
 
       - name: Stop when no label
         if: ${{ steps.gate.outputs.skip == 'true' }}
         run: echo "skip"
 
-      # === PR 소스: zipball로 전개(서브모듈/깃 의존 제거) ===
+      # === PR 소스: zipball로 전개(깃 의존 최소화) ===
       - name: Download PR source zipball
         if: ${{ steps.gate.outputs.skip != 'true' }}
         shell: pwsh
@@ -159,15 +90,14 @@ jobs:
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; "X-GitHub-Api-Version"="2022-11-28" }
           $url = "https://api.github.com/repos/$env:REPO/zipball/$env:SHA"
           Invoke-WebRequest -Headers $headers -Uri $url -OutFile $zip
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          [IO.Compression.ZipFile]::ExtractToDirectory($zip,$tmp)
-          $root = Get-ChildItem $tmp | ?{ $_.PSIsContainer } | Select-Object -First 1
+          Expand-Archive -Path $zip -DestinationPath $tmp -Force
+          $root = Get-ChildItem $tmp | Where-Object {$_.PSIsContainer} | Select-Object -First 1
           # 워크스페이스 클린 후 전개
-          Get-ChildItem -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+          Get-ChildItem -Force | Where-Object {$_.Name -notin '.', '..'} | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
           Get-ChildItem -Force $root.FullName | Copy-Item -Recurse -Force -Destination .
 
-      # === 실행 스크립트: 항상 main에서 하이드레이트 ===
-      - name: Hydrate scripts/g5 from main via zipball
+      # === scripts/g5 하이드레이트: main에서 보장 ===
+      - name: Hydrate scripts/g5 from main
         if: ${{ steps.gate.outputs.skip != 'true' }}
         shell: pwsh
         env:
@@ -182,9 +112,8 @@ jobs:
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; "X-GitHub-Api-Version"="2022-11-28" }
           $url = "https://api.github.com/repos/$env:REPO/zipball/main"
           Invoke-WebRequest -Headers $headers -Uri $url -OutFile $zip
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          [IO.Compression.ZipFile]::ExtractToDirectory($zip,$tmp)
-          $root = Get-ChildItem $tmp | ?{ $_.PSIsContainer } | Select-Object -First 1
+          Expand-Archive -Path $zip -DestinationPath $tmp -Force
+          $root = Get-ChildItem $tmp | Where-Object {$_.PSIsContainer} | Select-Object -First 1
           if (-not (Test-Path "$($root.FullName)/scripts/g5")) { throw "scripts/g5 not found" }
           Remove-Item -Recurse -Force scripts/g5 -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force scripts | Out-Null
@@ -198,6 +127,15 @@ jobs:
           mkdir -p logs
           [ -s logs/ak7.jsonl ] || printf '{"ts":"%s","lvl":"INFO","msg":"init"}\n' "$(date -Iseconds)" >> logs/ak7.jsonl
 
+      # === 워크플로 린트(actionlint) : 오류 선제 탐지 ===
+      - name: Workflow lint (actionlint)
+        if: ${{ steps.gate.outputs.skip != 'true' }}
+        uses: reviewdog/action-actionlint@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-check
+          level: error
+
       - name: /ak help
         if: ${{ steps.gate.outputs.skip != 'true' }}
         shell: pwsh
@@ -205,20 +143,69 @@ jobs:
 
       - name: /ak test
         if: ${{ steps.gate.outputs.skip != 'true' }}
+        id: step_test
         shell: pwsh
         run: ./scripts/g5/ak-dispatch.ps1 -Command test -Pr '${{ steps.pr.outputs.num }}'
 
+      - name: Label stage: test-ok
+        if: ${{ steps.gate.outputs.skip != 'true' && steps.step_test.outcome == 'success' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = Number('${{ steps.pr.outputs.num }}');
+            const {owner, repo} = context.repo;
+            const label = 'ak:stage:test-ok';
+            try {
+              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
+            } catch (e) {
+              try { await github.rest.issues.createLabel({owner, repo, name: label, color: '0e8a16'}); } catch (_){}
+              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
+            }
+
       - name: /ak scan --all
         if: ${{ steps.gate.outputs.skip != 'true' }}
+        id: step_scan
         shell: pwsh
         run: ./scripts/g5/ak-dispatch.ps1 -Command scan -RawArgs '--all' -Pr '${{ steps.pr.outputs.num }}'
 
+      - name: Label stage: scan-ok
+        if: ${{ steps.gate.outputs.skip != 'true' && steps.step_scan.outcome == 'success' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = Number('${{ steps.pr.outputs.num }}');
+            const {owner, repo} = context.repo;
+            const label = 'ak:stage:scan-ok';
+            try {
+              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
+            } catch (e) {
+              try { await github.rest.issues.createLabel({owner, repo, name: label, color: '1f77b4'}); } catch (_){}
+              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
+            }
+
       - name: /ak fixloop preview
         if: ${{ steps.gate.outputs.skip != 'true' }}
+        id: step_preview
         shell: pwsh
         run: |
           $ErrorActionPreference='Continue'
-          ./scripts/g5/ak-dispatch.ps1 -Command fixloop -RawArgs 'preview' -Pr '${{ steps.pr.outputs.num }}' ; exit 0
+          ./scripts/g5/ak-dispatch.ps1 -Command fixloop -RawArgs 'preview' -Pr '${{ steps.pr.outputs.num }}'
+          exit 0
+
+      - name: Label stage: preview-ok
+        if: ${{ steps.gate.outputs.skip != 'true' && steps.step_preview.outcome == 'success' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = Number('${{ steps.pr.outputs.num }}');
+            const {owner, repo} = context.repo;
+            const label = 'ak:stage:preview-ok';
+            try {
+              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
+            } catch (e) {
+              try { await github.rest.issues.createLabel({owner, repo, name: label, color: 'fbca04'}); } catch (_){}
+              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
+            }
 
       - name: Decide apply
         if: ${{ steps.gate.outputs.skip != 'true' }}
@@ -228,11 +215,11 @@ jobs:
           script: |
             const pr = Number('${{ steps.pr.outputs.num }}');
             const {owner, repo} = context.repo;
-            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
-            const doApply = labels.some(l => (l.name || '').toLowerCase() === 'ak:auto-apply');
+            const { data: labels } = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
+            const doApply = labels.some(l => (l.name||'').toLowerCase() === 'ak:auto-apply');
             core.setOutput('do', doApply ? 'true' : 'false');
 
-      - name: /ak fixloop apply
+      - name: /ak fixloop apply (OWNER only)
         if: ${{ steps.gate.outputs.skip != 'true' && steps.apply.outputs.do == 'true' && github.actor == github.repository_owner }}
         shell: pwsh
         run: ./scripts/g5/ak-dispatch.ps1 -Command fixloop -RawArgs 'apply' -Pr '${{ steps.pr.outputs.num }}'
@@ -243,10 +230,10 @@ jobs:
         with:
           name: ak7-logs
           path: logs/ak7.jsonl
-          if-no-files-found: ignore
+          if-no-files-found: warn
           retention-days: 7
 
-      - name: Summarize to PR
+      - name: Summarize
         if: always()
         uses: actions/github-script@v7
         env:
@@ -260,6 +247,20 @@ jobs:
             const body = [
               `**AUTO-Kobong** finished: **${process.env.STATUS.toUpperCase()}**`,
               `- Actions Run: ${process.env.RUN_URL}`,
-              `- PR Checks  : ${process.env.CHECKS_URL}`
-            ].join("\n");
+              `- PR Checks  : ${process.env.CHECKS_URL}`,
+            ].join("\n") + "\n<!-- ak-auto:runId=${{ github.run_id }} -->";
+            await github.rest.issues.createComment({ owner, repo, issue_number: pr, body });
+
+      # (선택) 협업 루프: 라벨이 있으면 ChatOps 재가동 코멘트 투하
+      - name: Auto-loop trigger comment
+        if: ${{ steps.gate.outputs.skip != 'true' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = Number('${{ steps.pr.outputs.num }}');
+            const {owner, repo} = context.repo;
+            const { data: labels } = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
+            const loop = labels.some(l => (l.name||'').toLowerCase() === 'ak:auto-loop');
+            if (!loop) return;
+            const body = '/ak fixloop --preview\n<!-- ak-auto:loop ${{ github.run_id }} -->';
             await github.rest.issues.createComment({ owner, repo, issue_number: pr, body });
