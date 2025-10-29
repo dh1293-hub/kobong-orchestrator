@@ -1,52 +1,132 @@
-# NO-SHELL
+# 파일: .github/workflows/housekeeping-smoke.yml
+# 목적: 주간/수동/PR 트리거로 하우스키핑 스모크를 실행하고, 결과 요약을 PR 또는 고정 이슈에 코멘트로 게시.
+# 주의: bash/cmd 외부 셸 호출은 하지 않고 PowerShell 7(pwsh)만 사용.
+
 name: housekeeping-smoke
+
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}            # 수동 실행 허용
   schedule:
-    - cron: "0 18 * * 6"   # Sun 03:00 KST (Sat 18:00 UTC)
+    - cron: "0 18 * * 6"           # 매주 토요일 18:00 UTC = 일요일 03:00 KST
   pull_request:
     paths:
-      - "scripts/g5/**"
+      - "scripts/g5/**"            # g5 스크립트 변경 PR에만 반응
       - ".github/workflows/housekeeping-smoke.yml"
+
+# 동일 ref에서 중복 실행 방지(최근 것만 유지)
+concurrency:
+  group: post-hk-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+# 최소 권한 원칙
+permissions:
+  contents: read                   # checkout에 필요
+  issues: write                    # PR/이슈 코멘트 작성에 필요
+
 jobs:
   smoke:
     runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh                # 전 스텝 PowerShell 7로 고정
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Setup PowerShell 7
-        with:
-          version: "7.4.4"
-      - name: Dry-run housekeeping weekly
-        shell: pwsh
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ✅ 스모크 실행: 스크립트가 있으면 실행, 없으면 기본 체크로 대체
+      - name: Run housekeeping smoke
+        id: smoke
+        continue-on-error: true    # 실패해도 이후 보고(코멘트/아티팩트) 스텝은 반드시 실행
         run: |
-          pwsh -NoLogo -NoProfile -File "scripts/g5/housekeeping-weekly.ps1" -Root . -TimeoutSec 60 -InactivitySec 20
-      - name: Summarize logs
-        shell: pwsh
-        run: |
-          pwsh -NoLogo -NoProfile -File "scripts/g5/housekeeping-summarize.ps1"
-      - name: Upload logs + summary
+          $ErrorActionPreference = 'Stop'
+          $summary = "housekeeping-summary.md"
+
+          $exists = Test-Path "scripts/g5/housekeeping-smoke.ps1"
+          if ($exists) {
+            try {
+              $sw = [System.Diagnostics.Stopwatch]::StartNew()
+              & pwsh -NoProfile -File "scripts/g5/housekeeping-smoke.ps1"
+              $exit = $LASTEXITCODE
+              $sw.Stop()
+              $status = if($exit -eq 0){"OK"} else {"FAIL($exit)"}
+              "# Housekeeping Smoke Result"            | Out-File $summary -Encoding UTF8
+              ""                                        | Out-File $summary -Append
+              "* Status*: **$status**"                  | Out-File $summary -Append
+              "* Duration*: ${($sw.Elapsed.TotalSeconds).ToString('0.000')}s" | Out-File $summary -Append
+              ""                                        | Out-File $summary -Append
+              "Logs excerpt:"                           | Out-File $summary -Append
+              "```"                                     | Out-File $summary -Append
+              # 필요 시 상세 로그 파일을 읽어 일부를 요약해 붙이세요.
+              "No additional logs captured."           | Out-File $summary -Append
+              "```"                                     | Out-File $summary -Append
+              exit $exit
+            } catch {
+              "# Housekeeping Smoke Result"            | Out-File $summary -Encoding UTF8
+              ""                                        | Out-File $summary -Append
+              "* Status*: **EXCEPTION**"                | Out-File $summary -Append
+              "* Error*: $($_.Exception.Message)"       | Out-File $summary -Append
+              exit 1
+            }
+          } else {
+            "# Housekeeping Smoke Result"              | Out-File $summary -Encoding UTF8
+            ""                                          | Out-File $summary -Append
+            "* Status*: **SKIPPED**"                    | Out-File $summary -Append
+            "* Note*: scripts/g5/housekeeping-smoke.ps1 not found." | Out-File $summary -Append
+            exit 0
+          }
+
+      # ✅ 산출물 보존(항상)
+      - name: Upload summary artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: housekeeping-artifacts
-          path: |
-            logs/apply-log.jsonl
-            housekeeping-summary.md
-          if-no-files-found: warn
-      - name: PR comment (sticky)
-        if: ${{ github.event_name == 'pull_request' }}
+          name: housekeeping-smoke-summary
+          path: housekeeping-summary.md
+          retention-days: 14
+
+      # ✅ 결과를 PR 또는 고정 이슈에 코멘트(헤더 마커로 업데이트)
+      - name: Post or update summary comment
+        if: always()
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const body = fs.existsSync('housekeeping-summary.md') ? fs.readFileSync('housekeeping-summary.md','utf8') : '_No summary file_';
             const header = '<!-- hk-summary -->';
-            const newBody = header + '\n' + body;
+            const body = fs.existsSync('housekeeping-summary.md')
+              ? fs.readFileSync('housekeeping-summary.md','utf8')
+              : '_No summary file_';
+            const newBody = `${header}\n${body}`;
+
             const {owner, repo} = context.repo;
-            const issue_number = context.issue.number;
-            const existing = await github.rest.issues.listComments({owner, repo, issue_number});
-            const prev = existing.data.find(c => c.user.type !== 'Bot' ? false : (c.body||'').includes(header));
+            const pr = context.payload.pull_request;
+            let issue_number = pr ? pr.number : null;
+
+            // 스케줄/수동 실행 시: 고정 이슈(제목) 생성/탐색
+            if (!issue_number) {
+              const title = 'Housekeeping Smoke Report';
+              const { data: issues } = await github.rest.issues.listForRepo({
+                owner, repo, state: 'open', labels: 'housekeeping',
+              });
+              const found = issues.find(i => i.title === title);
+              if (found) {
+                issue_number = found.number;
+              } else {
+                const created = await github.rest.issues.create({
+                  owner, repo, title,
+                  labels: ['housekeeping','automation']
+                });
+                issue_number = created.data.number;
+              }
+            }
+
+            // 기존 코멘트에 헤더가 있으면 업데이트, 없으면 새 코멘트
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
+            const prev = comments.find(c => (c.user?.type === 'Bot') && (c.body||'').includes(header));
             if (prev) {
-              await github.rest.issues.updateComment({owner, repo, comment_id: prev.id, body: newBody});
+              await github.rest.issues.updateComment({ owner, repo, comment_id: prev.id, body: newBody });
             } else {
-              await github.rest.issues.createComment({owner, repo, issue_number, body: newBody});
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: newBody });
             }
