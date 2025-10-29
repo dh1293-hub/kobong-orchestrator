@@ -1,4 +1,4 @@
 ADDED
 CHANGED
-.github/workflows/ak-apply.yml
+.github/workflows/ak-auto.yml
 REMOVED
