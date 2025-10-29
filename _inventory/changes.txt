@@ -1,4 +1,4 @@
 ADDED
+.github/workflows/ak-selftest.yml
 CHANGED
-.github/workflows/ak-commands.yml
 REMOVED
