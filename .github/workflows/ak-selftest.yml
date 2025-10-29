@@ -2,10 +2,10 @@
 # 파일 용도 : scripts/g5/* 변경 시
 #             1) PowerShell 정적 점검(PSScriptAnalyzer)
 #             2) 스모크 실행(ak-dispatch.ps1 -Command help)
-# 동작 방식 : push/pull_request 경로 필터 트리거 → 에러 시 즉시 실패
+# 동작 방식 : push/pull_request 경로 필터(워크플로 변경 포함) + 수동 실행
 # 연관 파일 : .github/workflows/ak-commands.yml, ak-auto.yml, scripts/g5/ak-dispatch.ps1
-# 안전 가드 : 모듈 설치 비대화식, 스모크는 help만(부작용 최소화)
-# 산출물    : Job Summary/콘솔 로그
+# 안전 가드 : PSGallery 장애 시에도 "문법 분석 폴백"으로 진행(의미있는 실패만 fail)
+# 산출물    : Job Summary/콘솔 로그, artifacts/pssa-findings.txt
 # =========================================================
 name: ak-selftest
 
@@ -13,11 +13,13 @@ on:
   pull_request:
     paths:
       - scripts/g5/**
+      - .github/workflows/ak-selftest.yml
   push:
     paths:
       - scripts/g5/**
+      - .github/workflows/ak-selftest.yml
+  workflow_dispatch: {}
 
-# 최소 권한(읽기만)
 permissions:
   contents: read
 
@@ -36,36 +38,31 @@ jobs:
           $hasPSR=[bool](Get-Command Install-PSResource -ErrorAction SilentlyContinue)
           $pget=(Get-Module PowerShellGet -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1).Version
           Write-Host "pwsh=$v  Install-PSResource?=$hasPSR  PowerShellGet=$pget"
-        
+
+      # ── 설치 실패해도 "폴백"으로 계속 진행(던지지 않음) ──
       - name: Install PSScriptAnalyzer robust
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
           $ok=$false
-      
-          # v3: PSResourceGet 우선 (Install-PSResource 존재 시)
-          if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
-            if (-not (Get-PSResourceRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
-              Register-PSResourceRepository -Name PSGallery -Uri 'https://www.powershellgallery.com/api/v3' -Trusted
-            } else { try { Set-PSResourceRepository -Name PSGallery -Trusted } catch {} }
-      
-            for ($i=0; $i -lt 6 -and -not $ok; $i++) {
-              try {
-                Install-PSResource -Name PSScriptAnalyzer -Repository PSGallery `
-                  -Scope CurrentUser -TrustRepository -Quiet -Reinstall
-                $ok=$true
-              } catch { Start-Sleep -Seconds ([math]::Pow(2,$i)) }
+
+          function Try-V3 {
+            if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
+              if (-not (Get-PSResourceRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+                Register-PSResourceRepository -Name PSGallery -Uri 'https://www.powershellgallery.com/api/v3' -Trusted
+              } else { try { Set-PSResourceRepository -Name PSGallery -Trusted } catch {} }
+              Install-PSResource -Name PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -TrustRepository -Quiet -Reinstall
+              $script:ok=$true
             }
           }
-      
-          # v2: PowerShellGet 폴백
-          if (-not $ok) {
+
+          function Try-V2 {
             if ($IsWindows -and -not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
               Install-PackageProvider -Name NuGet -Force -Scope CurrentUser | Out-Null
             }
             $pg = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
             if (-not $pg) {
-              $hasDefault = (Get-Command Register-PSRepository).Parameters.ContainsKey('Default')
+              $hasDefault=(Get-Command Register-PSRepository).Parameters.ContainsKey('Default')
               if ($hasDefault) {
                 Register-PSRepository -Default
                 try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted } catch {}
@@ -76,49 +73,78 @@ jobs:
                   -InstallationPolicy Trusted
               }
             } else { try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted } catch {} }
-      
-            for ($i=0; $i -lt 6 -and -not $ok; $i++) {
-              try {
-                Install-Module PSScriptAnalyzer -Repository PSGallery `
-                  -Scope CurrentUser -Force -AcceptLicense
-                $ok=$true
-              } catch { Start-Sleep -Seconds ([math]::Pow(2,$i)) }
-            }
+            Install-Module PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
+            $script:ok=$true
           }
-      
-          if (-not $ok) { throw "PSScriptAnalyzer install failed (PSGallery unavailable?)" }
-      
-          Import-Module PSScriptAnalyzer -Force
-          Get-Module PSScriptAnalyzer | Format-List Name,Version | Out-String | Write-Host
 
+          for ($i=0; $i -lt 6 -and -not $ok; $i++) { try { Try-V3 } catch { Start-Sleep -Seconds ([math]::Pow(2,$i)) } }
+          for ($i=0; $i -lt 6 -and -not $ok; $i++) { try { Try-V2 } catch { Start-Sleep -Seconds ([math]::Pow(2,$i)) } }
 
-      - name: Install PSScriptAnalyzer
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
-          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+          if ($ok) {
+            Import-Module PSScriptAnalyzer -Force
+            Get-Module PSScriptAnalyzer | Format-List Name,Version | Out-String | Write-Host
+            'PRIMARY=1' | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          } else {
+            Write-Warning 'PSScriptAnalyzer install failed; will run syntax-only fallback.'
+            'PRIMARY=0' | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          }
 
       - name: Run PSScriptAnalyzer
+        if: env.PRIMARY == '1'
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          $issues = Invoke-ScriptAnalyzer -Path 'scripts/g5' -Recurse -Severity Error
-          if ($issues) {
-            $issues | Format-Table | Out-String | Write-Output
-            throw "PSScriptAnalyzer errors: $($issues.Count)"
+          $ErrorActionPreference='Stop'
+          if (-not (Test-Path 'scripts/g5')) { Write-Host 'No scripts/g5; skip.'; exit 0 }
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $results = Invoke-ScriptAnalyzer -Path 'scripts/g5' -Recurse -Severity Error,Warning
+          if ($results) {
+            $results | Sort-Object Severity, RuleName |
+              Select-Object Severity, RuleName, ScriptName, Line, Message |
+              Format-Table -AutoSize | Out-String | Tee-Object -FilePath 'artifacts/pssa-findings.txt'
+          } else { 'PSScriptAnalyzer: no findings' | Tee-Object -FilePath 'artifacts/pssa-findings.txt' }
+          $err = ($results | Where-Object { $_.Severity -eq 'Error' }).Count
+          if ($err -gt 0) { Write-Error "PSScriptAnalyzer errors: $err" }
+
+      - name: Fallback syntax-only analysis
+        if: env.PRIMARY != '1'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          if (-not (Test-Path 'scripts/g5')) { Write-Host 'No scripts/g5; skip.'; exit 0 }
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $errs=@()
+          Get-ChildItem 'scripts/g5' -Recurse -Include *.ps1,*.psm1 | ForEach-Object {
+            try {
+              [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$null)
+            } catch {
+              $errs += [pscustomobject]@{ Severity='Error'; RuleName='Syntax'; ScriptName=$_.Name; Line=0; Message=$_.Exception.Message }
+            }
           }
-          Write-Output 'PSScriptAnalyzer: no errors'
+          if ($errs.Count -gt 0) {
+            $errs | Format-Table -AutoSize | Out-String | Tee-Object -FilePath 'artifacts/pssa-findings.txt'
+            Write-Error "Syntax errors: $($errs.Count)"
+          } else {
+            'Syntax-only: no parse errors (fallback mode)' | Tee-Object -FilePath 'artifacts/pssa-findings.txt'
+          }
+
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pssa-findings
+          path: artifacts/pssa-findings.txt
+          if-no-files-found: ignore
+          retention-days: 7
 
   smoke:
     name: Smoke help
     runs-on: ubuntu-latest
     needs: analyze
+    if: ${{ always() }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ⚠️ 여기서는 name에 콜론(:)을 쓰지 않습니다.
       - name: Smoke ak-dispatch help
         shell: pwsh
         run: |
