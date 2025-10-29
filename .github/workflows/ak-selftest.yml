@@ -29,6 +29,69 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Print pwsh env
+        shell: pwsh
+        run: |
+          $v=$PSVersionTable.PSVersion.ToString()
+          $hasPSR=[bool](Get-Command Install-PSResource -ErrorAction SilentlyContinue)
+          $pget=(Get-Module PowerShellGet -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1).Version
+          Write-Host "pwsh=$v  Install-PSResource?=$hasPSR  PowerShellGet=$pget"
+        
+      - name: Install PSScriptAnalyzer robust
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $ok=$false
+      
+          # v3: PSResourceGet 우선 (Install-PSResource 존재 시)
+          if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
+            if (-not (Get-PSResourceRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+              Register-PSResourceRepository -Name PSGallery -Uri 'https://www.powershellgallery.com/api/v3' -Trusted
+            } else { try { Set-PSResourceRepository -Name PSGallery -Trusted } catch {} }
+      
+            for ($i=0; $i -lt 6 -and -not $ok; $i++) {
+              try {
+                Install-PSResource -Name PSScriptAnalyzer -Repository PSGallery `
+                  -Scope CurrentUser -TrustRepository -Quiet -Reinstall
+                $ok=$true
+              } catch { Start-Sleep -Seconds ([math]::Pow(2,$i)) }
+            }
+          }
+      
+          # v2: PowerShellGet 폴백
+          if (-not $ok) {
+            if ($IsWindows -and -not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+              Install-PackageProvider -Name NuGet -Force -Scope CurrentUser | Out-Null
+            }
+            $pg = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
+            if (-not $pg) {
+              $hasDefault = (Get-Command Register-PSRepository).Parameters.ContainsKey('Default')
+              if ($hasDefault) {
+                Register-PSRepository -Default
+                try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted } catch {}
+              } else {
+                Register-PSRepository -Name PSGallery `
+                  -SourceLocation 'https://www.powershellgallery.com/api/v2' `
+                  -ScriptSourceLocation 'https://www.powershellgallery.com/api/v2' `
+                  -InstallationPolicy Trusted
+              }
+            } else { try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted } catch {} }
+      
+            for ($i=0; $i -lt 6 -and -not $ok; $i++) {
+              try {
+                Install-Module PSScriptAnalyzer -Repository PSGallery `
+                  -Scope CurrentUser -Force -AcceptLicense
+                $ok=$true
+              } catch { Start-Sleep -Seconds ([math]::Pow(2,$i)) }
+            }
+          }
+      
+          if (-not $ok) { throw "PSScriptAnalyzer install failed (PSGallery unavailable?)" }
+      
+          Import-Module PSScriptAnalyzer -Force
+          Get-Module PSScriptAnalyzer | Format-List Name,Version | Out-String | Write-Host
+
+
       - name: Install PSScriptAnalyzer
         shell: pwsh
         run: |
