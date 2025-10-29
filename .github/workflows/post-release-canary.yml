@@ -1,31 +1,58 @@
+# 파일: .github/workflows/post-release-canary.yml
+# 목적: 릴리즈(Publish) 직후 또는 외부 배포 신호(repository_dispatch: deploy) 이후
+#       프로덕트 헬스(/health 등)를 빠르게 확인하는 "포스트 릴리즈 카나리".
+#       실패 시 자동으로 Incident 이슈를 생성하여 신속 대응을 유도.
 name: Post-release Canary
+
 on:
   release:
-    types: [published]
+    types: [published]         # 릴리즈 Publish 직후 트리거
   repository_dispatch:
-    types: [deploy]
+    types: [deploy]            # 외부에서 event_type=deploy 로 호출 시 트리거
+  workflow_dispatch: {}         # 운영자가 수동 디버그/재실행 가능하도록 허용(권장)
+
+# 동일 ref 대상으로 중복 실행 방지(릴리즈/디스패치가 겹칠 때 러닝 1개만)
+concurrency:
+  group: post-release-canary-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read               # checkout 에 필요
+  issues: write                # 실패 시 Incident 이슈 작성에 필요
+
 jobs:
   canary:
     runs-on: windows-latest
-    permissions:
-      contents: read
-      issues: write
+    timeout-minutes: 15        # 행잉 방지(환경 네트워크 불안정 대비)
+    defaults:
+      run:
+        shell: pwsh            # 전 스텝 기본 셸을 PowerShell 7 로 고정
+
     steps:
       - uses: actions/checkout@v4
-      - name: Set up PowerShell 7
-        with: { pwsh-version: "7.4.x" }
-      - name: Canary
+
+      # ⚠ 원본의 "Set up PowerShell 7" 스텝은 액션이 없어 무효 → 삭제.
+      #   windows-latest 에는 pwsh 가 이미 들어있습니다.
+
+      - name: Run post-release canary
         id: canary
-        shell: pwsh
-        continue-on-error: true
-        run: pwsh -NoProfile -File ops/canary-postrelease.ps1
+        continue-on-error: true        # 실패해도 다음 스텝(이슈 생성)까지 진행
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # 스크립트에서 gh 사용 시
+        run: |
+          # ops/canary-postrelease.ps1 내부에서 /health 등 점검을 수행한다고 가정
+          # 표준 종료코드: 0=성공, 그 외는 실패로 처리
+          pwsh -NoProfile -File ops/canary-postrelease.ps1
+
       - name: Create incident issue on failure
         if: steps.canary.outcome != 'success'
-        shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $title = "Post-release canary failed"
-          $body  = "자동 카나리 실패: /health 응답 실패. 즉시 점검 및 `urs-rollback.ps1 -Mode prev` 권고."
-          gh issue create -t $title -b $body
-
+          $body  = @"
+자동 카나리 실패: /health 응답 실패 또는 비정상.
+권고: 즉시 점검 후 URS 롤백(예:ops/urs-rollback.ps1 -Mode prev) 수행.
+trace: run=${env:GITHUB_RUN_ID} attempt=${env:GITHUB_RUN_ATTEMPT}
+"@
+          gh issue create -t $title -b $body -l incident,canary
