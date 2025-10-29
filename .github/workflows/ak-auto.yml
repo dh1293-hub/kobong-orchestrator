@@ -34,7 +34,7 @@ jobs:
   auto:
     runs-on: ubuntu-latest
     steps:
-      - name: Resolve PR number and head sha
+      - name: "Resolve PR number and head sha"
         id: pr
         uses: actions/github-script@v7
         with:
@@ -50,7 +50,7 @@ jobs:
             core.setOutput('num', String(prNum));
             core.setOutput('sha', pr.head.sha);
 
-      - name: Gate: require ak:auto label
+      - name: "Gate: require ak:auto label"
         id: gate
         uses: actions/github-script@v7
         with:
@@ -69,12 +69,12 @@ jobs:
               core.setOutput('skip','false');
             }
 
-      - name: Stop when no label
+      - name: "Stop when no label"
         if: ${{ steps.gate.outputs.skip == 'true' }}
         run: echo "skip"
 
       # === PR 소스: zipball로 전개(깃 의존 최소화) ===
-      - name: Download PR source zipball
+      - name: "Download PR source zipball"
         if: ${{ steps.gate.outputs.skip != 'true' }}
         shell: pwsh
         env:
@@ -97,7 +97,7 @@ jobs:
           Get-ChildItem -Force $root.FullName | Copy-Item -Recurse -Force -Destination .
 
       # === scripts/g5 하이드레이트: main에서 보장 ===
-      - name: Hydrate scripts/g5 from main
+      - name: "Hydrate scripts/g5 from main"
         if: ${{ steps.gate.outputs.skip != 'true' }}
         shell: pwsh
         env:
@@ -120,7 +120,7 @@ jobs:
           Copy-Item -Recurse -Force "$($root.FullName)/scripts/g5" "scripts/g5"
 
       # === 로그 파일 보장(아티팩트 경고 제거) ===
-      - name: Ensure logs exist
+      - name: "Ensure logs exist"
         if: ${{ steps.gate.outputs.skip != 'true' }}
         shell: bash
         run: |
@@ -128,7 +128,7 @@ jobs:
           [ -s logs/ak7.jsonl ] || printf '{"ts":"%s","lvl":"INFO","msg":"init"}\n' "$(date -Iseconds)" >> logs/ak7.jsonl
 
       # === 워크플로 린트(actionlint) : 오류 선제 탐지 ===
-      - name: Workflow lint (actionlint)
+      - name: "Workflow lint (actionlint)"
         if: ${{ steps.gate.outputs.skip != 'true' }}
         uses: reviewdog/action-actionlint@v1
         with:
@@ -136,18 +136,18 @@ jobs:
           reporter: github-check
           level: error
 
-      - name: /ak help
+      - name: "/ak help"
         if: ${{ steps.gate.outputs.skip != 'true' }}
         shell: pwsh
         run: ./scripts/g5/ak-dispatch.ps1 -Command help -Pr '${{ steps.pr.outputs.num }}'
 
-      - name: /ak test
+      - name: "/ak test"
         if: ${{ steps.gate.outputs.skip != 'true' }}
         id: step_test
         shell: pwsh
         run: ./scripts/g5/ak-dispatch.ps1 -Command test -Pr '${{ steps.pr.outputs.num }}'
 
-      - name: Label stage: test-ok
+      - name: "Label stage: test-ok"
         if: ${{ steps.gate.outputs.skip != 'true' && steps.step_test.outcome == 'success' }}
         uses: actions/github-script@v7
         with:
@@ -162,13 +162,13 @@ jobs:
               await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
             }
 
-      - name: /ak scan --all
+      - name: "/ak scan --all"
         if: ${{ steps.gate.outputs.skip != 'true' }}
         id: step_scan
         shell: pwsh
         run: ./scripts/g5/ak-dispatch.ps1 -Command scan -RawArgs '--all' -Pr '${{ steps.pr.outputs.num }}'
 
-      - name: Label stage: scan-ok
+      - name: "Label stage: scan-ok"
         if: ${{ steps.gate.outputs.skip != 'true' && steps.step_scan.outcome == 'success' }}
         uses: actions/github-script@v7
         with:
@@ -183,7 +183,7 @@ jobs:
               await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
             }
 
-      - name: /ak fixloop preview
+      - name: "/ak fixloop preview"
         if: ${{ steps.gate.outputs.skip != 'true' }}
         id: step_preview
         shell: pwsh
@@ -192,7 +192,7 @@ jobs:
           ./scripts/g5/ak-dispatch.ps1 -Command fixloop -RawArgs 'preview' -Pr '${{ steps.pr.outputs.num }}'
           exit 0
 
-      - name: Label stage: preview-ok
+      - name: "Label stage: preview-ok"
         if: ${{ steps.gate.outputs.skip != 'true' && steps.step_preview.outcome == 'success' }}
         uses: actions/github-script@v7
         with:
@@ -207,7 +207,7 @@ jobs:
               await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
             }
 
-      - name: Decide apply
+      - name: "Decide apply"
         if: ${{ steps.gate.outputs.skip != 'true' }}
         id: apply
         uses: actions/github-script@v7
@@ -219,12 +219,12 @@ jobs:
             const doApply = labels.some(l => (l.name||'').toLowerCase() === 'ak:auto-apply');
             core.setOutput('do', doApply ? 'true' : 'false');
 
-      - name: /ak fixloop apply (OWNER only)
+      - name: "/ak fixloop apply (OWNER only)"
         if: ${{ steps.gate.outputs.skip != 'true' && steps.apply.outputs.do == 'true' && github.actor == github.repository_owner }}
         shell: pwsh
         run: ./scripts/g5/ak-dispatch.ps1 -Command fixloop -RawArgs 'apply' -Pr '${{ steps.pr.outputs.num }}'
 
-      - name: Upload ak logs
+      - name: "Upload ak logs"
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -233,7 +233,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Summarize
+      - name: "Summarize"
         if: always()
         uses: actions/github-script@v7
         env:
@@ -252,7 +252,7 @@ jobs:
             await github.rest.issues.createComment({ owner, repo, issue_number: pr, body });
 
       # (선택) 협업 루프: 라벨이 있으면 ChatOps 재가동 코멘트 투하
-      - name: Auto-loop trigger comment
+      - name: "Auto-loop trigger comment"
         if: ${{ steps.gate.outputs.skip != 'true' }}
         uses: actions/github-script@v7
         with:
