@@ -1,9 +1,9 @@
 # =========================================================
 # 파일 용도 : PowerShell 스크립트 정적 점검(PSScriptAnalyzer) 전용 워크플로
-# 동작 방식 : PR 또는 수동 실행 시 scripts/g5 하위의 .ps1/.psm1 등을 검사
-# 연관 파일 : scripts/g5/*  .github/workflows/ak-selftest.yml (보완용)
-# 안전 가드 : PSResourceGet 우선 설치 → 미존재 시 PowerShellGet(v2) 폴백
-#             Windows/Ubuntu 공통 동작, 설치 실패시 즉시 실패
+# 동작 방식 : PR/수동 실행 시 레포 소스를 Zipball로 가져와 scripts/g5 하위를 검사
+# 연관 파일 : scripts/g5/*   (ak-selftest.yml 보완용 보조 분석)
+# 안전 가드 : Git 미사용 전개(Zipball) → git 128 근본 차단
+#             PSResourceGet(v3) 우선, 없으면 PowerShellGet(v2) 폴백 설치
 # 산출물    : 콘솔 요약, artifacts/pssa-findings.txt (있을 경우)
 # =========================================================
 name: psanalyze
@@ -26,10 +26,40 @@ jobs:
     name: psanalyze
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout full history for PR base
-        uses: actions/checkout@v4
+      # ── Git 없이 소스 받기: zipball 다운로드/전개 → SRCROOT 환경변수로 전달
+      - name: Resolve repo and sha
+        id: rev
+        uses: actions/github-script@v7
         with:
-          fetch-depth: 0
+          script: |
+            let sha = context.sha;
+            if (context.eventName === 'pull_request') {
+              sha = context.payload.pull_request.head.sha;
+            }
+            core.setOutput('repo', `${context.repo.owner}/${context.repo.repo}`);
+            core.setOutput('sha', sha);
+
+      - name: Download zipball
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO:     ${{ steps.rev.outputs.repo }}
+          SHA:      ${{ steps.rev.outputs.sha }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $zip = Join-Path $env:RUNNER_TEMP 'src.zip'
+          $tmp = Join-Path $env:RUNNER_TEMP 'src-unzip'
+          Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $tmp | Out-Null
+          $hdr = @{ Authorization = "Bearer $env:GH_TOKEN"; "X-GitHub-Api-Version"="2022-11-28" }
+          $url = "https://api.github.com/repos/$env:REPO/zipball/$env:SHA"
+          Invoke-WebRequest -Headers $hdr -Uri $url -OutFile $zip
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::ExtractToDirectory($zip,$tmp)
+          $root = Get-ChildItem $tmp | ?{ $_.PSIsContainer } | Select-Object -First 1
+          if (-not $root) { throw "zipball root not found" }
+          # SRCROOT = 전개된 소스 루트(워크스페이스는 건드리지 않음)
+          "SRCROOT=$($root.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Print PowerShell environment
         shell: pwsh
@@ -38,23 +68,19 @@ jobs:
           $hasPSR = [bool](Get-Command Install-PSResource -ErrorAction SilentlyContinue)
           $pget = Get-Module PowerShellGet -ListAvailable | Sort-Object Version -Descending | Select-Object -First 1
           Write-Host "pwsh=$v  Install-PSResource?=$hasPSR  PowerShellGet=$($pget.Version)"
+          Write-Host "SRCROOT=$env:SRCROOT"
 
+      # ── PSScriptAnalyzer 설치: v3 우선 → v2 폴백
       - name: Install PSScriptAnalyzer robust
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-
-          # PSResourceGet 우선 (v3)
           if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
             if (-not (Get-PSResourceRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
               Register-PSResourceRepository -Name PSGallery -Uri 'https://www.powershellgallery.com/api/v3' -Trusted
-            } else {
-              try { Set-PSResourceRepository -Name PSGallery -Trusted } catch {}
-            }
+            } else { try { Set-PSResourceRepository -Name PSGallery -Trusted } catch {} }
             Install-PSResource -Name PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -TrustRepository -Quiet -Reinstall
-          }
-          else {
-            # PowerShellGet v2 폴백
+          } else {
             if ($IsWindows -and -not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
               Install-PackageProvider -Name NuGet -Force -Scope CurrentUser | Out-Null
             }
@@ -70,36 +96,33 @@ jobs:
                   -ScriptSourceLocation 'https://www.powershellgallery.com/api/v2' `
                   -InstallationPolicy Trusted
               }
-            } else {
-              try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted } catch {}
-            }
+            } else { try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted } catch {} }
             Install-Module PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
           }
           Import-Module PSScriptAnalyzer -Force
           Get-Module PSScriptAnalyzer | Format-List Name,Version | Out-String | Write-Host
 
+      # ── 분석 실행(없으면 통과), 결과를 파일로 저장
       - name: Run analyzer and save findings
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          if (-not (Test-Path 'scripts/g5')) {
-            Write-Host 'No scripts/g5 directory; nothing to analyze.'
+          $ErrorActionPreference='Stop'
+          $target = Join-Path $env:SRCROOT 'scripts/g5'
+          if (-not (Test-Path $target)) {
+            Write-Host "No scripts/g5 in SRCROOT; nothing to analyze."
             exit 0
           }
-          $results = Invoke-ScriptAnalyzer -Path 'scripts/g5' -Recurse -Severity Error,Warning
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $results = Invoke-ScriptAnalyzer -Path $target -Recurse -Severity Error,Warning
           if ($results) {
-            New-Item -ItemType Directory -Force -Path artifacts | Out-Null
             $results | Sort-Object Severity, RuleName |
               Select-Object Severity, RuleName, ScriptName, Line, Message |
               Format-Table -AutoSize | Out-String | Tee-Object -FilePath 'artifacts/pssa-findings.txt'
           } else {
-            Write-Host 'PSScriptAnalyzer: no findings'
+            'PSScriptAnalyzer: no findings' | Tee-Object -FilePath 'artifacts/pssa-findings.txt'
           }
-          # 에러가 있으면 실패 처리, 경고만 있으면 통과
           $errCount = ($results | Where-Object { $_.Severity -eq 'Error' }).Count
-          if ($errCount -gt 0) {
-            Write-Error "PSScriptAnalyzer errors: $errCount"
-          }
+          if ($errCount -gt 0) { Write-Error "PSScriptAnalyzer errors: $errCount" }
 
       - name: Upload findings artifact
         if: always()
