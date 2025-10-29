@@ -119,6 +119,36 @@ jobs:
 +              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
 +            }
 
+
+--- a/.github/workflows/ak-auto.yml
++++ b/.github/workflows/ak-auto.yml
+@@
+-    - name: Apply
++    - name: Apply
++      id: ak_apply
+       shell: bash
+       run: |
+         # ...기존 Apply 스크립트...
+
++    # ─────────────────────────────────────────────────────────────
++    # Label: Apply 성공 시 PR에 ak:stage:apply-ok 부여(초소형)
++    # 센티넬: AK-AUTO-LABEL-APPLY-OK-v1
++    - name: Label: ak:stage:apply-ok (on PR + Apply success)
++      if: ${{ success() && github.event_name == 'pull_request_target' && steps.ak_apply.outcome == 'success' }}
++      uses: actions/github-script@v7
++      with:
++        script: |
++          const n = context.payload.number ?? context.payload.pull_request?.number;
++          if (!n) { core.setFailed('No PR number in context'); }
++          else {
++            await github.issues.addLabels({
++              owner: context.repo.owner,
++              repo: context.repo.repo,
++              issue_number: n,
++              labels: ['ak:stage:apply-ok']
++            });
++          }
+
             
 
       - name: Check required label ak:auto
