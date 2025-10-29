@@ -1,0 +1,89 @@
+# =========================================================
+# 파일 용도:  전자동 협업 루프 보강기
+#            - PR 라벨 신호를 감지하여 다음 단계의
+#              ChatOps 명령(/ak ...) 코멘트를 자동 발사.
+# 동작 방식: pull_request.labeled 트리거에서
+#            * ak:auto-loop 라벨이 PR에 존재할 때만 동작
+#            * 추가/변경된 라벨에 따라 후속 명령을 전송
+# 연관 파일: .github/workflows/ak-commands.yml (ChatOps 수신)
+#            .github/workflows/ak-auto.yml     (자동 시퀀스)
+#            .github/workflows/ak-apply-gate.yml (선행 가드)
+# 안전 가드: - 숨은 토큰으로 중복 코멘트 방지
+#            - OWNER+ak:auto-apply 조합일 때만 apply 시도
+# 산출물   : PR 코멘트(자동 발사된 /ak 명령)
+# 운영 팁 : 얇은 상태 라벨(예: ak:stage:scan-ok/preview-ok)을
+#           쓰면 단계 전이가 눈에 잘 보이고 루프가 매끈함.
+# =========================================================
+name: ak-loop
+
+"on":
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: ak-loop-${{ github.repository }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  loop:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Decide and fire /ak command
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const pr = context.payload.pull_request.number;
+            const added = (context.payload.label?.name || '').toLowerCase();
+
+            // Load all labels on the PR
+            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
+            const has = (name) => labels.some(l => (l.name || '').toLowerCase() === name);
+
+            // Gate: ak:auto-loop 라벨이 PR에 있어야 동작
+            if (!has('ak:auto-loop')) {
+              core.notice('ak:auto-loop label not present -> skip.');
+              return;
+            }
+
+            // Idempotency token (중복 방지)
+            const token = `<!-- ak-loop:prev=${added} -->`;
+
+            // Skip if same label already handled
+            const {data: comments} = await github.rest.issues.listComments({owner, repo, issue_number: pr, per_page: 50});
+            if (comments.some(c => (c.body || '').includes(token))) {
+              core.notice('Already acted on this label -> skip.');
+              return;
+            }
+
+            // Decide next command by added label
+            let command = null;
+            switch (added) {
+              case 'ak:auto-loop':                // 루프 시작 신호
+                command = '/ak help';
+                break;
+              case 'ak:stage:test-ok':            // 테스트 통과 → 전체 스캔
+                command = '/ak scan --all';
+                break;
+              case 'ak:stage:scan-ok':            // 스캔 통과 → 프리뷰
+                command = '/ak fixloop preview';
+                break;
+              case 'ak:stage:preview-ok':         // 프리뷰 OK → 조건부 적용
+                if (has('ak:auto-apply') && (github.actor === github.repository_owner)) {
+                  command = '/ak fixloop apply';
+                } else {
+                  command = '/ak fixloop preview';
+                }
+                break;
+              default:
+                core.notice(`Unhandled label: ${added} -> no-op.`);
+                return;
+            }
+
+            const body = `${token}\n${command}`;
+            await github.rest.issues.createComment({owner, repo, issue_number: pr, body});
