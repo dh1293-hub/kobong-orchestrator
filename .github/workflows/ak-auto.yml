@@ -1,46 +1,53 @@
 # ===========================================
-# AK-AUTO : Kobong-Orchestrator 자동화 실행
+# AK-AUTO (fixed) : PR 라벨 기반 자동 시퀀스
+# - 트리거: pull_request_target(labeled/opened/reopened/synchronize), workflow_dispatch
+# - 조건: ak:auto 라벨 필수, (옵션) ak:auto-apply + OWNER → apply
+# - 실행: help → test → scan --all → fixloop preview → (옵션) apply
+# - logs/ak7.jsonl 아티팩트 업로드, 요약 코멘트 남김
 # ===========================================
-# ✔ logs/ 추적파일 차단 (no-tracked-logs 게이트)
-# ✔ 실행 전후 Context 출력
-# ✔ YAML 구조 및 들여쓰기 정합성 보정
-# -------------------------------------------
-
 name: ak-auto
 
-on:
+"on":
   pull_request_target:
     types: [labeled, opened, reopened, synchronize]
   workflow_dispatch:
     inputs:
       pr:
-        description: "PR number to run on"
-        required: false
-        type: string
+        description: "Pull request number"
+        required: true
 
 permissions:
   contents: read
   issues: write
   pull-requests: write
+  checks: write
+
+concurrency:
+  group: ak-auto-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
 
 jobs:
   auto:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-
-      # PR 번호 결정
-      - name: Resolve PR number
+      - name: Resolve PR
         id: pr
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const pr = core.getInput('pr') || context.payload.pull_request?.number || context.payload.issue?.number;
-            if(!pr) core.setFailed('No PR number'); else core.setOutput('num', String(pr));
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "num=${{ inputs.pr }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "num=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          fi
 
-      # ak:auto 라벨 확인(없으면 안내 후 종료)
-      - name: Check ak:auto present
-        id: gate
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ steps.pr.outputs.num }}/head
+          fetch-depth: 1
+
+      - name: Require ak:auto label
+        id: checklabel
         uses: actions/github-script@v7
         with:
           script: |
@@ -48,63 +55,39 @@ jobs:
             const pr = Number('${{ steps.pr.outputs.num }}');
             const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
             const ok = labels.some(l => l.name.toLowerCase()==='ak:auto');
-            if(!ok){
-              await github.rest.issues.createComment({
-                owner, repo, issue_number: pr,
-                body: "🔔 자동 실행 라벨 **`ak:auto`** 가 없어 대기합니다. 라벨 추가 후 자동으로 실행됩니다."
-              });
+            if (!ok) {
+              await github.rest.issues.createComment({owner, repo, issue_number: pr, body: 'ℹ️ 이 PR에는 `ak:auto` 라벨이 없어 자동 실행을 건너뜁니다.'});
+              core.setOutput('skip','true');
+            } else {
+              core.setOutput('skip','false');
             }
-            core.setOutput('enabled', ok ? 'true' : 'false');
 
-      - name: Short-circuit when ak:auto missing
-        if: steps.gate.outputs.enabled != 'true'
-        run: exit 0
+      - name: Stop when no label
+        if: ${{ steps.checklabel.outputs.skip == 'true' }}
+        run: echo "skip"
 
-      # 안내 코멘트
-      - name: Announce start
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const pr = Number('${{ steps.pr.outputs.num }}');
-            await github.rest.issues.createComment({
-              owner, repo, issue_number: pr,
-              body: "🤖 **AUTO-Kobong**: Help → Test → Scan → Preview 순서로 전자동 실행합니다. (DEV: 24h apply 허용, OWNER 전용)"
-            });
-
-      # ===== 시퀀스 =====
       - name: /ak help
-        shell: bash
-        run: |
-          set +e
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'help' -Pr '${{ steps.pr.outputs.num }}'
-          exit 0
+        if: ${{ steps.checklabel.outputs.skip != 'true' }}
+        shell: pwsh
+        run: ./scripts/g5/ak-dispatch.ps1 -Command help -Pr '${{ steps.pr.outputs.num }}'
 
       - name: /ak test
-        shell: bash
-        run: |
-          set +e
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'test' -Pr '${{ steps.pr.outputs.num }}'
-          code=$?; if [ -z "$code" ]; then code=0; fi
-          if [ "$code" -ge 10 ]; then exit "$code"; else exit 0; fi
+        if: ${{ steps.checklabel.outputs.skip != 'true' }}
+        shell: pwsh
+        run: ./scripts/g5/ak-dispatch.ps1 -Command test -Pr '${{ steps.pr.outputs.num }}'
 
       - name: /ak scan --all
-        shell: bash
-        run: |
-          set +e
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'scan' -RawArgs '--all' -Pr '${{ steps.pr.outputs.num }}'
-          code=$?; if [ -z "$code" ]; then code=0; fi
-          if [ "$code" -ge 10 ]; then exit "$code"; else exit 0; fi
+        if: ${{ steps.checklabel.outputs.skip != 'true' }}
+        shell: pwsh
+        run: ./scripts/g5/ak-dispatch.ps1 -Command scan -RawArgs '--all' -Pr '${{ steps.pr.outputs.num }}'
 
-      - name: /ak fixloop preview (always green)
-        shell: bash
-        continue-on-error: true
+      - name: /ak fixloop preview
+        if: ${{ steps.checklabel.outputs.skip != 'true' }}
+        shell: pwsh
         run: |
-          set +e
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'fixloop' -RawArgs 'preview' -Pr '${{ steps.pr.outputs.num }}' || true
-          exit 0
+          $ErrorActionPreference='Continue'
+          ./scripts/g5/ak-dispatch.ps1 -Command fixloop -RawArgs 'preview' -Pr '${{ steps.pr.outputs.num }}' ; exit 0
 
-      # ===== 조건부 apply (DEV: 24h 허용) =====
       - name: Decide apply
         id: apply
         uses: actions/github-script@v7
@@ -114,32 +97,36 @@ jobs:
             const pr = Number('${{ steps.pr.outputs.num }}');
             const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
             const applyLabel = labels.some(l => l.name.toLowerCase()==='ak:auto-apply');
-            // DEV: 야간 제한 제거 → 라벨만 있으면 실행
             core.setOutput('do', applyLabel ? 'true' : 'false');
-            core.setOutput('night','false')
+            core.setOutput('night','false');
 
       - name: Night notice
         if: ${{ false }}
-        run: echo "DEV mode: night guard disabled"
+        run: |
+          echo "DEV mode: night guard disabled"
 
       - name: /ak fixloop apply (OWNER only)
         if: ${{ steps.apply.outputs.do == 'true' && github.actor == github.repository_owner }}
-        shell: bash
-        run: |
-          set +e
-          pwsh -NoLogo -NoProfile -File scripts/g5/ak-dispatch.ps1 -Command 'fixloop' -RawArgs 'apply' -Pr '${{ steps.pr.outputs.num }}'
-          code=$?; if [ -z "$code" ]; then code=0; fi
-          if [ "$code" -ge 10 ]; then exit "$code"; else exit 0; fi
+        shell: pwsh
+        run: ./scripts/g5/ak-dispatch.ps1 -Command fixloop -RawArgs 'apply' -Pr '${{ steps.pr.outputs.num }}'
 
-      # 요약 댓글
-      - name: Comment summary
+      - name: Upload ak logs
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/upload-artifact@v4
+        with:
+          name: ak7-logs
+          path: logs/ak7.jsonl
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Summarize
+        if: always()
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           CHECKS_URL: ${{ github.server_url }}/${{ github.repository }}/pull/${{ steps.pr.outputs.num }}/checks
           STATUS: ${{ job.status }}
           KB_URL: ${{ github.server_url }}/${{ github.repository }}/blob/main/.kobong/reports/ERROR-KB.md
+        uses: actions/github-script@v7
         with:
           script: |
             const {owner, repo} = context.repo;
