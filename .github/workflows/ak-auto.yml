@@ -1,13 +1,17 @@
-# ===========================================
-# AK-AUTO (fixed) : PR 라벨 기반 자동 시퀀스
-# - 트리거: pull_request_target(labeled/opened/reopened/synchronize), workflow_dispatch
-# - 조건: ak:auto 라벨 필수, (옵션) ak:auto-apply + OWNER → apply
-# - 실행: help → test → scan --all → fixloop preview → (옵션) apply
-# - logs/ak7.jsonl 아티팩트 업로드, 요약 코멘트 남김
-# ===========================================
+# =========================================================
+# 파일 용도 : PR 라벨 기반 자동 파일럿
+#             Help → Test → Scan(--all) → Fixloop preview → (조건) Apply
+# 동작 방식 : pull_request_target(labeled/opened/reopened/synchronize),
+#             또는 workflow_dispatch(pr 입력)
+# 연관 파일 : scripts/g5/ak-dispatch.ps1
+#             .github/workflows/ak-exec.yml (ChatOps 수동 실행기)
+# 안전 가드 : - PR 코드는 zipball로 받고, 실행 스크립트는 항상 main에서 하이드레이트
+#             - Apply는 ak:auto-apply 라벨 + OWNER일 때만
+# 산출물    : PR 코멘트(요약), Artifact: ak7-logs (logs/ak7.jsonl)
+# =========================================================
 name: ak-auto
 
-"on":
+on:
   pull_request_target:
     types: [labeled, opened, reopened, synchronize]
   workflow_dispatch:
@@ -23,90 +27,140 @@ permissions:
   checks: write
 
 concurrency:
-  group: ak-auto-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.pull_request.number || github.event.issue.number }}
+  group: ak-auto-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
   auto:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
-      - name: Resolve PR
+      - name: Resolve PR number and head sha
         id: pr
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "num=${{ inputs.pr }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "num=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Checkout PR head
-        uses: actions/checkout@v4
-        with:
-          ref: refs/pull/${{ steps.pr.outputs.num }}/head
-          fetch-depth: 1
-
-      - name: Require ak:auto label
-        id: checklabel
         uses: actions/github-script@v7
         with:
           script: |
-            const {owner, repo} = context.repo;
+            const prNum = (context.eventName === 'workflow_dispatch')
+              ? Number(core.getInput('pr'))
+              : context.payload.pull_request.number;
+            const {data: pr} = await github.rest.pulls.get({
+              owner: context.repo.owner, repo: context.repo.repo, pull_number: prNum
+            });
+            core.setOutput('num', prNum.toString());
+            core.setOutput('sha', pr.head.sha);
+
+      - name: Check required label ak:auto
+        id: gate
+        uses: actions/github-script@v7
+        with:
+          script: |
             const pr = Number('${{ steps.pr.outputs.num }}');
+            const {owner, repo} = context.repo;
             const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
-            const ok = labels.some(l => l.name.toLowerCase()==='ak:auto');
+            const ok = labels.some(l => (l.name || '').toLowerCase() === 'ak:auto');
+            core.setOutput('skip', ok ? 'false' : 'true');
             if (!ok) {
-              await github.rest.issues.createComment({owner, repo, issue_number: pr, body: 'ℹ️ 이 PR에는 `ak:auto` 라벨이 없어 자동 실행을 건너뜁니다.'});
-              core.setOutput('skip','true');
-            } else {
-              core.setOutput('skip','false');
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: pr,
+                body: 'ℹ️ 이 PR에는 `ak:auto` 라벨이 없어 자동 실행을 건너뜁니다.'
+              });
             }
 
       - name: Stop when no label
-        if: ${{ steps.checklabel.outputs.skip == 'true' }}
+        if: ${{ steps.gate.outputs.skip == 'true' }}
         run: echo "skip"
 
+      # === PR 소스: zipball로 전개(서브모듈/깃 의존 제거) ===
+      - name: Download PR source zipball
+        if: ${{ steps.gate.outputs.skip != 'true' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA:  ${{ steps.pr.outputs.sha }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $zip = Join-Path $env:RUNNER_TEMP 'src.zip'
+          $tmp = Join-Path $env:RUNNER_TEMP 'src-unzip'
+          Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $tmp | Out-Null
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; "X-GitHub-Api-Version"="2022-11-28" }
+          $url = "https://api.github.com/repos/$env:REPO/zipball/$env:SHA"
+          Invoke-WebRequest -Headers $headers -Uri $url -OutFile $zip
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::ExtractToDirectory($zip,$tmp)
+          $root = Get-ChildItem $tmp | ?{ $_.PSIsContainer } | Select-Object -First 1
+          # 워크스페이스 클린 후 전개
+          Get-ChildItem -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+          Get-ChildItem -Force $root.FullName | Copy-Item -Recurse -Force -Destination .
+
+      # === 실행 스크립트: 항상 main에서 하이드레이트 ===
+      - name: Hydrate scripts/g5 from main via zipball
+        if: ${{ steps.gate.outputs.skip != 'true' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $zip = Join-Path $env:RUNNER_TEMP 'g5.zip'
+          $tmp = Join-Path $env:RUNNER_TEMP 'g5-unzip'
+          Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force $tmp | Out-Null
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; "X-GitHub-Api-Version"="2022-11-28" }
+          $url = "https://api.github.com/repos/$env:REPO/zipball/main"
+          Invoke-WebRequest -Headers $headers -Uri $url -OutFile $zip
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [IO.Compression.ZipFile]::ExtractToDirectory($zip,$tmp)
+          $root = Get-ChildItem $tmp | ?{ $_.PSIsContainer } | Select-Object -First 1
+          if (-not (Test-Path "$($root.FullName)/scripts/g5")) { throw "scripts/g5 not found" }
+          Remove-Item -Recurse -Force scripts/g5 -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force scripts | Out-Null
+          Copy-Item -Recurse -Force "$($root.FullName)/scripts/g5" "scripts/g5"
+
+      # === 로그 파일 보장(아티팩트 경고 제거) ===
+      - name: Ensure logs exist
+        if: ${{ steps.gate.outputs.skip != 'true' }}
+        shell: bash
+        run: |
+          mkdir -p logs
+          [ -s logs/ak7.jsonl ] || printf '{"ts":"%s","lvl":"INFO","msg":"init"}\n' "$(date -Iseconds)" >> logs/ak7.jsonl
+
       - name: /ak help
-        if: ${{ steps.checklabel.outputs.skip != 'true' }}
+        if: ${{ steps.gate.outputs.skip != 'true' }}
         shell: pwsh
         run: ./scripts/g5/ak-dispatch.ps1 -Command help -Pr '${{ steps.pr.outputs.num }}'
 
       - name: /ak test
-        if: ${{ steps.checklabel.outputs.skip != 'true' }}
+        if: ${{ steps.gate.outputs.skip != 'true' }}
         shell: pwsh
         run: ./scripts/g5/ak-dispatch.ps1 -Command test -Pr '${{ steps.pr.outputs.num }}'
 
       - name: /ak scan --all
-        if: ${{ steps.checklabel.outputs.skip != 'true' }}
+        if: ${{ steps.gate.outputs.skip != 'true' }}
         shell: pwsh
         run: ./scripts/g5/ak-dispatch.ps1 -Command scan -RawArgs '--all' -Pr '${{ steps.pr.outputs.num }}'
 
       - name: /ak fixloop preview
-        if: ${{ steps.checklabel.outputs.skip != 'true' }}
+        if: ${{ steps.gate.outputs.skip != 'true' }}
         shell: pwsh
         run: |
           $ErrorActionPreference='Continue'
           ./scripts/g5/ak-dispatch.ps1 -Command fixloop -RawArgs 'preview' -Pr '${{ steps.pr.outputs.num }}' ; exit 0
 
       - name: Decide apply
+        if: ${{ steps.gate.outputs.skip != 'true' }}
         id: apply
         uses: actions/github-script@v7
         with:
           script: |
-            const {owner, repo} = context.repo;
             const pr = Number('${{ steps.pr.outputs.num }}');
+            const {owner, repo} = context.repo;
             const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
-            const applyLabel = labels.some(l => l.name.toLowerCase()==='ak:auto-apply');
-            core.setOutput('do', applyLabel ? 'true' : 'false');
-            core.setOutput('night','false');
+            const doApply = labels.some(l => (l.name || '').toLowerCase() === 'ak:auto-apply');
+            core.setOutput('do', doApply ? 'true' : 'false');
 
-      - name: Night notice
-        if: ${{ false }}
-        run: |
-          echo "DEV mode: night guard disabled"
-
-      - name: /ak fixloop apply (OWNER only)
-        if: ${{ steps.apply.outputs.do == 'true' && github.actor == github.repository_owner }}
+      - name: /ak fixloop apply
+        if: ${{ steps.gate.outputs.skip != 'true' && steps.apply.outputs.do == 'true' && github.actor == github.repository_owner }}
         shell: pwsh
         run: ./scripts/g5/ak-dispatch.ps1 -Command fixloop -RawArgs 'apply' -Pr '${{ steps.pr.outputs.num }}'
 
@@ -116,17 +170,16 @@ jobs:
         with:
           name: ak7-logs
           path: logs/ak7.jsonl
-          if-no-files-found: warn
+          if-no-files-found: ignore
           retention-days: 7
 
-      - name: Summarize
+      - name: Summarize to PR
         if: always()
+        uses: actions/github-script@v7
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           CHECKS_URL: ${{ github.server_url }}/${{ github.repository }}/pull/${{ steps.pr.outputs.num }}/checks
           STATUS: ${{ job.status }}
-          KB_URL: ${{ github.server_url }}/${{ github.repository }}/blob/main/.kobong/reports/ERROR-KB.md
-        uses: actions/github-script@v7
         with:
           script: |
             const {owner, repo} = context.repo;
@@ -134,7 +187,6 @@ jobs:
             const body = [
               `**AUTO-Kobong** finished: **${process.env.STATUS.toUpperCase()}**`,
               `- Actions Run: ${process.env.RUN_URL}`,
-              `- PR Checks  : ${process.env.CHECKS_URL}`,
-              `- Error KB   : ${process.env.KB_URL}`
+              `- PR Checks  : ${process.env.CHECKS_URL}`
             ].join("\n");
             await github.rest.issues.createComment({ owner, repo, issue_number: pr, body });
