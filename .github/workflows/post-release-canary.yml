@@ -44,15 +44,22 @@ jobs:
           # 표준 종료코드: 0=성공, 그 외는 실패로 처리
           pwsh -NoProfile -File ops/canary-postrelease.ps1
 
-      - name: Create incident issue on failure
+      - name: Create incident issue on failure (robust)
         if: steps.canary.outcome != 'success'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}     # gh 인증 토큰
         run: |
-          $title = "Post-release canary failed"
+          # 제목/본문: PowerShell Here-String 사용(따옴표/콜론/줄바꿈 안전)
+          $title = 'Post-release canary failed'
           $body  = @"
 자동 카나리 실패: /health 응답 실패 또는 비정상.
-권고: 즉시 점검 후 URS 롤백(예:ops/urs-rollback.ps1 -Mode prev) 수행.
-trace: run=${env:GITHUB_RUN_ID} attempt=${env:GITHUB_RUN_ATTEMPT}
+권고: 즉시 점검 후 URS 롤백(예: ops/urs-rollback.ps1 -Mode prev) 수행.
+trace: run=$env:GITHUB_RUN_ID attempt=$env:GITHUB_RUN_ATTEMPT
 "@
-          gh issue create -t $title -b $body -l incident,canary
+
+          # ✅ 템플릿 YAML 파싱을 건드리지 않기 위해 REST API로 직접 생성
+          gh api --method POST "repos/$env:GITHUB_REPOSITORY/issues" `
+            -f "title=$title" `
+            -f "body=$body" `
+            -f 'labels=["incident","canary"]' | Out-Null
+
