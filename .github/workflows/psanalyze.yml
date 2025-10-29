@@ -37,80 +37,74 @@ jobs:
           echo "REPO=${GITHUB_REPOSITORY}" >> "$GITHUB_ENV"
           echo "SHA=${SHA}" >> "$GITHUB_ENV"
 
-      - name: Download zipball
-        shell: pwsh
+      - name: Download zipball (curl, 3-fallback)
+        shell: bash
+        env:
+          REPO: ${{ env.REPO }}
+          SHA:  ${{ env.SHA }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $ErrorActionPreference='Stop'
-          $ProgressPreference='SilentlyContinue'
+          set -euo pipefail
       
-          $zip = Join-Path $env:RUNNER_TEMP 'src.zip'
-          $tmp = Join-Path $env:RUNNER_TEMP 'src-unzip'
-          Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force $tmp | Out-Null
+          zip="$RUNNER_TEMP/src.zip"
+          tmp="$RUNNER_TEMP/src-unzip"
+          rm -rf "$tmp"; mkdir -p "$tmp"
       
-          # 1) 우선 API zipball 시도 (토큰 있으면 헤더, 없으면 무헤더)
-          $urls = @()
-          $urls += "https://api.github.com/repos/$($env:REPO)/zipball/$($env:SHA)"
+          api_url="https://api.github.com/repos/$REPO/zipball/$SHA"
+          owner="${REPO%%/*}"
+          name="${REPO##*/}"
+          cl_url="https://codeload.github.com/$owner/$name/zip/$SHA"
       
-          # 2) 실패시 공개레포 전용 codeload 폴백
-          $parts = $env:REPO -split '/'
-          if ($parts.Count -eq 2) {
-            $owner = $parts[0]; $name = $parts[1]
-            $urls += "https://codeload.github.com/$owner/$name/zip/$($env:SHA)"
+          download() {
+            local url="$1"
+            echo "→ try: $url"
+            if [ -n "${GITHUB_TOKEN:-}" ]; then
+              curl -fL --connect-timeout 10 \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                -H "Accept: application/zip" \
+                -o "$zip" "$url"
+            else
+              curl -fL --connect-timeout 10 \
+                -H "Accept: application/zip" \
+                -o "$zip" "$url"
+            fi
           }
       
-          $downloaded = $false
-          foreach ($u in $urls) {
-            try {
-              if ($env:GITHUB_TOKEN) {
-                $hdr = @{
-                  Authorization          = "Bearer $($env:GITHUB_TOKEN)"
-                  "X-GitHub-Api-Version" = "2022-11-28"
-                  Accept                 = "application/zip"
-                }
-                Invoke-WebRequest -Headers $hdr -Uri $u -OutFile $zip -MaximumRedirection 5
-              } else {
-                Invoke-WebRequest -Uri $u -OutFile $zip -MaximumRedirection 5
-              }
-              if (Test-Path $zip -and (Get-Item $zip).Length -gt 0) {
-                Write-Host "Downloaded from $u"
-                $downloaded = $true
-                break
-              }
-            } catch {
-              Write-Warning "Zipball try failed: $u -> $($_.Exception.Message)"
-            }
-          }
+          ok=0
+          # 1) API zipball
+          if download "$api_url"; then ok=1; fi
       
-          # 3) gh api 마지막 폴백 (토큰 자동 사용)
-          if (-not $downloaded) {
-            try {
-              $env:GH_TOKEN = $env:GITHUB_TOKEN
-              & gh api "/repos/$($env:REPO)/zipball/$($env:SHA)" -H "Accept: application/zip" --output $zip
-              if (Test-Path $zip -and (Get-Item $zip).Length -gt 0) {
-                Write-Host "Downloaded via gh api"
-                $downloaded = $true
-              }
-            } catch {
-              Write-Warning "gh api fallback failed: $($_.Exception.Message)"
-            }
-          }
+          # 2) codeload (공개 레포용) 폴백
+          if [ $ok -eq 0 ]; then
+            echo "warn: api zipball failed, fallback to codeload"
+            if download "$cl_url"; then ok=1; fi
+          fi
       
-          if (-not $downloaded) {
-            throw "Zipball download failed (401/403). Check token/permissions or repo visibility."
-          }
+          # 3) gh api 최종 폴백(토큰 자동 사용, 바이너리 리다이렉트)
+          if [ $ok -eq 0 ]; then
+            echo "warn: codeload failed, fallback to gh api"
+            if gh api -H "Accept: application/zip" "/repos/$REPO/zipball/$SHA" > "$zip"; then
+              ok=1
+            fi
+          fi
       
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          [IO.Compression.ZipFile]::ExtractToDirectory($zip,$tmp)
-          $root = Get-ChildItem $tmp | ?{ $_.PSIsContainer } | Select-Object -First 1
-          if (-not $root) { throw "zipball root not found" }
-          "SRCROOT=$($root.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          if [ $ok -ne 1 ] || [ ! -s "$zip" ]; then
+            echo "::error::Zipball download failed (auth/visibility). Check token/permissions."
+            exit 1
+          fi
       
-          # 분석 대상만 워크스페이스 하위로 복사(컨테이너 액션 등 대비)
-          New-Item -ItemType Directory -Force -Path src | Out-Null
-          if (Test-Path (Join-Path $env:SRCROOT 'scripts/g5')) {
-            Copy-Item -Recurse -Force (Join-Path $env:SRCROOT 'scripts/g5') 'src/scripts/g5'
-          }
+          unzip -q "$zip" -d "$tmp"
+          root="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          [ -n "$root" ] || { echo "::error::zipball root not found"; exit 1; }
+      
+          echo "SRCROOT=$root" >> "$GITHUB_ENV"
+          mkdir -p src
+          if [ -d "$root/scripts/g5" ]; then
+            mkdir -p src/scripts
+            cp -R "$root/scripts/g5" "src/scripts/"
+          fi
+
 
 
       - name: Print PowerShell env
