@@ -1,34 +1,24 @@
 # =========================================================
-# 파일 용도 : scripts/g5/* (ChatOps 디스패처 등) 변경 시
+# 파일 용도 : scripts/g5/* 변경 시
 #             1) PowerShell 정적 점검(PSScriptAnalyzer)
 #             2) 스모크 실행(ak-dispatch.ps1 -Command help)
-# 동작 방식 : push/pull_request 에서 경로 필터로 트리거.
-#             오류 발생 시 즉시 실패하여 운영 반영 전 차단.
-# 연관 파일 : .github/workflows/ak-commands.yml
-#             .github/workflows/ak-auto.yml
-#             scripts/g5/ak-dispatch.ps1
-# 안전 가드 : - PSGallery 신뢰 설정 후 모듈 설치(비대화식)
-#             - 스모크는 help만 실행(부작용 최소화)
-# 산출물    : Job Summary(분석 결과), 콘솔 로그
-# 운영 팁  : scripts/g5/* 업데이트는 반드시 이 게이트를
-#            통과해야 ChatOps 루프가 안전하게 동작합니다.
+# 동작 방식 : push/pull_request 경로 필터 트리거 → 에러 시 즉시 실패
+# 연관 파일 : .github/workflows/ak-commands.yml, ak-auto.yml, scripts/g5/ak-dispatch.ps1
+# 안전 가드 : 모듈 설치 비대화식, 스모크는 help만(부작용 최소화)
+# 산출물    : Job Summary/콘솔 로그
 # =========================================================
 name: ak-selftest
 
-on:
-  push:
-    paths:
-      - scripts/g5/**
+"on":
   pull_request:
     paths:
-      - scripts/g5/**
+      - "scripts/g5/**"
+  push:
+    paths:
+      - "scripts/g5/**"
 
-permissions:
-  contents: read
-
-concurrency:
-  group: ak-selftest-${{ github.ref }}
-  cancel-in-progress: false
+# 최소 권한(읽기만)
+permissions: {}
 
 jobs:
   analyze:
@@ -50,22 +40,21 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $issues = Invoke-ScriptAnalyzer -Path 'scripts/g5' -Recurse -Severity Error
-          if ($null -ne $issues -and $issues.Count -gt 0) {
+          if ($issues) {
             $issues | Format-Table | Out-String | Write-Output
             throw "PSScriptAnalyzer errors: $($issues.Count)"
-          } else {
-            Write-Output 'PSScriptAnalyzer: no errors'
           }
+          Write-Output 'PSScriptAnalyzer: no errors'
 
   smoke:
-    name: Smoke help
+    name: Smoke (help)
     runs-on: ubuntu-latest
     needs: analyze
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Smoke: ak-dispatch.ps1 -Command help
+      - name: Smoke:ak-dispatch.ps1 -Command help
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
