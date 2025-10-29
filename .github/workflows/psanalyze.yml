@@ -41,22 +41,77 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
+          $ProgressPreference='SilentlyContinue'
+      
           $zip = Join-Path $env:RUNNER_TEMP 'src.zip'
           $tmp = Join-Path $env:RUNNER_TEMP 'src-unzip'
           Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $tmp | Out-Null
-          $hdr = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; "X-GitHub-Api-Version"="2022-11-28" }
-          $url = "https://api.github.com/repos/$env:REPO/zipball/$env:SHA"
-          Invoke-WebRequest -Headers $hdr -Uri $url -OutFile $zip
+      
+          # 1) 우선 API zipball 시도 (토큰 있으면 헤더, 없으면 무헤더)
+          $urls = @()
+          $urls += "https://api.github.com/repos/$($env:REPO)/zipball/$($env:SHA)"
+      
+          # 2) 실패시 공개레포 전용 codeload 폴백
+          $parts = $env:REPO -split '/'
+          if ($parts.Count -eq 2) {
+            $owner = $parts[0]; $name = $parts[1]
+            $urls += "https://codeload.github.com/$owner/$name/zip/$($env:SHA)"
+          }
+      
+          $downloaded = $false
+          foreach ($u in $urls) {
+            try {
+              if ($env:GITHUB_TOKEN) {
+                $hdr = @{
+                  Authorization          = "Bearer $($env:GITHUB_TOKEN)"
+                  "X-GitHub-Api-Version" = "2022-11-28"
+                  Accept                 = "application/zip"
+                }
+                Invoke-WebRequest -Headers $hdr -Uri $u -OutFile $zip -MaximumRedirection 5
+              } else {
+                Invoke-WebRequest -Uri $u -OutFile $zip -MaximumRedirection 5
+              }
+              if (Test-Path $zip -and (Get-Item $zip).Length -gt 0) {
+                Write-Host "Downloaded from $u"
+                $downloaded = $true
+                break
+              }
+            } catch {
+              Write-Warning "Zipball try failed: $u -> $($_.Exception.Message)"
+            }
+          }
+      
+          # 3) gh api 마지막 폴백 (토큰 자동 사용)
+          if (-not $downloaded) {
+            try {
+              $env:GH_TOKEN = $env:GITHUB_TOKEN
+              & gh api "/repos/$($env:REPO)/zipball/$($env:SHA)" -H "Accept: application/zip" --output $zip
+              if (Test-Path $zip -and (Get-Item $zip).Length -gt 0) {
+                Write-Host "Downloaded via gh api"
+                $downloaded = $true
+              }
+            } catch {
+              Write-Warning "gh api fallback failed: $($_.Exception.Message)"
+            }
+          }
+      
+          if (-not $downloaded) {
+            throw "Zipball download failed (401/403). Check token/permissions or repo visibility."
+          }
+      
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           [IO.Compression.ZipFile]::ExtractToDirectory($zip,$tmp)
           $root = Get-ChildItem $tmp | ?{ $_.PSIsContainer } | Select-Object -First 1
           if (-not $root) { throw "zipball root not found" }
           "SRCROOT=$($root.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      
+          # 분석 대상만 워크스페이스 하위로 복사(컨테이너 액션 등 대비)
           New-Item -ItemType Directory -Force -Path src | Out-Null
           if (Test-Path (Join-Path $env:SRCROOT 'scripts/g5')) {
             Copy-Item -Recurse -Force (Join-Path $env:SRCROOT 'scripts/g5') 'src/scripts/g5'
           }
+
 
       - name: Print PowerShell env
         shell: pwsh
