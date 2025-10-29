@@ -1,8 +1,15 @@
-name: Protect Manual
+# =========================================================
+# Protect Manual & Workflows
+# - 메뉴얼/핵심 워크플로 파일을 PR에서 임의 변경하지 못하도록 가드
+# - OWNER 또는 특정 라벨로만 예외 허용
+# =========================================================
+
+name: Protect Manual & Workflows
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, edited]
+    # 해당 경로의 변경이 있을 때만 트리거
     paths:
       - 'AUTO-Kobong/**'
       - '.github/workflows/protect-manual.yml'
@@ -12,38 +19,82 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  issues: write
+
+concurrency:
+  # 같은 PR에서는 한 번에 하나만 실행
+  group: protect-manual-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
   guard:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Validate manual not deleted or edited by non-owner
+      - name: Check changed files & enforce policy
         uses: actions/github-script@v7
         with:
           script: |
+            const core = require('@actions/core');
             const {owner, repo} = context.repo;
             const pr = context.payload.pull_request.number;
-            const senderAssoc = context.payload.pull_request.author_association; // OWNER/MEMBER/COLLABORATOR/...
-            const {data: files} = await github.rest.pulls.listFiles({owner, repo, pull_number: pr, per_page: 300});
-            const manualPath = 'AUTO-Kobong/AUTO-Kobong-메뉴얼.md';
-            const changed = files.find(f => f.filename === manualPath);
-            if (!changed) {
-              core.info('Manual not touched in this PR. OK.');
-              return;
-            }
-            // allow if OWNER or label doc:allow-edit is present
-            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
-            const allow = labels.some(l => l.name.toLowerCase()==='doc:allow-edit');
-            if (senderAssoc === 'OWNER' || allow) {
-              core.info('Owner or allow label present. OK.');
-              return;
-            }
-            // block deletion or edits by non-owner
-            await github.rest.issues.createComment({
-              owner, repo, issue_number: pr,
-              body: '⛔ 이 PR은 **메뉴얼**을 변경하거나 삭제하려 합니다. OWNER 또는 `doc:allow-edit` 라벨이 필요합니다.'
-            });
-            core.setFailed('Manual change blocked: require OWNER or doc:allow-edit');
+            const assoc = context.payload.pull_request.author_association; // OWNER/MEMBER/COLLABORATOR/CONTRIBUTOR/...
+            // 보호 대상 경로 목록(파일/패턴)
+            const protectedTargets = [
+              'AUTO-Kobong/AUTO-Kobong-메뉴얼.md',
+              '.github/workflows/protect-manual.yml',
+              '.github/workflows/ak-commands.yml',
+              '.github/workflows/ak-auto.yml',
+            ];
 
+            // 변경 파일 조회
+            const files = await github.paginate(
+              github.rest.pulls.listFiles,
+              { owner, repo, pull_number: pr, per_page: 100 },
+              (res) => res.data.map(f => f.filename)
+            );
+
+            // 보호 대상에 대한 변경 감지
+            const touched = files.filter(f =>
+              protectedTargets.some(p => {
+                if (p.endsWith('/**')) return f.startsWith(p.replace('/**','/'));
+                return f === p;
+              })
+            );
+
+            if (touched.length === 0) {
+              core.info('No protected files touched. OK.');
+              return;
+            }
+
+            // 라벨 조회
+            const {data: labels} = await github.rest.issues.listLabelsOnIssue({owner, repo, issue_number: pr});
+            const names = labels.map(l => l.name.toLowerCase());
+
+            // 메뉴얼 변경은 doc:allow-edit 라벨 또는 OWNER만 허용
+            const manualChanged = touched.some(f => f === 'AUTO-Kobong/AUTO-Kobong-메뉴얼.md');
+            const manualAllowed = names.includes('doc:allow-edit') || assoc === 'OWNER';
+
+            // 워크플로 변경은 ops:allow-workflow-edit 라벨 또는 OWNER만 허용
+            const wfChanged = touched.some(f => f.startsWith('.github/workflows/'));
+            const wfAllowed = names.includes('ops:allow-workflow-edit') || assoc === 'OWNER';
+
+            let violations = [];
+            if (manualChanged && !manualAllowed) violations.push('메뉴얼 변경: OWNER 또는 `doc:allow-edit` 필요');
+            if (wfChanged && !wfAllowed) violations.push('워크플로 변경: OWNER 또는 `ops:allow-workflow-edit` 필요');
+
+            if (violations.length) {
+              const body = [
+                '⛔ **보호 대상 파일** 변경 감지로 인해 실행 차단되었습니다.',
+                '',
+                `- 변경 파일: ${touched.map(f => '`'+f+'`').join(', ')}`,
+                '- 허용 조건:',
+                '  - 메뉴얼: OWNER 또는 `doc:allow-edit` 라벨',
+                '  - 워크플로: OWNER 또는 `ops:allow-workflow-edit` 라벨',
+                '',
+                `사유: ${violations.join(' / ')}`
+              ].join('\n');
+              await github.rest.issues.createComment({owner, repo, issue_number: pr, body});
+              core.setFailed('Protected files changed without proper authorization.');
+            } else {
+              core.info('Protected files changed with proper authorization. OK.');
+            }
