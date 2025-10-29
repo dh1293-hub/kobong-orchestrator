@@ -1,8 +1,8 @@
 # =========================================================
 # 파일 용도 : PowerShell 스크립트 정적 점검(PSScriptAnalyzer) + 폴백(문법 전용)
 # 동작 방식 : PR/수동 실행 시 레포 소스를 Zipball로 받고 scripts/g5 하위 검사
-# 연관 파일 : scripts/g5/* (ak-selftest.yml 보조)
-# 안전 가드 : Git 미사용(Zipball), PSGallery v3→v2 다중 재시도, 갤러리 장애 시 문법 분석 폴백
+# 연관 파일 : scripts/g5/*  (ak-selftest.yml의 보조 분석기로 병행 운용)
+# 안전 가드 : Git 미사용(Zipball), PSGallery(v3→v2) 다중 재시도, 갤러리 장애 시 문법 분석 폴백
 # 산출물    : artifacts/pssa-findings.txt
 # =========================================================
 name: PS-analyze
@@ -27,22 +27,17 @@ jobs:
     steps:
       # ── Git 없이 소스 수신(Zipball) ─────────────────────────────
       - name: Resolve repo and sha
-        id: rev
-        uses: actions/github-script@v7
-        with:
-          script: |
-            let sha = context.sha;
-            if (context.eventName === 'pull_request') {
-              sha = context.payload.pull_request.head.sha;
-            }
-            core.setOutput('repo', `${context.repo.owner}/${context.repo.repo}`);
-            core.setOutput('sha', sha);
+        shell: bash
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            SHA="$(jq -r '.pull_request.head.sha' < "$GITHUB_EVENT_PATH")"
+          else
+            SHA="${GITHUB_SHA}"
+          fi
+          echo "REPO=${GITHUB_REPOSITORY}" >> "$GITHUB_ENV"
+          echo "SHA=${SHA}" >> "$GITHUB_ENV"
 
       - name: Download zipball
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO:     ${{ steps.rev.outputs.repo }}
-          SHA:      ${{ steps.rev.outputs.sha }}
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
@@ -50,7 +45,7 @@ jobs:
           $tmp = Join-Path $env:RUNNER_TEMP 'src-unzip'
           Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force $tmp | Out-Null
-          $hdr = @{ Authorization = "Bearer $env:GH_TOKEN"; "X-GitHub-Api-Version"="2022-11-28" }
+          $hdr = @{ Authorization = "Bearer $env:GITHUB_TOKEN"; "X-GitHub-Api-Version"="2022-11-28" }
           $url = "https://api.github.com/repos/$env:REPO/zipball/$env:SHA"
           Invoke-WebRequest -Headers $hdr -Uri $url -OutFile $zip
           Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -58,13 +53,12 @@ jobs:
           $root = Get-ChildItem $tmp | ?{ $_.PSIsContainer } | Select-Object -First 1
           if (-not $root) { throw "zipball root not found" }
           "SRCROOT=$($root.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          # 분석 대상만 워크스페이스 하위로 복사(컨테이너 액션 등 대비)
           New-Item -ItemType Directory -Force -Path src | Out-Null
           if (Test-Path (Join-Path $env:SRCROOT 'scripts/g5')) {
             Copy-Item -Recurse -Force (Join-Path $env:SRCROOT 'scripts/g5') 'src/scripts/g5'
           }
 
-      - name: Print PowerShell environment
+      - name: Print PowerShell env
         shell: pwsh
         run: |
           $v=$PSVersionTable.PSVersion.ToString()
@@ -74,21 +68,22 @@ jobs:
           Write-Host "SRCROOT=$env:SRCROOT"
 
       # ── PSScriptAnalyzer 설치(다중 재시도) ──────────────────────
-      - name: Install PSScriptAnalyzer robust with retry
-        id: install
+      - name: Install PSScriptAnalyzer robust
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          $ok=$false
+          $global:PSAInstalled=$false
+
           function Try-V3 {
             if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
               if (-not (Get-PSResourceRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
                 Register-PSResourceRepository -Name PSGallery -Uri 'https://www.powershellgallery.com/api/v3' -Trusted
               } else { try { Set-PSResourceRepository -Name PSGallery -Trusted } catch {} }
               Install-PSResource -Name PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -TrustRepository -Quiet -Reinstall
-              $script:ok=$true
+              $global:PSAInstalled=$true
             }
           }
+
           function Try-V2 {
             if ($IsWindows -and -not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
               Install-PackageProvider -Name NuGet -Force -Scope CurrentUser | Out-Null
@@ -101,13 +96,73 @@ jobs:
               }
             } else { try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted } catch {} }
             Install-Module PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
-            $script:ok=$true
+            $global:PSAInstalled=$true
           }
-          for ($i=0; $i -lt 6 -and -not $ok; $i++) { try { Try-V3 } catch { Start-Sleep -Seconds ([math]::Pow(2,$i)); continue } }
-          for ($i=0; $i -lt 6 -and -not $ok; $i++) { try { Try-V2 } catch { Start-Sleep -Seconds ([math]::Pow(2,$i)); continue } }
-          if ($ok) { Import-Module PSScriptAnalyzer -Force; 'ok=true'  | Out-File -FilePath $env:GITHUB_OUTPUT -Append }
-          else      { 'ok=false' | Out-File -FilePath $env:GITHUB_OUTPUT -Append; Write-Warning 'PSScriptAnalyzer install failed; will run syntax-only fallback.' }
 
-      # ── PSSA 사용 분석(정상 경로) ───────────────────────────────
+          for ($i=0; $i -lt 6 -and -not $global:PSAInstalled; $i++) {
+            try { Try-V3 } catch { Start-Sleep -Seconds ([math]::Pow(2,$i)); continue }
+          }
+          for ($i=0; $i -lt 6 -and -not $global:PSAInstalled; $i++) {
+            try { Try-V2 } catch { Start-Sleep -Seconds ([math]::Pow(2,$i)); continue }
+          }
+
+          if ($global:PSAInstalled) {
+            Import-Module PSScriptAnalyzer -Force
+            Get-Module PSScriptAnalyzer | Format-List Name,Version | Out-String | Write-Host
+            'PRIMARY=1' | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          } else {
+            Write-Warning 'PSScriptAnalyzer install failed; will run syntax-only fallback.'
+            'PRIMARY=0' | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          }
+
+      # ── 분석 실행(Primary 경로) ─────────────────────────────────
       - name: Run PSSA and save findings
-        if: ${{ steps.install.outputs.ok == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          if ($env:PRIMARY -ne '1') { Write-Host 'Skip primary (no PSSA).'; exit 0 }
+          $target='src/scripts/g5'
+          if (-not (Test-Path $target)) { Write-Host 'No scripts/g5 to analyze'; exit 0 }
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $results = Invoke-ScriptAnalyzer -Path $target -Recurse -Severity Error,Warning
+          if ($results) {
+            $results | Sort-Object Severity, RuleName |
+              Select-Object Severity, RuleName, ScriptName, Line, Message |
+              Format-Table -AutoSize | Out-String | Tee-Object -FilePath 'artifacts/pssa-findings.txt'
+          } else {
+            'PSScriptAnalyzer: no findings' | Tee-Object -FilePath 'artifacts/pssa-findings.txt'
+          }
+          $err = ($results | Where-Object { $_.Severity -eq 'Error' }).Count
+          if ($err -gt 0) { Write-Error "PSScriptAnalyzer errors: $err" }
+
+      # ── 갤러리 장애 폴백: 문법 전용 분석(오프라인) ───────────────
+      - name: Fallback syntax only analysis
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          if ($env:PRIMARY -eq '1') { Write-Host 'Skip fallback (PSSA available).'; exit 0 }
+          $target='src/scripts/g5'
+          if (-not (Test-Path $target)) { Write-Host 'No scripts/g5 to analyze'; exit 0 }
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          $errs=@()
+          Get-ChildItem $target -Recurse -Include *.ps1,*.psm1 | ForEach-Object {
+            try {
+              [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$null)
+            } catch {
+              $errs += [pscustomobject]@{ Severity='Error'; RuleName='Syntax'; ScriptName=$_.Name; Line=0; Message=$_.Exception.Message }
+            }
+          }
+          if ($errs.Count -gt 0) {
+            $errs | Format-Table -AutoSize | Out-String | Tee-Object -FilePath 'artifacts/pssa-findings.txt'
+            Write-Error "Syntax errors: $($errs.Count)"
+          } else {
+            'Syntax-only: no parse errors (PSGallery outage fallback mode)' | Tee-Object -FilePath 'artifacts/pssa-findings.txt'
+          }
+
+      - name: Upload findings artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pssa-findings
+          path: artifacts/pssa-findings.txt
+          if-no-files-found: ignore
+          retention-days: 7
