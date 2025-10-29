@@ -1,3 +1,32 @@
+# ak-apply.yml — 주석판(가시 영역 기준)  / by GPT‑5
+# -----------------------------------------------------------------------------
+# 파일 용도: AUTO‑Kobong(AK) 워크로드를 수동(workflow_dispatch)으로 실행해
+#            코드에 rewrite/fix/test를 적용하고, 결과 로그를 아티팩트로 남기며
+#            (선택) 특정 PR에 실행 결과 요약을 코멘트로 회신합니다.
+# 동작 개요(원본 추정 + 규약 반영):
+#   1) 입력값(cmd/ref/pr)을 받음 → ref 기준으로 체크아웃
+#   2) PowerShell7 엄격 모드(StrictMode) + 예외정지(-ErrorAction Stop)를 적용
+#   3) 'cmd'에 따라 AK 실행 스크립트 호출(rewrite|fix|test)
+#   4) 표준 로그를 .ak-out.txt와 logs/ak7.jsonl로 저장
+#   5) 아티팩트 업로드(ak-apply-logs)
+#   6) pr 번호가 있으면 마지막 80줄 tail을 PR 코멘트로 회신
+# 연관 파일(대표):
+#   - scripts/g5/apply-patches.ps1, fix-ak.ps1 (AK 실행 계열)  # 실제 저장소 구조에 맞춰 조정
+#   - .kobong/ROLLBACK_POLICY.md, Rollbackfile.json           # URS 롤백 규약
+#   - scripts/g5/*                                            # PS7 운영 스크립트 표준
+# 안전 가드(권고):
+#   - permissions 최소화 유지, ref 입력값 화이트리스트/패턴 검증
+#   - DRYRUN→APPLY 2단계(+CONFIRM_APPLY 플래그) 운영
+#   - 실패 시 .bak/good 슬롯 롤백 경로 안내(URS), 비밀값 마스킹
+#   - 모든 스텝 로그에 KLC 4요소(traceId,durationMs,exitCode,anchorHash) 1행 포함
+# 산출물:
+#   - 아티팩트: ak-apply-logs (.ak-out.txt, logs/ak7.jsonl)
+#   - PR 코멘트(선택): 마지막 80줄 요약(Tail)
+# 사용법:
+#   - GitHub → Actions → ‘AK Apply (manual)’ → Run workflow
+#     · cmd: rewrite|fix|test  · ref: 대상 브랜치/태그  · pr: 회신할 PR 번호(선택)
+# -----------------------------------------------------------------------------
+
 name: AK Apply (manual)
 on:
   workflow_dispatch:
