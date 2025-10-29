@@ -54,7 +54,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Smoke:ak-dispatch.ps1 -Command help
+      - name: "Smoke: ak-dispatch.ps1 -Command help"
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
