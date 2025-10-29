@@ -1,4 +1,4 @@
 ADDED
 CHANGED
-.github/workflows/ak-commands.yml
+.github/workflows/ak-auto.yml
 REMOVED
