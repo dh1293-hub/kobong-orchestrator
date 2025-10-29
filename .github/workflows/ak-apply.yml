@@ -45,12 +45,15 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-        with: { ref: ${{ inputs.ref }}, fetch-depth: 2 }
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 2
 
       - name: Run AK in APPLY mode
         id: run
         shell: pwsh
-        env: { CMD: ${{ inputs.cmd }} }
+        env:
+          CMD: ${{ inputs.cmd }}
         run: |
           Set-StrictMode -Version Latest; $ErrorActionPreference='Stop'
           $map = @{ rewrite='ak-rewrite.ps1'; fix='ak-fixloop.ps1'; test='ak-test.ps1' }
@@ -78,7 +81,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Comment back to PR (optional)
-        if: always() && inputs.pr != ''
+        if: ${{ always() && inputs.pr != '' }}
         uses: actions/github-script@v7
         with:
           github-token: ${{ github.token }}
