@@ -22,7 +22,9 @@ concurrency:
 permissions:
   contents: read                   # checkout에 필요
   issues: write                    # PR/이슈 코멘트 작성에 필요
+  pull-requests: write
 
+  
 jobs:
   smoke:
     runs-on: windows-latest
@@ -86,7 +88,18 @@ jobs:
           path: housekeeping-summary.md
           retention-days: 14
 
-      # ✅ 결과를 PR 또는 고정 이슈에 코멘트(헤더 마커로 업데이트)
+      # ✅ 요약을 Actions Job Summary에도 기록(언제나 보임)
+      - name: Write job summary
+        if: always()
+        run: |
+          $p = Join-Path $PWD 'housekeeping-summary.md'
+          if (Test-Path $p) {
+            Get-Content $p -Raw | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          } else {
+            "No summary file." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          }
+
+      # ✅ 포크 PR이면 코멘트 스킵, 아니면 PR/고정 이슈에 코멘트(헤더 마커 업데이트)
       - name: Post or update summary comment
         if: always()
         uses: actions/github-script@v7
@@ -94,17 +107,25 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
+            const {owner, repo} = context.repo;
+            const pr = context.payload.pull_request || null;
+
+            // 포크 PR 판단: 포크에서 온 PR이면 토큰이 read-only라 코멘트 금지
+            const isForkPR = !!pr && pr.head && pr.head.repo && pr.head.repo.fork === true;
+            if (isForkPR) {
+              core.notice('Fork PR detected -> skip commenting (token is read-only). See Job Summary & Artifact.');
+              return;
+            }
+
             const header = '<!-- hk-summary -->';
             const body = fs.existsSync('housekeeping-summary.md')
               ? fs.readFileSync('housekeeping-summary.md','utf8')
               : '_No summary file_';
             const newBody = `${header}\n${body}`;
 
-            const {owner, repo} = context.repo;
-            const pr = context.payload.pull_request;
             let issue_number = pr ? pr.number : null;
 
-            // 스케줄/수동 실행 시: 고정 이슈(제목) 생성/탐색
+            // 스케줄/수동 실행: 고정 이슈(제목)로 유도
             if (!issue_number) {
               const title = 'Housekeeping Smoke Report';
               const { data: issues } = await github.rest.issues.listForRepo({
@@ -122,11 +143,14 @@ jobs:
               }
             }
 
-            // 기존 코멘트에 헤더가 있으면 업데이트, 없으면 새 코멘트
-            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
+            // 헤더가 있는 기존 코멘트는 업데이트, 없으면 신규 작성
+            const { data: comments } = await github.rest.issues.listComments({
+              owner, repo, issue_number, per_page: 100
+            });
             const prev = comments.find(c => (c.user?.type === 'Bot') && (c.body||'').includes(header));
             if (prev) {
               await github.rest.issues.updateComment({ owner, repo, comment_id: prev.id, body: newBody });
             } else {
               await github.rest.issues.createComment({ owner, repo, issue_number, body: newBody });
             }
+
