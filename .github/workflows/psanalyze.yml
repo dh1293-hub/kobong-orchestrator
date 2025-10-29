@@ -92,13 +92,50 @@ jobs:
 
           [string[]]$targets | Set-Content targets.txt -Encoding utf8
           "count=$($targets.Count)" | Out-File $env:GITHUB_OUTPUT -Append
+          
+          - name: Install PSScriptAnalyzer
+            shell: pwsh
+            run: |
+              $ErrorActionPreference = 'Stop'
+              
+              # WinPS 5.1일 수 있으니 TLS1.2 강제
+              if ($PSVersionTable.PSEdition -eq 'Desktop') {
+              [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+              }
+              
+              # 1) PSResourceGet(Install-PSResource) 경로 우선
+              if (Get-Command Install-PSResource -ErrorAction SilentlyContinue) {
+              if (-not (Get-PSResourceRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+              Register-PSResourceRepository -Name PSGallery -Uri 'https://www.powershellgallery.com/api/v3' -Trusted
+              } else {
+              try { Set-PSResourceRepository -Name PSGallery -Trusted } catch {}
+              }
+              Install-PSResource -Name PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -TrustRepository -Quiet -Reinstall
+              }
+              else {
+              # 2) (레거시) PowerShellGet v2 폴백
+              if ($IsWindows -and -not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+              Install-PackageProvider -Name NuGet -Force -Scope CurrentUser | Out-Null
+              }
+              $pg = Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue
+              if (-not $pg) {
+              if ((Get-Command Register-PSRepository).Parameters.ContainsKey('Default')) {
+              Register-PSRepository -Default
+              try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted } catch {}
+              } else {
+              Register-PSRepository -Name PSGallery `
+              -SourceLocation 'https://www.powershellgallery.com/api/v2' `
+              -ScriptSourceLocation 'https://www.powershellgallery.com/api/v2' `
+              -InstallationPolicy Trusted
+              }
+              } else {
+              try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted } catch {}
+              }
+              Install-Module PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
+              }
 
+              Import-Module PSScriptAnalyzer -Force
 
-      - name: Install PSScriptAnalyzer
-        shell: pwsh
-        run: |
-          Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
 
       - name: Run analyzer (per-file → SARIF, robust)
         id: scan
