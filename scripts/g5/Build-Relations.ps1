@@ -135,6 +135,7 @@ $lines -join [Environment]::NewLine | Set-Content -Path $mm -Encoding UTF8
 
 $summary = @{
   generated_at = (Get-Date).ToString("s")
+  generated_at = Get-Date -Format s
   node_count   = $nodes.Count
   edge_count   = $edges.Count
   changed_only = [bool]$ChangedOnly
