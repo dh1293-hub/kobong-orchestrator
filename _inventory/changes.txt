@@ -1,4 +1,4 @@
 ADDED
-patches/manifest.json
 CHANGED
+scripts/g5/apply-patches.ps1
 REMOVED
