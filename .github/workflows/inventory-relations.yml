@@ -1,0 +1,80 @@
+name: Inventory / File Relations
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - "_inventory/**"
+  pull_request:
+    paths-ignore:
+      - "_inventory/**"
+  workflow_dispatch:
+
+concurrency:
+  group: inventory-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-relations:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup PowerShell 7
+        uses: PowerShell/PowerShell@v1
+        with:
+          version: '7.4.x'
+
+      - name: Build relations (ChangedOnly on PR)
+        shell: pwsh
+        run: |
+          $changed = "${{ github.event_name }}" -eq "pull_request"
+          pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -OutDir _inventory @(
+            if ($changed) { '-ChangedOnly' }
+          )
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inventory-relations
+          path: |
+            _inventory/relations.csv
+            _inventory/graph.json
+            _inventory/graph.mermaid.md
+            _inventory/index.json
+
+      - name: Summarize
+        shell: pwsh
+        run: |
+          $idx = Get-Content _inventory/index.json -Raw | ConvertFrom-Json
+          $rel = Import-Csv _inventory/relations.csv
+          $top = $rel | Group-Object source_path | Sort-Object Count -Desc | Select-Object -First 10
+          @"
+          # File Relations
+          - Generated: $($idx.generated_at)
+          - Nodes: $($idx.node_count)
+          - Edges: $($idx.edge_count)
+
+          ## Top 10 Sources
+          $(($top | ForEach-Object { "* $($_.Name) — $($_.Count) edges" }) -join "`n")
+
+          ## Mermaid Preview (first 100 edges)
+          $(Get-Content _inventory/graph.mermaid.md -Raw)
+          "@ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+
+      - name: Create PR for _inventory update
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore(inventory): update relations graph"
+          title: "chore(inventory): update relations graph"
+          body: "자동 생성된 파일 관계 그래프/목록 업데이트"
+          branch: chore/inventory-relations-update
+          add-paths: |
+            _inventory/relations.csv
+            _inventory/graph.json
+            _inventory/graph.mermaid.md
+            _inventory/index.json
