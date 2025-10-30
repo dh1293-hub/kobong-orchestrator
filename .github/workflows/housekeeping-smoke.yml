@@ -99,19 +99,19 @@ jobs:
             // 포크 PR이면 토큰이 read-only → 코멘트 스킵
             const isForkPR = !!pr && pr.head && pr.head.repo && pr.head.repo.fork === true;
             if (isForkPR) {
-              core.notice('Fork PR detected -> skip commenting (token is read-only). See Job Summary & Artifact.');
+              core.notice('Fork PR detected → skip commenting (token read-only). Check Job Summary & Artifact.');
               return;
             }
 
             const header = '<!-- hk-summary -->';
             const body = fs.existsSync('housekeeping-summary.md')
-              ? fs.readFileSync('housekeeping-summary.md','utf8')
+              ? fs.readFileSync('housekeeping-summary.md', 'utf8')
               : '_No summary file_';
             const newBody = `${header}\n${body}`;
 
             let issue_number = pr ? pr.number : null;
 
-            // 스케줄/수동 실행: 고정 이슈(제목) 생성/탐색 후 갱신
+            // 스케줄/수동 실행: 고정 이슈(제목) 생성/탐색
             if (!issue_number) {
               const title = 'Housekeeping Smoke Report';
               const { data: issues } = await github.rest.issues.listForRepo({
@@ -129,13 +129,14 @@ jobs:
               }
             }
 
-            // 헤더가 있는 기존 코멘트는 업데이트, 없으면 신규 작성
+            // 기존 봇 코멘트(헤더 포함) 업데이트, 없으면 신규 작성
             const { data: comments } = await github.rest.issues.listComments({
               owner, repo, issue_number, per_page: 100
             });
-            const prev = comments.find(c => (c.user?.type === 'Bot') && (c.body||'').includes(header));
+            const prev = comments.find(c => (c.user?.type === 'Bot') && (c.body || '').includes(header));
             if (prev) {
               await github.rest.issues.updateComment({ owner, repo, comment_id: prev.id, body: newBody });
             } else {
               await github.rest.issues.createComment({ owner, repo, issue_number, body: newBody });
             }
+
