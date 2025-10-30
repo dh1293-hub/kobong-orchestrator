@@ -88,21 +88,57 @@ jobs:
           '[INIT] AK APPLY {0} on {1}' -f $env:TARGET_CMD, $env:TARGET_REF | Out-File .ak-out.txt
 
       - name: Plan (Dry-Run)
+        shell: pwsh
         run: |
-          # 실제 저장소의 스크립트 경로/옵션으로 교체하세요.
-          # Dry-Run 단계: 실패하면 즉시 중단되어 Apply는 스킵됩니다.
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path logs | Out-Null
+          New-Item -ItemType File -Force -Path .ak-out.txt | Out-Null
           try {
-            "== DRYRUN start ==" | Tee-Object -FilePath .ak-out.txt -Append
             pwsh -NoProfile -File scripts/g5/apply-patches.ps1 -DryRun `
-              2>&1 | Tee-Object -FilePath .ak-out.txt -Append
-            "== DRYRUN end =="   | Tee-Object -FilePath .ak-out.txt -Append
-            # KLC 1행(예시)
-            New-Item -ItemType Directory -Path logs -Force | Out-Null
-            '{ "ts":"{0}","event":"ak-plan","cmd":"{1}","exitCode":0 }' -f (Get-Date -Format o), $env:TARGET_CMD | Out-File logs/ak7.jsonl -Append
+              -Manifest patches/manifest.json `
+              -OutText .ak-out.txt -OutJson logs/ak7.jsonl
+            $code = $LASTEXITCODE
+            $msg  = 'ok'
           } catch {
-            '{ "ts":"{0}","event":"ak-plan","cmd":"{1}","exitCode":1,"error":"{2}"}' -f (Get-Date -Format o), $env:TARGET_CMD, ($_.Exception.Message.Replace('"','''')) | Out-File logs/ak7.jsonl -Append
-            throw
+            $code = 1
+            $msg  = $_.Exception.Message
           }
+          # ConvertTo-Json 기반이라 중괄호 충돌 없음
+          [pscustomobject]@{
+            ts = (Get-Date -AsUtc -Format o)
+            event = 'ak-plan'
+            cmd = '${{ env.TARGET_CMD }}'
+            exitCode = $code
+            error = if($code -eq 0){''}else{$msg}
+          } | ConvertTo-Json -Compress | Out-File logs/ak7.jsonl -Append -Encoding utf8
+          exit $code
+
+      - name: Apply (on merge or manual)
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true) }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path logs | Out-Null
+          New-Item -ItemType File -Force -Path .ak-out.txt | Out-Null
+          try {
+            pwsh -NoProfile -File scripts/g5/apply-patches.ps1 `
+              -Manifest patches/manifest.json `
+              -OutText .ak-out.txt -OutJson logs/ak7.jsonl
+            $code = $LASTEXITCODE
+            $msg  = 'ok'
+          } catch {
+            $code = 1
+            $msg  = $_.Exception.Message
+          }
+          [pscustomobject]@{
+            ts = (Get-Date -AsUtc -Format o)
+            event = 'ak-apply'
+            cmd = '${{ env.TARGET_CMD }}'
+            exitCode = $code
+            error = if($code -eq 0){''}else{$msg}
+          } | ConvertTo-Json -Compress | Out-File logs/ak7.jsonl -Append -Encoding utf8
+          exit $code
+
 
       - name: Health gate (optional)
         if: ${{ always() }}   # 필요 시 조건/구현 보강
