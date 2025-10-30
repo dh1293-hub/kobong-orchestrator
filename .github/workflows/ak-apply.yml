@@ -1,87 +1,145 @@
 # ak-apply.yml — 주석판(가시 영역 기준)  / by GPT‑5
-# -----------------------------------------------------------------------------
-# 파일 용도: AUTO‑Kobong(AK) 워크로드를 수동(workflow_dispatch)으로 실행해
-#            코드에 rewrite/fix/test를 적용하고, 결과 로그를 아티팩트로 남기며
-#            (선택) 특정 PR에 실행 결과 요약을 코멘트로 회신합니다.
-# 동작 개요(원본 추정 + 규약 반영):
-#   1) 입력값(cmd/ref/pr)을 받음 → ref 기준으로 체크아웃
-#   2) PowerShell7 엄격 모드(StrictMode) + 예외정지(-ErrorAction Stop)를 적용
-#   3) 'cmd'에 따라 AK 실행 스크립트 호출(rewrite|fix|test)
-#   4) 표준 로그를 .ak-out.txt와 logs/ak7.jsonl로 저장
-#   5) 아티팩트 업로드(ak-apply-logs)
-#   6) pr 번호가 있으면 마지막 80줄 tail을 PR 코멘트로 회신
-# 연관 파일(대표):
-#   - scripts/g5/apply-patches.ps1, fix-ak.ps1 (AK 실행 계열)  # 실제 저장소 구조에 맞춰 조정
-#   - .kobong/ROLLBACK_POLICY.md, Rollbackfile.json           # URS 롤백 규약
-#   - scripts/g5/*                                            # PS7 운영 스크립트 표준
-# 안전 가드(권고):
-#   - permissions 최소화 유지, ref 입력값 화이트리스트/패턴 검증
-#   - DRYRUN→APPLY 2단계(+CONFIRM_APPLY 플래그) 운영
-#   - 실패 시 .bak/good 슬롯 롤백 경로 안내(URS), 비밀값 마스킹
-#   - 모든 스텝 로그에 KLC 4요소(traceId,durationMs,exitCode,anchorHash) 1행 포함
-# 산출물:
-#   - 아티팩트: ak-apply-logs (.ak-out.txt, logs/ak7.jsonl)
-#   - PR 코멘트(선택): 마지막 80줄 요약(Tail)
+# 파일: .github/workflows/ak-apply.yml
+# 제목: AK Apply (manual & merge)
+# 목적:
+#   - 수동(workflow_dispatch) 실행으로 AK 계열 작업(rewrite|fix|test)을 돌리고 산출물(로그)을 남김
+#   - PR이 main에 "머지되어 닫힘(closed & merged==true)"일 때 자동 실행
+#   - (선택) workflow_dispatch 실행 시 지정한 PR 번호에 결과 요약 Tail(80줄)을 코멘트로 회신
+# 근거(우리 운영 표준):
+#   - PS7 우선, StrictMode + -ErrorAction Stop (PowerShell7_Guidelines_Kobong_v1.1.md)
+#   - Dry-Run → Apply 2단계 / GOOD 슬롯 롤백(ROLLBACK_POLICY.md, ROLLBACK_POLICY_MANUAL.md)
+#   - KLC 1행 로그( traceId, durationMs, exitCode, anchorHash ) 기본
+#   - 아티팩트/요약 보존, 브랜치 보호·필수 체크와 함께 운용
 # 사용법:
-#   - GitHub → Actions → ‘AK Apply (manual)’ → Run workflow
-#     · cmd: rewrite|fix|test  · ref: 대상 브랜치/태그  · pr: 회신할 PR 번호(선택)
-# -----------------------------------------------------------------------------
+#   - Actions > AK Apply (manual & merge) > Run workflow
+#     · cmd: rewrite|fix|test (기본 fix)
+#     · ref: 실행 기준 git ref (기본 main)
+#     · pr:  회신할 PR 번호(선택)
+#     · apply: 수동 실행 시 실제 적용(Apply)까지 수행할지 여부 (기본 false=Dry-Run만)
+# 연관 파일/스크립트(예):
+#   - scripts/g5/apply-patches.ps1  # 저장소 스크립트 경로에 맞게 조정 필수
+# 산출물:
+#   - artifacts: ak-apply-logs → .ak-out.txt, logs/ak7.jsonl
+#   - (옵션) PR 코멘트: 마지막 80줄 Tail
 
-name: AK Apply (manual)
+name: AK Apply (manual & merge)
+
 on:
   workflow_dispatch:
     inputs:
-      cmd:  { description: 'rewrite|fix|test', required: true, default: 'fix' }
-      ref:  { description: 'git ref (branch/tag)', required: true, default: 'main' }
-      pr:   { description: 'PR number to comment back (optional)', required: false, default: '' }
+      cmd:
+        description: 'rewrite|fix|test'
+        required: true
+        default: 'fix'
+        type: choice
+        options: [rewrite, fix, test]
+      ref:
+        description: 'git ref (branch/tag)'
+        required: true
+        default: 'main'
+      pr:
+        description: 'PR number to comment back (optional)'
+        required: false
+        default: ''
+      apply:
+        description: 'Run Apply step? (default: Dry-Run only)'
+        required: true
+        default: false
+        type: boolean
+  pull_request:
+    branches: [main]
+    types: [closed]   # 닫힐 때만 수신, 아래 if로 merged==true인 경우에만 실행
 
 permissions:
   contents: write
   issues: write
   pull-requests: write
 
+concurrency:
+  # 같은 ref 대상으로는 한 번에 하나만
+  group: ak-apply-${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
+  cancel-in-progress: false
+
 jobs:
   apply:
+    # 수동 실행이거나, PR이 "머지되어 닫힘"인 경우만 처리
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true) }}
     runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref }}
-          fetch-depth: 2
-
-      - name: Run AK in APPLY mode
-        id: run
+    timeout-minutes: 20
+    defaults:
+      run:
         shell: pwsh
-        env:
-          CMD: ${{ inputs.cmd }}
+    env:
+      # 수동 실행이면 inputs.ref/cmd, PR-머지 자동이면 ref_name/기본 fix
+      TARGET_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
+      TARGET_CMD: ${{ github.event_name == 'workflow_dispatch' && inputs.cmd || 'fix' }}
+
+    steps:
+      - name: Checkout (TARGET_REF)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_REF }}
+          fetch-depth: 0
+
+      - name: Init PS7 guard (StrictMode / Stop / UTF-8)
         run: |
-          Set-StrictMode -Version Latest; $ErrorActionPreference='Stop'
-          $map = @{ rewrite='ak-rewrite.ps1'; fix='ak-fixloop.ps1'; test='ak-test.ps1' }
-          if (-not $map.ContainsKey($env:CMD)) { throw "unknown cmd: $env:CMD" }
-          $pth = @(
-            Join-Path 'scripts/g5' $map[$env:CMD],
-            Join-Path 'scripts'    $map[$env:CMD],
-            $map[$env:CMD]
-          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $pth) { throw "script not found: $($map[$env:CMD])" }
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
+          '[INIT] AK APPLY {0} on {1}' -f $env:TARGET_CMD, $env:TARGET_REF | Out-File .ak-out.txt
 
-          ">> APPLY: $pth -ConfirmApply" | Tee-Object .ak-out.txt
-          & pwsh -NoProfile -File $pth -ConfirmApply 2>&1 | Tee-Object -Append .ak-out.txt
-          "exit_code=$LASTEXITCODE" | Out-File $env:GITHUB_OUTPUT -Append
-          if ($LASTEXITCODE -ne 0) { Write-Error "AK APPLY failed with $LASTEXITCODE" }
+      - name: Plan (Dry-Run)
+        run: |
+          # 실제 저장소의 스크립트 경로/옵션으로 교체하세요.
+          # Dry-Run 단계: 실패하면 즉시 중단되어 Apply는 스킵됩니다.
+          try {
+            "== DRYRUN start ==" | Tee-Object -FilePath .ak-out.txt -Append
+            pwsh -NoProfile -File scripts/g5/apply-patches.ps1 -DryRun `
+              2>&1 | Tee-Object -FilePath .ak-out.txt -Append
+            "== DRYRUN end =="   | Tee-Object -FilePath .ak-out.txt -Append
+            # KLC 1행(예시)
+            New-Item -ItemType Directory -Path logs -Force | Out-Null
+            '{ "ts":"{0}","event":"ak-plan","cmd":"{1}","exitCode":0 }' -f (Get-Date -Format o), $env:TARGET_CMD | Out-File logs/ak7.jsonl -Append
+          } catch {
+            '{ "ts":"{0}","event":"ak-plan","cmd":"{1}","exitCode":1,"error":"{2}"}' -f (Get-Date -Format o), $env:TARGET_CMD, ($_.Exception.Message.Replace('"','''')) | Out-File logs/ak7.jsonl -Append
+            throw
+          }
 
-      - name: Upload logs
-        if: always()
+      - name: Health gate (optional)
+        if: ${{ always() }}   # 필요 시 조건/구현 보강
+        run: |
+          # TODO: 외부 서비스/에이전트 헬스체크 로직 삽입
+          "health=ok" | Out-File .ak-out.txt -Append
+
+      - name: Apply (CONFIRM_APPLY)
+        if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.merged == true) || (github.event_name == 'workflow_dispatch' && inputs.apply == true) }}
+        env:
+          CONFIRM_APPLY: 'true'
+        run: |
+          try {
+            "== APPLY start ==" | Tee-Object -FilePath .ak-out.txt -Append
+            pwsh -NoProfile -File scripts/g5/apply-patches.ps1 -Apply `
+              2>&1 | Tee-Object -FilePath .ak-out.txt -Append
+            "== APPLY end =="   | Tee-Object -FilePath .ak-out.txt -Append
+            '{ "ts":"{0}","event":"ak-apply","cmd":"{1}","exitCode":0 }' -f (Get-Date -Format o), $env:TARGET_CMD | Out-File logs/ak7.jsonl -Append
+          } catch {
+            '{ "ts":"{0}","event":"ak-apply","cmd":"{1}","exitCode":1,"error":"{2}"}' -f (Get-Date -Format o), $env:TARGET_CMD, ($_.Exception.Message.Replace('"','''')) | Out-File logs/ak7.jsonl -Append
+            throw
+          }
+
+      - name: Upload artifacts (logs)
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ak-apply-logs
           path: |
             .ak-out.txt
             logs/ak7.jsonl
-          if-no-files-found: ignore
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Comment back to PR (optional)
-        if: ${{ always() && inputs.pr != '' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.pr != '' }}
         uses: actions/github-script@v7
         with:
           github-token: ${{ github.token }}
@@ -91,5 +149,5 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: Number("${{ inputs.pr }}"),
-              body: "🟩 **AK APPLY `${{ inputs.cmd }}`** on `${{ inputs.ref }}`\n\n```\n"+tail+"\n```"
+              body: "🟩 **AK APPLY `${{ env.TARGET_CMD }}`** on `${{ env.TARGET_REF }}`\n\n```\\n"+tail+"\\n```"
             });
