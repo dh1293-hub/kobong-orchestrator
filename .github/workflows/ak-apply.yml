@@ -112,8 +112,6 @@ jobs:
       
           exit $norm
 
-
-
       - name: Apply (CONFIRM_APPLY)
         shell: pwsh
         run: |
@@ -121,25 +119,37 @@ jobs:
           New-Item -ItemType Directory -Force -Path logs | Out-Null
           New-Item -ItemType File -Force -Path .ak-out.txt | Out-Null
       
-          # ❌ 절대 사용 금지: -Apply (이 파라미터는 없음)
-          # & pwsh -NoProfile -File scripts/g5/apply-patches.ps1 -Apply ...
+          try {
+            "== APPLY start ==" | Tee-Object -FilePath .ak-out.txt -Append
       
-          # ✅ 적용은 스위치 없이 호출
-          & pwsh -NoProfile -File scripts/g5/apply-patches.ps1 `
-            -Manifest patches/manifest.json `
-            -OutText .ak-out.txt -OutJson logs/ak7.jsonl
+            # ⛔ (삭제) -Apply 스위치
+            # pwsh -NoProfile -File scripts/g5/apply-patches.ps1 -Apply `
       
-          $code = $LASTEXITCODE
-          # 0(성공)·10(No-Op) → 성공(0)으로 맵핑
+            # ✅ 적용은 스위치 없이 호출, JSON은 스크립트에서 생성
+            & pwsh -NoProfile -File scripts/g5/apply-patches.ps1 `
+              -Manifest patches/manifest.json `
+              -OutText .ak-out.txt -OutJson logs/ak7.jsonl `
+              2>&1 | Tee-Object -FilePath .ak-out.txt -Append
+      
+            "== APPLY end ==" | Tee-Object -FilePath .ak-out.txt -Append
+            $code = $LASTEXITCODE
+            $err  = ''
+          }
+          catch {
+            $code = 1
+            $err  = $_.Exception.Message
+          }
+      
+          # 0(성공), 10(No-Op) → 성공(0)으로 취급
           $norm = if ($code -in 0,10) { 0 } else { $code }
-          $err  = if ($norm -eq 0) { '' } else { "failed (code=$code)" }
       
-          # ❗JSON은 항상 객체 → ConvertTo-Json (서식문자 -f 금지)
+          # ❗여기서 더 이상 -f 로 JSON 만들지 않습니다
           [pscustomobject]@{
             ts       = (Get-Date -AsUtc -Format o)
             event    = 'ak-apply'
+            cmd      = $env:TARGET_CMD
             exitCode = $code
-            error    = $err
+            error    = if ($norm -eq 0) { '' } else { $err }
           } | ConvertTo-Json -Compress | Out-File logs/ak7.jsonl -Append -Encoding utf8
       
           exit $norm
