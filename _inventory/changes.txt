@@ -1,4 +1,4 @@
 ADDED
 CHANGED
-.github/workflows/ak-apply.yml
 REMOVED
+scripts/g5/apply-patches - 복사본.ps1
