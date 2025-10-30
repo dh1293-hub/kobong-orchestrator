@@ -93,51 +93,74 @@ jobs:
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force -Path logs | Out-Null
           New-Item -ItemType File -Force -Path .ak-out.txt | Out-Null
-          try {
-            pwsh -NoProfile -File scripts/g5/apply-patches.ps1 -DryRun `
-              -Manifest patches/manifest.json `
-              -OutText .ak-out.txt -OutJson logs/ak7.jsonl
-            $code = $LASTEXITCODE
-            $msg  = 'ok'
-          } catch {
-            $code = 1
-            $msg  = $_.Exception.Message
-          }
-          # ConvertTo-Json 기반이라 중괄호 충돌 없음
-          [pscustomobject]@{
-            ts = (Get-Date -AsUtc -Format o)
-            event = 'ak-plan'
-            cmd = '${{ env.TARGET_CMD }}'
-            exitCode = $code
-            error = if($code -eq 0){''}else{$msg}
-          } | ConvertTo-Json -Compress | Out-File logs/ak7.jsonl -Append -Encoding utf8
-          exit $code
+    
+           try {
+             pwsh -NoProfile -File scripts/g5/apply-patches.ps1 -DryRun `
+               -Manifest patches/manifest.json `
+               -OutText .ak-out.txt -OutJson logs/ak7.jsonl
+             $code = $LASTEXITCODE
+             $msg  = 'ok'
+           } catch {
+             $code = 1
+             $msg  = $_.Exception.Message
+           }
+           & pwsh -NoProfile -File scripts/g5/apply-patches.ps1 -DryRun `
+             -Manifest patches/manifest.json `
+             -OutText .ak-out.txt -OutJson logs/ak7.jsonl
+           $code = $LASTEXITCODE
+           # ✅ 정상 코드 맵핑: 0(성공), 11(DryRun 완료), 10(No-Op) → 성공(0)으로 처리
+           $norm = if ($code -in 0,10,11) { 0 } else { $code }
+           $msg  = if ($norm -eq 0) { 'ok' } else { "failed (code=$code)" }
+        
+            [pscustomobject]@{
+              ts = (Get-Date -AsUtc -Format o)
+              event = 'ak-plan'
+             exitCode = $code
+             error = if($code -eq 0){''}else{$msg}
+             exitCode = $code
+             error = if($norm -eq 0){''}else{$msg}
+            } | ConvertTo-Json -Compress | Out-File logs/ak7.jsonl -Append -Encoding utf8
+           exit $code
+           exit $norm
+
 
       - name: Apply (on merge or manual)
         if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true) }}
         shell: pwsh
         run: |
-          $ErrorActionPreference = 'Stop'
-          New-Item -ItemType Directory -Force -Path logs | Out-Null
-          New-Item -ItemType File -Force -Path .ak-out.txt | Out-Null
-          try {
-            pwsh -NoProfile -File scripts/g5/apply-patches.ps1 `
-              -Manifest patches/manifest.json `
-              -OutText .ak-out.txt -OutJson logs/ak7.jsonl
-            $code = $LASTEXITCODE
-            $msg  = 'ok'
-          } catch {
-            $code = 1
-            $msg  = $_.Exception.Message
-          }
-          [pscustomobject]@{
-            ts = (Get-Date -AsUtc -Format o)
-            event = 'ak-apply'
-            cmd = '${{ env.TARGET_CMD }}'
-            exitCode = $code
-            error = if($code -eq 0){''}else{$msg}
-          } | ConvertTo-Json -Compress | Out-File logs/ak7.jsonl -Append -Encoding utf8
-          exit $code
+            $ErrorActionPreference = 'Stop'
+            New-Item -ItemType Directory -Force -Path logs | Out-Null
+            New-Item -ItemType File -Force -Path .ak-out.txt | Out-Null
+        
+             try {
+               pwsh -NoProfile -File scripts/g5/apply-patches.ps1 `
+                 -Manifest patches/manifest.json `
+                 -OutText .ak-out.txt -OutJson logs/ak7.jsonl
+               $code = $LASTEXITCODE
+               $msg  = 'ok'
+             } catch {
+               $code = 1
+               $msg  = $_.Exception.Message
+             }
+             & pwsh -NoProfile -File scripts/g5/apply-patches.ps1 `
+               -Manifest patches/manifest.json `
+               -OutText .ak-out.txt -OutJson logs/ak7.jsonl
+             $code = $LASTEXITCODE
+             # ✅ 0(성공), 10(No-Op) → 성공(0)으로 처리
+             $norm = if ($code -in 0,10) { 0 } else { $code }
+             $msg  = if ($norm -eq 0) { 'ok' } else { "failed (code=$code)" }
+          
+              [pscustomobject]@{
+                ts = (Get-Date -AsUtc -Format o)
+                event = 'ak-apply'
+               exitCode = $code
+               error = if($code -eq 0){''}else{$msg}
+               exitCode = $code
+               error = if($norm -eq 0){''}else{$msg}
+              } | ConvertTo-Json -Compress | Out-File logs/ak7.jsonl -Append -Encoding utf8
+             exit $code
+             exit $norm
+
 
 
       - name: Health gate (optional)
