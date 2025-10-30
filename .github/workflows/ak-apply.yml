@@ -99,6 +99,7 @@ jobs:
             -OutText .ak-out.txt -OutJson logs/ak7.jsonl
       
           $code = $LASTEXITCODE
+          # 0(성공)·10(No-Op)·11(DryRun 완료) → 성공(0)으로 맵핑
           $norm = if ($code -in 0,10,11) { 0 } else { $code }
           $err  = if ($norm -eq 0) { '' } else { "failed (code=$code)" }
       
@@ -112,6 +113,7 @@ jobs:
           exit $norm
 
 
+
       - name: Apply (CONFIRM_APPLY)
         shell: pwsh
         run: |
@@ -119,20 +121,20 @@ jobs:
           New-Item -ItemType Directory -Force -Path logs | Out-Null
           New-Item -ItemType File -Force -Path .ak-out.txt | Out-Null
       
-          # ✅ 절대 넣지 말 것: -Apply
-          # & pwsh -NoProfile -File scripts/g5/apply-patches.ps1 -Apply  ← 이 줄이 있으면 100% 실패
+          # ❌ 절대 사용 금지: -Apply (이 파라미터는 없음)
+          # & pwsh -NoProfile -File scripts/g5/apply-patches.ps1 -Apply ...
       
-          # ✅ 정답: 스위치 없이 호출하면 '적용' 모드
+          # ✅ 적용은 스위치 없이 호출
           & pwsh -NoProfile -File scripts/g5/apply-patches.ps1 `
             -Manifest patches/manifest.json `
             -OutText .ak-out.txt -OutJson logs/ak7.jsonl
       
           $code = $LASTEXITCODE
-          # 0(성공), 10(No-Op) → 성공(0) 처리
+          # 0(성공)·10(No-Op) → 성공(0)으로 맵핑
           $norm = if ($code -in 0,10) { 0 } else { $code }
           $err  = if ($norm -eq 0) { '' } else { "failed (code=$code)" }
       
-          # JSON은 절대 -f 사용 금지. 객체 → ConvertTo-Json로만 기록
+          # ❗JSON은 항상 객체 → ConvertTo-Json (서식문자 -f 금지)
           [pscustomobject]@{
             ts       = (Get-Date -AsUtc -Format o)
             event    = 'ak-apply'
@@ -141,8 +143,7 @@ jobs:
           } | ConvertTo-Json -Compress | Out-File logs/ak7.jsonl -Append -Encoding utf8
       
           exit $norm
-
-
+          
       - name: Health gate (optional)
         if: ${{ always() }}   # 필요 시 조건/구현 보강
         run: |
