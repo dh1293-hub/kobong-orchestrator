@@ -274,3 +274,4 @@ Write-JsonLog -Event 'ak-done' -Message 'ok' -ExitCode 0 -Data @{ mode=$mode; ch
 if ($DryRun) { exit 11 }
 elseif ($changed -gt 0) { exit 0 }
 else { exit 10 }
+
