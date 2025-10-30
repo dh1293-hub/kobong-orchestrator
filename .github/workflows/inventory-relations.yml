@@ -1,0 +1,166 @@
+# .github/workflows/inventory-relations.yml
+# 목적(WHAT):
+#   - 리포지토리 파일들의 "연관 관계"를 스캔하여 _inventory에 산출물로 저장·PR 생성
+#   - 1회(초기) 전체 수집 → 이후에는 변경 파일만 갱신(빠른 동작/안전)
+#
+# 용도(WHY):
+#   - 코드/스크립트/워크플로/문서 간 의존을 한눈에 파악(impact 분석/리팩토링/리뷰 보조)
+#
+# 연관 파일(RELATED):
+#   - scripts/g5/Build-Relations.ps1   # 실제 스캐너(정규식 기반 1차판)
+#   - _inventory/relations.csv         # 엣지 목록(소스,관계,타깃)
+#   - _inventory/graph.json            # 그래프 노드/엣지 JSON
+#   - _inventory/graph.mermaid.md      # 미리보기(최대 100엣지)
+#   - _inventory/index.json            # 생성 메타(노드/엣지 수 등)
+#
+# 출력(OUTPUTS):
+#   - Job Summary: 상위 소스 TOP10 + Mermaid 다이어그램
+#   - Artifact: inventory-relations (위 4개 산출물)
+#   - PR: chore/inventory-relations-update (메인 직접 push 금지)
+#
+# 안전 가드(SAFETY):
+#   - paths-ignore: _inventory/**  → 자기 변경으로 인한 무한 트리거 방지
+#   - concurrency: ref별 1개만 동작
+#   - permissions 최소화 + PR로 반영(메인 직접 수정 없음)
+#
+# 테스트 방법(TEST):
+#   - 로컬(빠름): act -n -j build-relations  (또는 이벤트 JSON으로 재현)
+#   - 원격(실환경): gh workflow run inventory-relations.yml --ref <브랜치>
+#   - actionlint 로 YAML 정적 점검 권장(별도 워크플로 또는 로컬)
+#
+name: "Inventory / File Relations"
+
+on:
+  push:
+    branches: [ "main" ]
+    paths-ignore:
+      - "_inventory/**"
+  pull_request:
+    paths-ignore:
+      - "_inventory/**"
+  workflow_dispatch:
+    inputs:
+      full:
+        description: "강제 전체 수집(Force Full Scan)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+# PR 생성에 필요
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: "inventory-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  build-relations:
+    runs-on: ubuntu-latest
+    # ubuntu-latest는 pwsh(파워셸 7)가 기본 탑재 → 별도 'powershell/powershell@v1' 액션 불필요
+    steps:
+      - name: "Checkout (full history)"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: "Show PowerShell version (for audit)"
+        shell: pwsh
+        run: pwsh --version
+
+      - name: "Decide scan mode (Full vs Incremental)"
+        id: mode
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_FULL: ${{ inputs.full }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # 기본: 전체(false). 조건 충족 시 변경분(true)
+          $changedOnly = $false
+
+          # 1) dispatch에서 강제 전체수집 true면 무조건 Full
+          if ($env:EVENT_NAME -eq 'workflow_dispatch' -and $env:INPUT_FULL -eq 'true') {
+            $changedOnly = $false
+          }
+          else {
+            # 2) main 브랜치에 과거 산출물이 있는지 확인 → 있으면 이후 갱신(Incremental)
+            git fetch --no-tags --prune --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+            $hasRel = $false
+            & git cat-file -e "origin/main:_inventory/relations.csv" 2>$null
+            if ($LASTEXITCODE -eq 0) { $hasRel = $true }
+
+            if ($hasRel) {
+              # PR/Push 모두 "변경만"으로 빠르게. (필요시 이후 정책에서 세분화)
+              $changedOnly = $true
+            } else {
+              $changedOnly = $false
+            }
+          }
+
+          $mode = if ($changedOnly) { 'Incremental' } else { 'Full' }
+          "changed_only=$changedOnly" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "mode=$mode"              | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "== Scan Mode: $mode"
+
+      - name: "Build relations (scripts/g5/Build-Relations.ps1)"
+        shell: pwsh
+        run: |
+          $args = @(
+            '-NoProfile','-File','scripts/g5/Build-Relations.ps1',
+            '-OutDir','_inventory'
+          )
+          if ('${{ steps.mode.outputs.changed_only }}' -eq 'true') { $args += '-ChangedOnly' }
+          pwsh @args
+
+      - name: "Upload artifact (inventory-relations)"
+        uses: actions/upload-artifact@v4
+        with:
+          name: inventory-relations
+          path: |
+            _inventory/relations.csv
+            _inventory/graph.json
+            _inventory/graph.mermaid.md
+            _inventory/index.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: "Summarize (Job Summary)"
+        shell: pwsh
+        run: |
+          $idx = Get-Content _inventory/index.json -Raw | ConvertFrom-Json
+          $rel = Import-Csv _inventory/relations.csv
+          $top = $rel | Group-Object source_path | Sort-Object Count -Desc | Select-Object -First 10
+
+          $lines = @()
+          $lines += "# File Relations"
+          $lines += "- Mode: ${{ steps.mode.outputs.mode }}"
+          $lines += "- Generated: $($idx.generated_at)"
+          $lines += "- Nodes: $($idx.node_count)"
+          $lines += "- Edges: $($idx.edge_count)"
+          $lines += ""
+          $lines += "## Top 10 Sources"
+          foreach ($t in $top) { $lines += "* $($t.Name) — $($t.Count) edges" }
+          $lines += ""
+          $lines += "## Mermaid Preview (first 100 edges)"
+          $lines += (Get-Content _inventory/graph.mermaid.md -Raw)
+
+          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+
+      - name: "Create PR for _inventory update"
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore(inventory): update relations graph"
+          title: "chore(inventory): update relations graph"
+          body: |
+            자동 생성된 파일 관계 그래프/목록 업데이트
+            - 모드: ${{ steps.mode.outputs.mode }}
+          branch: chore/inventory-relations-update
+          add-paths: |
+            _inventory/relations.csv
+            _inventory/graph.json
+            _inventory/graph.mermaid.md
+            _inventory/index.json
