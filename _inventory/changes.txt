@@ -1,4 +1,4 @@
 ADDED
 CHANGED
+scripts/g5/apply-patches.ps1
 REMOVED
-scripts/g5/apply-patches - 복사본.ps1
