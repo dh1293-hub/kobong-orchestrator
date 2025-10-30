@@ -1,4 +1,4 @@
 ADDED
 CHANGED
-.github/workflows/housekeeping-smoke.yml
+scripts/g5/housekeeping-smoke.ps1
 REMOVED
