@@ -1,37 +1,36 @@
 <# =====================================================================
   파일: scripts/g5/apply-patches.ps1
-  목적: 패치(manifest 기반)를 DryRun/Apply로 실행하고,
-        콘솔·텍스트·JSONL 로그를 남기는 "표준 운용" 스크립트
+  목적: manifest 기반 패치를 DryRun/Apply로 실행하고
+        콘솔·JSONL 로그를 남기는 표준 운용 스크립트
   사용법(로컬):
-    # DryRun (표준 종료코드 11)
+    # DryRun (종료코드 11)
     pwsh -NoProfile -File scripts/g5/apply-patches.ps1 -DryRun `
       -Root . -Manifest patches/manifest.json `
       -OutText .ak-out.txt -OutJson logs/ak7.jsonl
 
-    # Apply
+    # Apply (종료코드 0)
     pwsh -NoProfile -File scripts/g5/apply-patches.ps1 `
       -Root . -Manifest patches/manifest.json `
       -OutText .ak-out.txt -OutJson logs/ak7.jsonl
 
-  CI(GitHub Actions) 연동 규칙:
-    - 워크플로에서 .ak-out.txt는 Tee-Object가 "단독"으로 쓰도록 함.
-    - 이를 위해 이 스크립트는 AK_TEE=1 이면 OutText 파일 쓰기를 생략(콘솔만 출력).
-    - JSONL(logs/ak7.jsonl)은 항상 안전한 Append로 남김(분석/보관용).
+  CI(GitHub Actions) 자동 보호:
+    - CI에서는 .ak-out.txt에 직접 쓰지 않음(콘솔만 출력).
+      => 워크플로의 Tee-Object가 파일을 "단독"으로 잡음 → 잠금 충돌 제거.
+    - 별도 설정 불필요. (AK_TEE=1 있으면 동일하게 우선 적용)
 
   종료코드:
-    0  = 성공(Apply 또는 DryRun에서 오류 없음 + DryRun이 아님)
+    0  = Apply 성공
     11 = DryRun 정상 종료
-    1  = 일반 오류(예외 발생 등)
+    1  = 일반 오류
 
   연관 파일:
-    - .github/workflows/ak-apply.yml  (이 스크립트를 호출)
-    - patches/manifest.json           (패치 정의; 없으면 스킵)
-    - logs/ak7.jsonl                  (JSON Lines; 운영/분석용)
+    - .github/workflows/ak-apply.yml (이 스크립트를 호출)
+    - patches/manifest.json         (패치 정의)
+    - logs/ak7.jsonl                (JSON Lines; 분석/보관)
 
   테스트:
-    1) DryRun과 Apply 모두 실행해 종료코드 확인
-    2) .ak-out.txt, logs/ak7.jsonl 내용 확인
-    3) 잠금 충돌 재현 불가 확인(Tee-Object와 Out-File 동시쓰기 제거)
+    1) CI에서 재실행 → .ak-out.txt 잠금 오류가 사라져야 함.
+    2) 로컬 단독 실행 시 .ak-out.txt/ak7.jsonl 생성 확인.
 ===================================================================== #>
 
 param(
@@ -43,15 +42,23 @@ param(
   [switch]$Quiet
 )
 
-# ===== 내부 설정/상태 =====
+# ===== 런타임 가드 =====
 $ErrorActionPreference = 'Stop'
 $PSStyle.OutputRendering = 'Ansi'
 
-# CI에서 전달될 수 있는 힌트(없어도 무방)
+# CI 여부 및 OutText 비활성화 플래그(자체 방어)
+$IsCI = ($env:GITHUB_ACTIONS -eq 'true')
+# 아래 조건 중 하나라도 true면 OutText 파일 기록 금지:
+#  - AK_TEE=1 (워크플로가 Tee-Object로 파일 전담)
+#  - CI(GitHub Actions)에서 실행
+#  - 대상 파일명이 .ak-out.txt (충돌 위험 높은 표준 파일)
+$DisableOutText = ($env:AK_TEE -eq '1') -or $IsCI -or ($OutText -match '\.ak-out\.txt$')
+
+# CI 힌트(있으면 로그에 싣기)
 $TARGET_CMD = $env:TARGET_CMD
 $TARGET_REF = $env:TARGET_REF
 
-# ===== 공용 유틸: 안전 Append (파일공유 허용 + 재시도) =====
+# ===== 안전 Append 유틸(파일공유 허용 + 재시도) =====
 function Append-SafeLine {
   param([string]$Path, [string]$Line)
 
@@ -61,6 +68,7 @@ function Append-SafeLine {
   $enc = [System.Text.UTF8Encoding]::new($false)  # UTF-8 (BOM 없음)
   for ($i=0; $i -lt 20; $i++) {
     try {
+      # 공유 모드: ReadWrite → 동시 읽기/쓰기 허용
       $fs = [System.IO.File]::Open($Path,
         [System.IO.FileMode]::Append,
         [System.IO.FileAccess]::Write,
@@ -79,9 +87,8 @@ function Append-SafeLine {
 # ===== 로깅 =====
 function Write-Text([string]$s) {
   if (-not $Quiet) { Write-Host $s }
-  # CI에서는 .ak-out.txt 파일을 Tee-Object가 전담한다.
-  # 따라서 AK_TEE=1 이면 파일 쓰기 스킵 → 잠금 충돌 제거.
-  if ($env:AK_TEE -eq '1') { return }
+  # ⚠️ 충돌 방지: CI / AK_TEE=1 / .ak-out.txt 지정 시 파일 기록 금지
+  if ($DisableOutText) { return }
   Append-SafeLine -Path $OutText -Line $s
 }
 
@@ -100,6 +107,7 @@ function Write-JsonLog {
     data     = $Data
   }
   $line = $obj | ConvertTo-Json -Compress
+  # JSONL은 동시 사용률 낮고 충돌 리스크 낮음 → 계속 파일로 남김
   Append-SafeLine -Path $OutJson -Line $line
   if (-not $Quiet) { Write-Host $line }
 }
@@ -185,12 +193,13 @@ function Apply-Op {
 
 # ===== 메인 =====
 try {
-  Write-Text  "== apply-patches.ps1 start (DryRun=$DryRun) =="
+  Write-Text  "== apply-patches.ps1 start (DryRun=$DryRun; CI=$IsCI; AK_TEE=$($env:AK_TEE)) =="
   Write-JsonLog -Event 'start' -Message 'apply-patches start' -Data @{
     root = (Resolve-Path $Root).Path
     manifest = $Manifest
     target_cmd = $TARGET_CMD
     target_ref = $TARGET_REF
+    ci = $IsCI
   }
 
   $mf = Read-Json -Path (Join-Path $Root $Manifest)
