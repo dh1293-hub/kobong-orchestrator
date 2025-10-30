@@ -9,14 +9,11 @@
    - _inventory/graph.mermaid.md     # Mermaid 미리보기(최대 100 엣지)
    - _inventory/index.json           # { generated_at, node_count, edge_count, changed_only_effective, out_dir }
 
- 사용법(로컬):
-   pwsh -NoProfile -File scripts/g5/Build-Relations.ps1              # 전체 스캔
-   pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly # 변경만 (git 불가 시 자동 전체)
-
- 안전 가드:
-   - zipball( .git 미존재 ) 환경에서도 정상 동작
-   - 0건이어도 CSV 헤더/메르메이드 래퍼/인덱스는 항상 생성
-   - run: 블록은 단일 탐색기로 .ps1/.js 토큰만 추출(정규식 누수 차단)
+ 특징/가드:
+   - zipball( .git 없음 ) 환경에서도 동작
+   - run: 블록은 .ps1/.js 토큰만 추출(배열 인자/ -File 유무 무관)
+   - 0건이어도 CSV 헤더/메르메이드 래퍼/인덱스 항상 생성
+   - 🔒 파일 읽기 null-safe: 어떤 경우에도 항상 문자열을 반환하여 Regex.Matches null 예외 방지
 ===================================================================== #>
 
 [CmdletBinding()]
@@ -43,6 +40,20 @@ $ALLOW_EXT = @(
 $IGNORE_RX = @('^\.git/','^_inventory/','^node_modules/','^dist/','^build/','^out/','^coverage/')
 function Test-Ignored([string]$rel){ foreach($r in $IGNORE_RX){ if($rel -match $r){return $true} } return $false }
 
+# == 🔒 항상 문자열을 반환하는 안전한 파일 읽기 ==
+function Read-TextSafe {
+  param([string]$Path)
+  try {
+    # 가장 빠르고 확정적인 방법
+    return [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)
+  } catch {
+    try {
+      $s = Get-Content -LiteralPath $Path -Raw -ErrorAction SilentlyContinue
+      if ($null -eq $s) { return '' } else { return [string]$s }
+    } catch { return '' }
+  }
+}
+
 # == 경로 안전성 검사 + 정규화 ==
 function Resolve-PathSafe {
   param([string]$src, [string]$t, [string]$kind)
@@ -50,7 +61,7 @@ function Resolve-PathSafe {
   if ([string]::IsNullOrWhiteSpace($t)) { return $null }
   $t = $t.Trim(" `t`r`n'`"")
 
-  # ⚠ 정규식 누수/이상문자 차단
+  # 정규식 누수/이상문자 차단
   if ($t -match '\(\?\<|<path>|\?\:|\[\^|\\d|\(\?i|\(\?m|\(\?s') { return $null }
   if ($t -match '[\r\n]') { return $null }
 
@@ -109,7 +120,7 @@ function Get-RepoFiles {
   return @{ files = $files; changed = $effectiveChanged }
 }
 
-# == 파일 내 탐지 정규식(1차) ==
+# == 파일 내 탐지 정규식 ==
 $RX = @{
   js_import = [regex]"(?m)^\s*import\s+.*?\sfrom\s+['""](?<t>[^'""]+)['""]"
   js_req    = [regex]"(?m)require\(['""](?<t>[^'""]+)['""]\)"
@@ -117,11 +128,11 @@ $RX = @{
   ps_call   = [regex]"(?m)^\s*&\s+(?<t>(?:\.{0,2}[\\/])?[^\s#'""]+\.ps1)\b"
   ps_module = [regex]"(?im)^\s*Import-Module\s+['""]?(?<t>[^'""]+?)(['""]|\s|$)"
   md_link   = [regex]"\[(?<text>[^\]]+)\]\((?<t>[^)]+)\)"
-  yml_uses  = [regex]"(?m)^\s*uses:\s*(?<t>\./[^\s#]+)"                     # 로컬 액션만
+  yml_uses  = [regex]"(?m)^\s*uses:\s*(?<t>\./[^\s#]+)"                       # 로컬 액션만
   yml_run   = [regex]"(?s)^\s*run:\s*\|?\s*[\r\n]+(?<t>(?:\s{2,}.+[\r\n]+)+)" # 블록 전체
 }
 
-# == run: 블록에서 .ps1/.js 경로만 추출 (여기스트링으로 안전 처리) ==
+# == run: 블록에서 .ps1/.js 경로만 추출 ==
 function Find-YamlRunPaths {
   param([string]$block)
 
@@ -147,13 +158,15 @@ $ChangedEff = $scan.changed
 
 foreach ($f in $FILES) {
   $full = Join-Path $REPO $f
-  $text = Get-Content -Raw -Encoding UTF8 $full
+
+  # 🔒 안전한 읽기 (항상 문자열)
+  $text = Read-TextSafe -Path $full
 
   foreach($k in $RX.Keys){
-    $matches = $RX[$k].Matches($text)
+    $mset = $RX[$k].Matches([string]$text)   # ← null 방지 캐스팅 보강
 
     if ($k -eq 'yml_run') {
-      foreach($m in $matches) {
+      foreach($m in $mset) {
         $blk = $m.Groups['t'].Value
         foreach($raw in (Find-YamlRunPaths $blk)) {
           $tp = Resolve-PathSafe -src $f -t $raw -kind $k
@@ -167,7 +180,7 @@ foreach ($f in $FILES) {
       continue
     }
 
-    foreach($m in $matches) {
+    foreach($m in $mset) {
       $raw = $m.Groups['t'].Value
       $tp = Resolve-PathSafe -src $f -t $raw -kind $k
       if ($tp) {
