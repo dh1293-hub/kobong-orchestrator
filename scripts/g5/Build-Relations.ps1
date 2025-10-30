@@ -134,8 +134,8 @@ $lines.Add("```")
 $lines -join [Environment]::NewLine | Set-Content -Path $mm -Encoding UTF8
 
 $summary = @{
-  generated_at = (Get-Date).ToString("s")
   generated_at = Get-Date -Format s
+  generated_at = (Get-Date -AsUtc -Format s) + 'Z'
   node_count   = $nodes.Count
   edge_count   = $edges.Count
   changed_only = [bool]$ChangedOnly
