@@ -11,13 +11,9 @@
 # 사용법(USAGE)
 #   - 전체 스캔:    pwsh -NoProfile -File scripts/g5/Build-Relations.ps1
 #   - 변경만 스캔:  pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly
-# 테스트(TEST)
-#   - GitHub Actions에서 수동 실행(workflow_dispatch) 또는 PR/Push 트리거로 검증
-#   - act 를 쓰는 경우: act -n -j build-relations (리눅스 잡만)
 # 안전 가드(SAFETY)
-#   - git 명령 실패/변경없음 → 전체 스캔으로 자동 폴백
-#   - 마지막에 종료코드를 0으로 고정하여 상위 단계에 실패 코드가 전이되지 않도록 처리
-#   - 문자열/서브식은 파서오류가 없도록 -f 서식/단일따옴표 사용
+#   - git diff 실패/변경없음 → 전체 스캔으로 폴백
+#   - 마지막에 종료코드 0 보장
 
 [CmdletBinding()]
 param(
@@ -29,10 +25,9 @@ $ErrorActionPreference = 'Stop'
 
 # == 환경 준비
 $repo = (Get-Location).Path
-$rel = Join-Path $repo $OutDir
+$rel  = Join-Path $repo $OutDir
 New-Item -ItemType Directory -Force -Path $rel | Out-Null
 
-# == 스캔 대상 계산
 function Get-TargetFiles {
   param([switch]$ChangedOnly)
   $patterns = @(
@@ -50,7 +45,6 @@ function Get-TargetFiles {
       Write-Warning "git 미존재 → 전체 스캔으로 대체합니다."
       $ChangedOnly = $false
     } else {
-      # 변경 파일 목록
       $diff = git diff --name-only $base...HEAD 2>$null
       if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($diff)) {
         Write-Warning "git diff 실패/변경없음 → 전체 스캔으로 대체합니다."
@@ -78,7 +72,7 @@ function Get-TargetFiles {
   }
 }
 
-# == 관계 추출기(정규식 1차판: 보수적으로 탐지)
+# == 관계 추출기(정규식 1차판)
 $rx = @{
   js_import  = [regex]"(?m)^\s*import\s+.*?\sfrom\s+['""](?<t>[^'""]+)['""]"
   js_require = [regex]"(?m)require\(['""](?<t>[^'""]+)['""]\)"
@@ -86,8 +80,8 @@ $rx = @{
   ps_call    = [regex]"(?m)^\s*&\s+(?<t>(?:\.{0,2}[\\/])?[^\s#'""]+\.ps1)\b"
   ps_module  = [regex]"(?im)^\s*Import-Module\s+['""]?(?<t>[^'""]+?)(['""]|\s|$)"
   md_link    = [regex]"\[(?<text>[^\]]+)\]\((?<t>[^)]+)\)"
-  yml_uses   = [regex]"(?m)^\s*uses:\s*(?<t>\./[^\s#]+)"
-  yml_run    = [regex]"(?s)\brun:\s*\|?[\r\n]+(?<t>(?:\s+).*(?:\.ps1|\.js))"
+  yml_uses   = [regex]"(?m)^\s*uses:\s*(?<t>\./[^\s#]+)"                        # 로컬 액션(.으로 시작)만 수집
+  yml_run    = [regex]"(?s)\brun:\s*\|?[\r\n]+(?<t>(?:.+?))"                    # 블록 전체를 잡고 아래에서 경로만 추출
 }
 
 function Resolve-TargetPath {
@@ -97,14 +91,15 @@ function Resolve-TargetPath {
   if ($t -match "^(node:|https?://|@|[A-Za-z0-9._-]+/[A-Za-z0-9._-]+)") { return $null }
   if ($t -match "^[A-Za-z]:[\\/]" -or $t -match "^/") { return $null }
 
-  # Import-Module 은 "상대경로"만 파일관계로 수집(모듈명은 제외)
-  if ($kind -eq 'ps_module' -and ($t -notmatch "[\\/]|^\.")) { return $null }
-
   # 공백/인용부호 제거
   $t = $t.Trim("'`"").Trim()
 
-  # 상대경로 기준으로 정규화
-  $baseDir = Split-Path -Parent (Join-Path $repo $src)
+  # 🔧 핵심 수정: YAML(run/uses)은 레포 루트 기준으로 해석
+  $baseDir =
+    if ($kind -like 'yml_*') { $repo }
+    else { Split-Path -Parent (Join-Path $repo $src) }
+
+  # 상대경로 정규화
   $p = [System.IO.Path]::GetFullPath((Join-Path $baseDir $t))
 
   if ($p.StartsWith($repo)) {
@@ -124,15 +119,15 @@ foreach ($f in $files) {
   foreach ($k in $rx.Keys) {
     foreach ($m in $rx[$k].Matches($text)) {
       $t = $m.Groups['t'].Value
-      # yml_run 의 경우 첫 단어가 경로가 아닐 수 있으므로 라인 단위에서 경로만 추출
+
+      # 🔧 핵심 수정: run 블록에서 첫 번째 .ps1/.js 경로를 **점 없이 시작해도** 허용
       if ($k -eq 'yml_run') {
-        $line = $t.Trim()
-        if ($line -match "(?<path>\.?[\.\/\\][^\s]+?\.(ps1|js))") {
-          $t = $Matches['path']
-        } else {
-          continue
-        }
+        $line = $t
+        # 예: pwsh -NoProfile -File scripts/g5/apply-patches.ps1
+        $match = [regex]::Match($line, "(?<path>(?:\.{0,2}[\\/])?(?:[A-Za-z0-9._-]+[\\/])*[A-Za-z0-9._-]+\.(?:ps1|js))", "IgnoreCase")
+        if ($match.Success) { $t = $match.Groups['path'].Value } else { continue }
       }
+
       $tp = Resolve-TargetPath -src $f -t $t -kind $k
       if ($null -ne $tp) {
         $edges.Add([pscustomobject]@{
@@ -153,9 +148,12 @@ $json = Join-Path $rel "graph.json"
 $mm   = Join-Path $rel "graph.mermaid.md"
 $idx  = Join-Path $rel "index.json"
 
-$edges
-| Sort-Object source_path, target_path, relation
-| Export-Csv -Path $csv -NoTypeInformation -Encoding UTF8
+# 0행이어도 헤더는 보장
+if ($edges.Count -eq 0) {
+  Set-Content -Path $csv -Value "source_path,relation,target_path,detected_by,confidence`n" -Encoding UTF8
+} else {
+  $edges | Sort-Object source_path, target_path, relation | Export-Csv -Path $csv -NoTypeInformation -Encoding UTF8
+}
 
 $nodes = @{}
 $edges | ForEach-Object {
@@ -167,7 +165,6 @@ $g = [pscustomobject]@{
   nodes = @($nodes.Keys | Sort-Object | ForEach-Object { @{ id = $_ } })
   edges = @($edges | ForEach-Object { @{ from = $_.source_path; to = $_.target_path; type = $_.relation } })
 }
-
 $g | ConvertTo-Json -Depth 5 | Set-Content -Path $json -Encoding UTF8
 
 # Mermaid (100엣지까지만)
@@ -191,10 +188,8 @@ $summary = @{
 }
 $summary | ConvertTo-Json -Depth 3 | Set-Content -Path $idx -Encoding UTF8
 
-# 요약 로그(파서 안전한 형식)
 Write-Host ("== relations.csv: {0} edges" -f $edges.Count)
 Write-Host ("== graph.json: {0} nodes" -f $nodes.Count)
 
-# 단계 종료코드 안전 보장
 $global:LASTEXITCODE = 0
 exit 0
