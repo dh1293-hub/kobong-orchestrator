@@ -121,21 +121,21 @@ $RX = @{
   yml_run   = [regex]"(?s)^\s*run:\s*\|?\s*[\r\n]+(?<t>(?:\s{2,}.+[\r\n]+)+)" # 블록 전체
 }
 
-# == run: 블록에서 .ps1/.js 경로만 추출 ==
+# == run: 블록에서 .ps1/.js 경로만 추출 (여기스트링으로 안전 처리) ==
 function Find-YamlRunPaths {
   param([string]$block)
 
   if ([string]::IsNullOrWhiteSpace($block)) { return @() }
 
-  # 따옴표 유무/배열 인자/ -File 유무와 관계없이 .ps1|.js 토큰만 추출
-  $pat = [regex]'(?im)(?:"|\')?(?<path>(?:\.{0,2}[\\/])?(?:[\w\.\-]+[\\/])*[\w\.\-]+\.(?:ps1|js))(?:"|\')?'
-  $list = New-Object System.Collections.Generic.List[string]
+  $pat = [regex]@'
+(?im)(?:"|')?(?<path>(?:\.{0,2}[\\/])?(?:[\w\.\-]+[\\/])*[\w\.\-]+\.(?:ps1|js))(?:"|')?
+'@
 
+  $list = New-Object System.Collections.Generic.List[string]
   foreach ($m in $pat.Matches($block)) {
     $p = $m.Groups['path'].Value
     if (-not [string]::IsNullOrWhiteSpace($p)) { $list.Add($p) }
   }
-
   return ($list | Select-Object -Unique)
 }
 
