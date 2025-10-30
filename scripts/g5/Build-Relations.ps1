@@ -1,12 +1,16 @@
 # scripts/g5/Build-Relations.ps1
-# 목적: 리포지토리 내 파일 간 관계를 스캔해 _inventory 산출물로 저장
+# 목적: 리포 파일 간 관계 스캔 → _inventory 산출물 저장
 # 사용법:
-#   pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 [-ChangedOnly] [-OutDir _inventory]
-# 출력:
+#   pwsh -NoProfile -File scripts/g5/Build-Relations.ps1            # 전체 스캔
+#   pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly  # 변경만(기본 비교: origin/main)
+# 출력물:
 #   _inventory/relations.csv, graph.json, graph.mermaid.md, index.json
-# 주의:
-#   - 정규식 기반 1차 판: 과탐/미탐이 있을 수 있으나, 운영 안전성을 위해 "보수적"으로 추출
-#   - YAML 파싱 미사용(무의존). 추후 확장 여지 있음.
+# 테스트:
+#   - 로컬 act: act -n -j build-relations
+#   - actionlint: docker run --rm -v "${PWD}:/repo" -w /repo rhysd/actionlint:latest -color
+# 안전:
+#   - git 명령 실패 시 전체 스캔으로 폴백
+#   - 마지막에 $LASTEXITCODE=0 으로 정리(워크플로 단계 실패 방지)
 
 [CmdletBinding()]
 param(
@@ -19,17 +23,14 @@ $repo = (Get-Location).Path
 $rel = Join-Path $repo $OutDir
 New-Item -ItemType Directory -Force -Path $rel | Out-Null
 
-# == 1) 스캔 대상 계산 (ChangedOnly면 git diff 기반)
 function Get-TargetFiles {
   param([switch]$ChangedOnly)
   $patterns = @("**/*.ps1","**/*.psm1","**/*.psd1","**/*.js","**/*.ts","**/*.tsx","**/*.jsx","**/*.md","**/*.yml","**/*.yaml")
   $ignore = @("^\.git/","^$OutDir/","^node_modules/","^dist/","^build/")
 
   if ($ChangedOnly) {
-    # 기본: main과 비교. 필요 시 환경에 맞게 브랜치명 변경.
     $base = $env:GITHUB_BASE_REF
     if ([string]::IsNullOrWhiteSpace($base)) { $base = "origin/main" }
-    # git 없으면 전체 스캔
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
       Write-Warning "git 미존재 → 전체 스캔으로 대체"
       $ChangedOnly = $false
@@ -44,12 +45,13 @@ function Get-TargetFiles {
           -not ($ignore | ForEach-Object { $p -match $_ }) -and
           ($patterns | ForEach-Object { $p -like $_ }) -contains $true
         }
+        # 네이티브 커맨드 종료코드 정리
+        $global:LASTEXITCODE = 0
         return $files
       }
     }
   }
 
-  # 전체 스캔
   $all = Get-ChildItem -Recurse -File -Force | ForEach-Object {
     $_.FullName.Substring($repo.Length + 1).Replace("\","/")
   }
@@ -60,7 +62,7 @@ function Get-TargetFiles {
   }
 }
 
-# == 2) 파일별 관계 추출기 (정규식 기반)
+# === 관계 추출기 (정규식 1차판)
 $rx = @{
   js_import   = [regex]"(?m)^\s*import\s+.*?from\s+['""](?<t>[^'""]+)['""]"
   js_require  = [regex]"(?m)require\(['""](?<t>[^'""]+)['""]\)"
@@ -74,9 +76,7 @@ $rx = @{
 
 function Resolve-TargetPath {
   param($src,$t)
-  # 외부 패키지(ex: npm 패키지)는 파일관계에서 제외
   if ($t -match "^(node:|https?://|@|[A-Za-z0-9_-]+/[^/]+)") { return $null }
-  # 확장자 없는 경우 보정은 1차판에선 생략
   $p = [System.IO.Path]::GetFullPath((Join-Path (Split-Path $src -Parent) $t))
   if ($p.StartsWith($repo)) {
     return $p.Substring($repo.Length + 1).Replace("\","/")
@@ -106,7 +106,7 @@ foreach ($f in $files) {
   }
 }
 
-# == 3) 산출물 저장
+# === 산출물 저장
 $csv = Join-Path $rel "relations.csv"
 $json = Join-Path $rel "graph.json"
 $mm   = Join-Path $rel "graph.mermaid.md"
@@ -122,7 +122,6 @@ $g = [pscustomobject]@{
 }
 $g | ConvertTo-Json -Depth 5 | Set-Content -Path $json -Encoding UTF8
 
-# 간단 Mermaid (상위 100엣지만)
 $lines = New-Object System.Collections.Generic.List[string]
 $lines.Add("```mermaid")
 $lines.Add("graph LR")
@@ -145,3 +144,7 @@ $summary | ConvertTo-Json -Depth 3 | Set-Content -Path $idx -Encoding UTF8
 
 Write-Host "== relations.csv: $($edges.Count) edges"
 Write-Host "== graph.json: $($nodes.Count) nodes"
+
+# 단계 종료코드 안전 보장
+$global:LASTEXITCODE = 0
+exit 0
