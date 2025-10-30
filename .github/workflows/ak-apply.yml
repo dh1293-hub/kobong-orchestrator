@@ -21,7 +21,6 @@
 # 산출물:
 #   - artifacts: ak-apply-logs → .ak-out.txt, logs/ak7.jsonl
 #   - (옵션) PR 코멘트: 마지막 80줄 Tail
-
 name: AK Apply (manual & merge)
 
 on:
