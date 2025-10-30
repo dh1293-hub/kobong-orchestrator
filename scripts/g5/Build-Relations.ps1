@@ -1,18 +1,22 @@
-# scripts/g5/Build-Relations.ps1
 <# =====================================================================
+ 파일: scripts/g5/Build-Relations.ps1
  목적:
-   리포지토리 내 파일 연관관계를 스캔하여 _inventory 산출물 생성
- 산출물:
-   - _inventory/relations.csv
-   - _inventory/graph.json
-   - _inventory/graph.mermaid.md
-   - _inventory/index.json
- 사용법:
-   pwsh -NoProfile -File scripts/g5/Build-Relations.ps1            # 전체 스캔
-   pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly  # 변경만(불가 시 자동 전체)
- 친절 주석:
-   - zipball( .git 없음 ) 환경에서도 안전 동작
-   - run: 블록은 단일 탐색기로 실제 경로만 추출(정규식 누수 방지)
+   - 리포지토리 내 파일 간 "연관 관계"를 스캔하여 _inventory 산출물 생성
+
+ 산출물(OUTPUTS):
+   - _inventory/relations.csv        # source_path, relation, target_path, detected_by, confidence
+   - _inventory/graph.json           # { nodes:[{id}], edges:[{from,to,type}] }
+   - _inventory/graph.mermaid.md     # Mermaid 미리보기(최대 100 엣지)
+   - _inventory/index.json           # { generated_at, node_count, edge_count, changed_only_effective, out_dir }
+
+ 사용법(로컬):
+   pwsh -NoProfile -File scripts/g5/Build-Relations.ps1              # 전체 스캔
+   pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly # 변경만 (git 불가 시 자동 전체)
+
+ 안전 가드:
+   - zipball( .git 미존재 ) 환경에서도 정상 동작
+   - 0건이어도 CSV 헤더/메르메이드 래퍼/인덱스는 항상 생성
+   - run: 블록은 단일 탐색기로 .ps1/.js 토큰만 추출(정규식 누수 차단)
 ===================================================================== #>
 
 [CmdletBinding()]
@@ -28,7 +32,7 @@ $REPO = (Get-Location).Path
 $OUT  = Join-Path $REPO $OutDir
 New-Item -ItemType Directory -Force -Path $OUT | Out-Null
 
-# == 허용 확장자 ==
+# == 허용 확장자(소문자) ==
 $ALLOW_EXT = @(
   '.ps1','.psm1','.psd1',
   '.js','.mjs','.cjs','.ts','.tsx','.jsx',
@@ -44,7 +48,7 @@ function Resolve-PathSafe {
   param([string]$src, [string]$t, [string]$kind)
 
   if ([string]::IsNullOrWhiteSpace($t)) { return $null }
-  $t = $t.Trim(" `t`r`n'`"")  # 공백/인용부호 제거
+  $t = $t.Trim(" `t`r`n'`"")
 
   # ⚠ 정규식 누수/이상문자 차단
   if ($t -match '\(\?\<|<path>|\?\:|\[\^|\\d|\(\?i|\(\?m|\(\?s') { return $null }
@@ -54,14 +58,13 @@ function Resolve-PathSafe {
   if ($t -match '^(node:|https?://|@|[A-Za-z0-9._-]+/[A-Za-z0-9._-]+)') { return $null }
   if ($t -match '^[A-Za-z]:[\\/]' -or $t -match '^/') { return $null }
 
-  # 허용 문자 화이트리스트 + 확장자 필터
+  # 허용 문자/확장자 화이트리스트
   if ($t -notmatch '^[\.A-Za-z0-9_\-/\\]+?\.[A-Za-z0-9]+$') { return $null }
   $ext = ([System.IO.Path]::GetExtension($t) ?? '').ToLowerInvariant()
   if (-not ($ALLOW_EXT -contains $ext)) { return $null }
 
   # YAML(run/uses)은 레포 루트 기준, 그 외는 파일 기준
   $baseDir = if ($kind -like 'yml_*') { $REPO } else { Split-Path -Parent (Join-Path $REPO $src) }
-
   $abs = [System.IO.Path]::GetFullPath((Join-Path $baseDir $t))
   if (-not $abs.StartsWith($REPO)) { return $null }
   return $abs.Substring($REPO.Length + 1).Replace('\','/')
@@ -106,7 +109,7 @@ function Get-RepoFiles {
   return @{ files = $files; changed = $effectiveChanged }
 }
 
-# == 단순 패턴 (파일 내 import/require/모듈/링크/uses) ==
+# == 파일 내 탐지 정규식(1차) ==
 $RX = @{
   js_import = [regex]"(?m)^\s*import\s+.*?\sfrom\s+['""](?<t>[^'""]+)['""]"
   js_req    = [regex]"(?m)require\(['""](?<t>[^'""]+)['""]\)"
@@ -114,22 +117,29 @@ $RX = @{
   ps_call   = [regex]"(?m)^\s*&\s+(?<t>(?:\.{0,2}[\\/])?[^\s#'""]+\.ps1)\b"
   ps_module = [regex]"(?im)^\s*Import-Module\s+['""]?(?<t>[^'""]+?)(['""]|\s|$)"
   md_link   = [regex]"\[(?<text>[^\]]+)\]\((?<t>[^)]+)\)"
-  yml_uses  = [regex]"(?m)^\s*uses:\s*(?<t>\./[^\s#]+)"    # 로컬 액션만
+  yml_uses  = [regex]"(?m)^\s*uses:\s*(?<t>\./[^\s#]+)"                     # 로컬 액션만
   yml_run   = [regex]"(?s)^\s*run:\s*\|?\s*[\r\n]+(?<t>(?:\s{2,}.+[\r\n]+)+)" # 블록 전체
 }
 
-# == run: 블록에서 .ps1/.js 추출 (배열 인자/ -File 불문) ==
-function Find-YamlRunPaths([string]$block) {
-  $paths = New-Object System.Collections.Generic.List[string]
+# == run: 블록에서 .ps1/.js 경로만 추출 ==
+function Find-YamlRunPaths {
+  param([string]$block)
+
+  if ([string]::IsNullOrWhiteSpace($block)) { return @() }
+
+  # 따옴표 유무/배열 인자/ -File 유무와 관계없이 .ps1|.js 토큰만 추출
   $pat = [regex]'(?im)(?:"|\')?(?<path>(?:\.{0,2}[\\/])?(?:[\w\.\-]+[\\/])*[\w\.\-]+\.(?:ps1|js))(?:"|\')?'
-  foreach($m in $pat.Matches($block)) {
+  $list = New-Object System.Collections.Generic.List[string]
+
+  foreach ($m in $pat.Matches($block)) {
     $p = $m.Groups['path'].Value
-    if (-not [string]::IsNullOrWhiteSpace($p)) { $paths.Add($p) }
+    if (-not [string]::IsNullOrWhiteSpace($p)) { $list.Add($p) }
   }
-  return ($paths | Select-Object -Unique)
+
+  return ($list | Select-Object -Unique)
 }
 
-# == 스캔 ==
+# == 스캔 본체 ==
 $edges = New-Object System.Collections.Generic.List[object]
 $scan  = Get-RepoFiles -Changed:$ChangedOnly
 $FILES = $scan.files
@@ -162,7 +172,7 @@ foreach ($f in $FILES) {
       $tp = Resolve-PathSafe -src $f -t $raw -kind $k
       if ($tp) {
         $edges.Add([pscustomobject]@{
-          source_path=$f; relation=$k; target_path=$tp; detected_by="regex/$k"; confidence=0.7
+          source_path=$f; relation=$k; target_path=$tp; detected_by=("regex/{0}" -f $k); confidence=0.7
         })
       }
     }
@@ -201,11 +211,11 @@ $mm.Add('```')
 $mm -join [Environment]::NewLine | Set-Content -Path $MM -Encoding UTF8
 
 [pscustomobject]@{
-  generated_at = (Get-Date -AsUtc -Format s) + 'Z'
-  node_count   = $nodes.Count
-  edge_count   = $edges.Count
+  generated_at           = (Get-Date -AsUtc -Format s) + 'Z'
+  node_count             = $nodes.Count
+  edge_count             = $edges.Count
   changed_only_effective = [bool]$ChangedEff
-  out_dir      = $OutDir
+  out_dir                = $OutDir
 } | ConvertTo-Json -Depth 3 | Set-Content -Path $IDX -Encoding UTF8
 
 Write-Host ("== relations.csv edges: {0}" -f $edges.Count)
