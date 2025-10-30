@@ -34,14 +34,14 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Git ref (branch or sha)'
+        description: 'Git ref (branch/sha)'
         required: false
         default: 'main'
-      changed_only:
-        description: 'Changed files only (false=FULL SCAN)'
+      full:
+        description: 'Full scan (false면 자동 판정)'
         type: boolean
         required: false
-        default: false
+        default: true
 
 permissions:
   contents: read
@@ -93,16 +93,45 @@ jobs:
             throw "scripts/g5/Build-Relations.ps1 not found (working-directory=src)."
           }
 
-      - name: Build relations (FULL / CHANGED)
+      - name: Static parse (PowerShell AST)
         shell: pwsh
         working-directory: src
         run: |
           $ErrorActionPreference='Stop'
-          $changed = '${{ inputs.changed_only }}' -eq 'true'
-          if ($changed) {
-            & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly
+          $p = 'scripts/g5/Build-Relations.ps1'
+          $null = $tokens = $errs = $null
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $p), [ref]$tokens, [ref]$errs
+          )
+          if ($errs) {
+            $lines = Get-Content -Path $p
+            foreach ($e in $errs) {
+              $l1 = $e.Extent.StartLineNumber
+              $c1 = $e.Extent.StartColumnNumber
+              $l2 = $e.Extent.EndLineNumber
+              Write-Host ("{0}:{1}  {2}" -f $l1,$c1,$e.Message)
+              $from = [Math]::Max($l1-3,1); $to = [Math]::Min($l2+3,$lines.Count)
+              "----- context $from..$to -----"
+              for ($i=$from; $i -le $to; $i++) { '{0,5} {1}' -f $i, $lines[$i-1] }
+              "-------------------------------"
+            }
+            throw "Parse errors found."
           } else {
+            Write-Host "No parse errors."
+          }
+
+      - name: Build relations (FULL / CHANGED)
+        shell: pwsh
+        working-directory: src
+        env:
+          WANT_FULL: ${{ inputs.full }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $full = ($env:WANT_FULL -eq 'true')
+          if ($full) {
             & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1
+          } else {
+            & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly
           }
           if ($LASTEXITCODE -ne 0) { throw "Build-Relations.ps1 exit=$LASTEXITCODE" }
 
@@ -123,17 +152,17 @@ jobs:
             $s += "- generated_at: $($j.generated_at)"
             $s += "- node_count  : $($j.node_count)"
             $s += "- edge_count  : $($j.edge_count)"
-            $s += "- changed_only: $($j.changed_only)"
+            $s += "- changed_only: $($j.changed_only_effective)"
           } else {
             $s += "- index.json missing (no output?)"
           }
 
           if (Test-Path $csv) {
-            $tail = Get-Content $csv -Raw
+            $head = (Get-Content $csv -Raw) -split "`n"
             $s += ""
             $s += "#### relations.csv (head)"
             $s += "````csv"
-            $s += ($tail -split "`n" | Select-Object -First 15)
+            $s += ($head | Select-Object -First 15)
             $s += "````"
           } else {
             $s += ""
