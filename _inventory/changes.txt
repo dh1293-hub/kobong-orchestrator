@@ -1,4 +1,4 @@
 ADDED
 CHANGED
 REMOVED
-.github/workflows/block-arch-pr.yml
+.github/workflows/auto-merge.yml
