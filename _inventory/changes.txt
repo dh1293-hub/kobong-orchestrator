@@ -1,4 +1,4 @@
 ADDED
+patches/manifest.json
 CHANGED
-.github/workflows/ak-apply.yml
 REMOVED
