@@ -28,139 +28,134 @@
 #   - 원격: gh workflow run inventory-relations.yml --ref <브랜치>
 #   - 정적검사: actionlint (필수)
 #
-name: "Inventory / File Relations"
+name: inventory-relations
 
 on:
-  push:
-    branches: [ "main" ]
-    paths-ignore:
-      - "_inventory/**"
-  pull_request:
-    paths-ignore:
-      - "_inventory/**"
   workflow_dispatch:
     inputs:
-      full:
-        description: "강제 전체 수집(Force Full Scan)"
+      ref:
+        description: 'Git ref (branch or sha)'
         required: false
-        default: "false"
-        type: choice
-        options: ["false", "true"]
+        default: 'main'
+      changed_only:
+        description: 'Changed files only (false=FULL SCAN)'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
-  group: "inventory-${{ github.ref }}"
-  cancel-in-progress: true
+  group: inventory-relations-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build-relations:
-    runs-on: ubuntu-latest
+  build:
+    name: Build Relations
+    runs-on: windows-latest
+    timeout-minutes: 20
+
     steps:
-      - name: "Checkout (full history)"
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: "Show PowerShell version (for audit)"
-        shell: pwsh
-        run: pwsh --version
-
-      - name: "Decide scan mode (Full vs Incremental)"
-        id: mode
+      - name: Download source (zipball) to ./src
         shell: pwsh
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          INPUT_FULL: ${{ inputs.full }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA:  ${{ inputs.ref }}
         run: |
-          $ErrorActionPreference = 'Stop'
+          $ErrorActionPreference='Stop'
+          $zip = Join-Path $env:RUNNER_TEMP 'src.zip'
+          $dst = Join-Path $env:GITHUB_WORKSPACE 'src'
+          if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
 
-          # 기본: Full. 조건 충족 시 Incremental
-          $changedOnly = $false
+          $url = "https://api.github.com/repos/$env:REPO/zipball/$env:SHA"
+          $hdr = @{ Authorization = "token $env:GH_TOKEN"; 'User-Agent'='inventory-relations' }
+          Invoke-WebRequest -Uri $url -Headers $hdr -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dst -Force
 
-          if ($env:EVENT_NAME -eq 'workflow_dispatch' -and $env:INPUT_FULL -eq 'true') {
-            $changedOnly = $false
+          # zipball 최상단 임시 폴더 → 실제 루트로 평탄화
+          $inner = Get-ChildItem -Path $dst | Where-Object { $_.PSIsContainer } | Select-Object -First 1
+          if ($null -ne $inner) {
+            Get-ChildItem -Path $inner.FullName -Force | Move-Item -Destination $dst -Force
+            Remove-Item -Recurse -Force $inner.FullName
           }
-          else {
-            # main의 과거 산출물 유무 확인 (에러를 남기지 않는 방식)
-            git fetch --no-tags --prune --depth=1 origin +refs/heads/main:refs/remotes/origin/main | Out-Null
-            $exist = (git ls-tree -r --name-only origin/main -- _inventory/relations.csv | Select-Object -First 1)
-            $hasRel = -not [string]::IsNullOrWhiteSpace($exist)
-            # git 네이티브 커맨드의 종료코드가 단계 종료코드에 전이되지 않도록 리셋
-            $global:LASTEXITCODE = 0
 
-            if ($hasRel) { $changedOnly = $true } else { $changedOnly = $false }
-          }
-
-          $mode = if ($changedOnly) { 'Incremental' } else { 'Full' }
-
-          "changed_only=$changedOnly" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "mode=$mode"              | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
-          Write-Host "== Scan Mode: $mode"
-
-          # 이 단계는 반드시 성공 종료
-          $global:LASTEXITCODE = 0
-          exit 0
-
-      - name: "Build relations (scripts/g5/Build-Relations.ps1)"
+      - name: Sanity check (tree & script exists)
         shell: pwsh
+        working-directory: src
         run: |
-          $args = @(
-            '-NoProfile','-File','scripts/g5/Build-Relations.ps1',
-            '-OutDir','_inventory'
-          )
-          if ('${{ steps.mode.outputs.changed_only }}' -eq 'true') { $args += '-ChangedOnly' }
-          pwsh @args
+          $ErrorActionPreference='Stop'
+          Write-Host "== Top-level tree =="
+          Get-ChildItem -Force | Select-Object Mode,Length,Name | Format-Table -AutoSize
+          if (-not (Test-Path 'scripts/g5/Build-Relations.ps1')) {
+            throw "scripts/g5/Build-Relations.ps1 not found (working-directory=src)."
+          }
 
-      - name: "Upload artifact (inventory-relations)"
+      - name: Build relations (FULL / CHANGED)
+        shell: pwsh
+        working-directory: src
+        run: |
+          $ErrorActionPreference='Stop'
+          $changed = '${{ inputs.changed_only }}' -eq 'true'
+          if ($changed) {
+            & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly
+          } else {
+            & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1
+          }
+          if ($LASTEXITCODE -ne 0) { throw "Build-Relations.ps1 exit=$LASTEXITCODE" }
+
+      - name: Job summary (counts + Mermaid preview)
+        if: always()
+        shell: pwsh
+        working-directory: src
+        run: |
+          $s = @()
+          $s += "## build-relations summary"
+          $idx = "_inventory/index.json"
+          $csv = "_inventory/relations.csv"
+          $mm  = "_inventory/graph.mermaid.md"
+
+          if (Test-Path $idx) {
+            $j = Get-Content $idx -Raw | ConvertFrom-Json
+            $s += ""
+            $s += "- generated_at: $($j.generated_at)"
+            $s += "- node_count  : $($j.node_count)"
+            $s += "- edge_count  : $($j.edge_count)"
+            $s += "- changed_only: $($j.changed_only)"
+          } else {
+            $s += "- index.json missing (no output?)"
+          }
+
+          if (Test-Path $csv) {
+            $tail = Get-Content $csv -Raw
+            $s += ""
+            $s += "#### relations.csv (head)"
+            $s += "````csv"
+            $s += ($tail -split "`n" | Select-Object -First 15)
+            $s += "````"
+          } else {
+            $s += ""
+            $s += "- relations.csv not found."
+          }
+
+          if (Test-Path $mm) {
+            $m = Get-Content $mm -Raw
+            $s += ""
+            $s += "#### Mermaid Preview (first 100 edges)"
+            $s += $m
+          } else {
+            $s += ""
+            $s += "- Mermaid preview not found."
+          }
+
+          Set-Content -Path $env:GITHUB_STEP_SUMMARY -Value ($s -join "`n") -Encoding UTF8
+
+      - name: Upload artifacts (_inventory)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: inventory-relations
-          path: |
-            _inventory/relations.csv
-            _inventory/graph.json
-            _inventory/graph.mermaid.md
-            _inventory/index.json
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: "Summarize (Job Summary)"
-        shell: pwsh
-        run: |
-          $idx = Get-Content _inventory/index.json -Raw | ConvertFrom-Json
-          $rel = Import-Csv _inventory/relations.csv
-          $top = $rel | Group-Object source_path | Sort-Object Count -Desc | Select-Object -First 10
-
-          $lines = @()
-          $lines += "# File Relations"
-          $lines += "- Mode: ${{ steps.mode.outputs.mode }}"
-          $lines += "- Generated: $($idx.generated_at)"
-          $lines += "- Nodes: $($idx.node_count)"
-          $lines += "- Edges: $($idx.edge_count)"
-          $lines += ""
-          $lines += "## Top 10 Sources"
-          foreach ($t in $top) { $lines += "* $($t.Name) — $($t.Count) edges" }
-          $lines += ""
-          $lines += "## Mermaid Preview (first 100 edges)"
-          $lines += (Get-Content _inventory/graph.mermaid.md -Raw)
-
-          $lines -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
-
-      - name: "Create PR for _inventory update"
-        if: ${{ github.event_name != 'pull_request' }}
-        uses: peter-evans/create-pull-request@v6
-        with:
-          commit-message: "chore(inventory): update relations graph"
-          title: "chore(inventory): update relations graph"
-          body: |
-            자동 생성된 파일 관계 그래프/목록 업데이트
-            - 모드: ${{ steps.mode.outputs.mode }}
-          branch: chore/inventory-relations-update
-          add-paths: |
-            _inventory/relations.csv
-            _inventory/graph.json
-            _inventory/graph.mermaid.md
-            _inventory/index.json
+          path: src/_inventory/**
+          if-no-files-found: warn
