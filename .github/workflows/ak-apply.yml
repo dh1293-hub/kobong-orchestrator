@@ -91,66 +91,56 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-      
-          # 아티팩트 경로 보장
           New-Item -ItemType Directory -Force -Path logs | Out-Null
           New-Item -ItemType File -Force -Path .ak-out.txt | Out-Null
       
-          # DryRun 실행
           & pwsh -NoProfile -File scripts/g5/apply-patches.ps1 -DryRun `
             -Manifest patches/manifest.json `
             -OutText .ak-out.txt -OutJson logs/ak7.jsonl
       
-          # 원본 스크립트의 종료코드
           $code = $LASTEXITCODE
-      
-          # ✅ 정상 코드 맵핑: 0(성공), 10(No-Op), 11(DryRun 완료) → 성공(0)으로 처리
+          # ✅ 0(성공), 10(No-Op), 11(DryRun 완료) → 성공(0)으로 간주
           $norm = if ($code -in 0,10,11) { 0 } else { $code }
           $err  = if ($norm -eq 0) { '' } else { "failed (code=$code)" }
       
-          # JSON 로그(중복 키 금지! 한 번만 정의)
-          $obj = [pscustomobject]@{
+          [pscustomobject]@{
             ts       = (Get-Date -AsUtc -Format o)
             event    = 'ak-plan'
             exitCode = $code
             error    = $err
-          }
-          $obj | ConvertTo-Json -Compress | Out-File logs/ak7.jsonl -Append -Encoding utf8
+          } | ConvertTo-Json -Compress | Out-File logs/ak7.jsonl -Append -Encoding utf8
       
           exit $norm
 
-
-
-      - name: Apply (on merge or manual)
-        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true) }}
+      - name: Apply (CONFIRM_APPLY)
+        # 기존 조건식 유지(merge 후/수동 등). 필요시 원래 if 그대로.
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-      
           New-Item -ItemType Directory -Force -Path logs | Out-Null
           New-Item -ItemType File -Force -Path .ak-out.txt | Out-Null
       
+          # ❌ 잘못: -Apply
+          # pwsh -NoProfile -File scripts/g5/apply-patches.ps1 -Apply ...
+      
+          # ✅ 정답: 스위치 없이 호출하면 '적용' 모드
           & pwsh -NoProfile -File scripts/g5/apply-patches.ps1 `
             -Manifest patches/manifest.json `
             -OutText .ak-out.txt -OutJson logs/ak7.jsonl
       
           $code = $LASTEXITCODE
-          # ✅ Apply는 0(성공), 10(No-Op) → 성공(0)
+          # ✅ 0(성공), 10(No-Op) → 성공(0)으로 간주
           $norm = if ($code -in 0,10) { 0 } else { $code }
           $err  = if ($norm -eq 0) { '' } else { "failed (code=$code)" }
       
-          $obj = [pscustomobject]@{
+          [pscustomobject]@{
             ts       = (Get-Date -AsUtc -Format o)
             event    = 'ak-apply'
             exitCode = $code
             error    = $err
-          }
-          $obj | ConvertTo-Json -Compress | Out-File logs/ak7.jsonl -Append -Encoding utf8
+          } | ConvertTo-Json -Compress | Out-File logs/ak7.jsonl -Append -Encoding utf8
       
           exit $norm
-
-
-
 
       - name: Health gate (optional)
         if: ${{ always() }}   # 필요 시 조건/구현 보강
