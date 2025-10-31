@@ -47,14 +47,21 @@ jobs:
       - name: Generate header docs (to _inventory & wiki)  #주석(친절한)
         shell: pwsh
         run: |
-          # 1) _inventory 쪽 산출
-          pwsh -NoProfile -File ./scripts/g5/Extract-WorkflowHeaders.v1.2.ps1 -Out ./_inventory/workflow-headers.md
-          # 2) wiki 쪽 산출(동일 내용)
-          pwsh -NoProfile -File ./scripts/g5/Extract-WorkflowHeaders.v1.2.ps1 -Out ./wiki/Workflow-Header-Comments.md
+          # 스크립트 자동 탐색(버전/대소문자 오타 방지)
+          $script = Get-ChildItem -File -Recurse "scripts/g5/Extract-WorkflowHeaders*.ps1" |
+                    Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $script) { throw "Extract-WorkflowHeaders*.ps1 not found under scripts/g5" }
+          Write-Host "Using script: $($script.FullName)"
+
+          # 1) _inventory 산출
+          pwsh -NoProfile -File $script.FullName -Out ./_inventory/workflow-headers.md
+          # 2) wiki 산출
+          pwsh -NoProfile -File $script.FullName -Out ./wiki/Workflow-Header-Comments.md
 
           # 요약 출력(앞부분)
           '## Workflow Headers (head of file)' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           Get-Content ./_inventory/workflow-headers.md -TotalCount 60 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
 
       - name: Commit back to repo (_inventory) if changed
         shell: bash
