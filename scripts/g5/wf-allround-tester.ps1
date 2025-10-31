@@ -75,7 +75,14 @@ if($TestPR -or $TestIssueComment){
 }
 
 # 3) 출력(후속 잡에서 사용)
-"pr_number=$prNumber" >> $GITHUB_OUTPUT
-"branch=$branch"      >> $GITHUB_OUTPUT
-"ts=$ts"              >> $GITHUB_OUTPUT
+# == OUTPUTS to GitHub Actions ==
+$outFile = $env:GITHUB_OUTPUT
+if ([string]::IsNullOrEmpty($outFile)) {
+  Write-Warning "GITHUB_OUTPUT not set (local run?). Skip step outputs."
+} else {
+  Add-Content -Path $outFile -Value "pr_number=$prNumber"
+  Add-Content -Path $outFile -Value "branch=$branch"
+  Add-Content -Path $outFile -Value "ts=$ts"
+}
 Write-Host "[OK] trigger-done → pr=$prNumber, branch=$branch, ts=$ts"
+
