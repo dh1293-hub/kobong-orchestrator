@@ -1,4 +1,4 @@
 ADDED
 CHANGED
-.github/workflows/inventory-relations.yml
+scripts/g5/Build-Relations.ps1
 REMOVED
