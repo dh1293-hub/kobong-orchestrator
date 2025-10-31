@@ -1,4 +1,4 @@
-# GENERATED @ 2025-10-31 19:08:07+00:00  (repo=/home/runner/work/kobong-orchestrator/kobong-orchestrator)
+# GENERATED @ 2025-10-31 20:17:32+00:00  (repo=/home/runner/work/kobong-orchestrator/kobong-orchestrator)
 # RULES: block+inline comments excluded, files-only, .github/workflows only, flat, exclude=inventory-ci.yml
 
 .github/workflows/ak-apply.yml
@@ -22,11 +22,17 @@
 .github/workflows/ak-run.yml
   - .github/workflows/ak-dispatch.yml
 
+.github/workflows/ak-script-headers.yml
+
 .github/workflows/ak-selftest.yml
   - .github/workflows/ak-selftest.yml
   - scripts/g5/ak-dispatch.ps1
 
+.github/workflows/ak-workflow-headers.yml
+  - _inventory/workflow-headers.md
+
 .github/workflows/ak-workflow-inventory.yml
+  - _inventory/workflows.txt
   - .github/workflows/inventory-ci.yml
 
 .github/workflows/auto-github-release.yml
@@ -52,9 +58,6 @@
 .github/workflows/housekeeping-smoke.yml
   - .github/workflows/housekeeping-smoke.yml
   - scripts/g5/housekeeping-smoke.ps1
-
-.github/workflows/inventory-relations.yml
-  - scripts/g5/Build-Relations.ps1
 
 .github/workflows/klc-append-release.yml
 
