@@ -1,4 +1,4 @@
-# GENERATED @ 2025-10-31 20:17:32+00:00  (repo=/home/runner/work/kobong-orchestrator/kobong-orchestrator)
+# GENERATED @ 2025-10-31 22:12:21+00:00  (repo=/home/runner/work/kobong-orchestrator/kobong-orchestrator)
 # RULES: block+inline comments excluded, files-only, .github/workflows only, flat, exclude=inventory-ci.yml
 
 .github/workflows/ak-apply.yml
@@ -23,6 +23,7 @@
   - .github/workflows/ak-dispatch.yml
 
 .github/workflows/ak-script-headers.yml
+  - _inventory/script-headers.md
 
 .github/workflows/ak-selftest.yml
   - .github/workflows/ak-selftest.yml
@@ -36,7 +37,6 @@
   - .github/workflows/inventory-ci.yml
 
 .github/workflows/auto-github-release.yml
-  - CHANGELOG.md
 
 .github/workflows/ci.yml
 
@@ -92,6 +92,10 @@
 .github/workflows/weekly-auto-release-smoke.yml
 
 .github/workflows/weekly-housekeeping.yml
+
+.github/workflows/wf-allround-tester.yml
+  - scripts/g5/wf-allround-tester.ps1
+  - scripts/g5/wf-inventory.ps1
 
 .github/workflows/xp-summary-artifact.yml
 
