@@ -1,6 +1,6 @@
 # Script Header Comments (scripts/g5)
 
-> Generated @ 2025-10-31 22:09:57+00:00 (`scripts/g5/**/*.ps1`, head comments only)
+> Generated @ 2025-10-31 22:23:08+00:00 (`scripts/g5/**/*.ps1`, head comments only)
 
 ## `scripts/g5/ak-audit.ps1`
 
@@ -1186,12 +1186,11 @@ scripts/g5/wf-allround-tester.ps1
 ## `scripts/g5/wf-inventory.ps1`
 
 ```text
-scripts/g5/wf-inventory.ps1
-친절한 주석: 목적/용도/보안/출력 위치
-- 목적: 리포의 모든 GitHub Actions 워크플로(YAML) 자동 수집→요약→_inventory 저장
-- 사용법:
-pwsh -NoProfile -File scripts/g5/wf-inventory.ps1 -Repo dh1293-hub/kobong-orchestrator -Ref main
-- 출력: _inventory/workflows.csv, _inventory/workflows.json (멱등)
-- 보안: 읽기 전용(zipball). 토큰 있으면 헤더로 사용(속도↑).
+파일: scripts/g5/wf-inventory.ps1
+목적: .github/workflows/*.yml 전수 수집 → _inventory/workflows.csv|json 생성
+동작: (A) 로컬 워크스페이스 스캔 우선  (B) 없으면 zipball로 폴백
+사용: pwsh -NoProfile -File scripts/g5/wf-inventory.ps1 -Repo dh1293-hub/kobong-orchestrator -Ref main
+보안: GH_TOKEN 있으면 API 헤더에 사용(속도/제한 완화). User-Agent/Api-Version 명시.
+산출: _inventory/workflows.csv, _inventory/workflows.json (멱등 생성)
 ```
 
