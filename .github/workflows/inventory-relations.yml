@@ -35,12 +35,10 @@ on:
     inputs:
       ref:
         description: 'Git ref (branch/sha)'
-        required: false
         default: 'main'
       full:
-        description: 'Full scan (false면 자동 판정)'
+        description: 'Full scan (false면 변경만 시도; zipball이면 내부적으로 전체)'
         type: boolean
-        required: false
         default: true
 
 permissions:
@@ -97,7 +95,6 @@ jobs:
         shell: pwsh
         working-directory: src
         run: |
-          $ErrorActionPreference='Stop'
           $p = 'scripts/g5/Build-Relations.ps1'
           $null = $tokens = $errs = $null
           $ast = [System.Management.Automation.Language.Parser]::ParseFile(
@@ -106,9 +103,7 @@ jobs:
           if ($errs) {
             $lines = Get-Content -Path $p
             foreach ($e in $errs) {
-              $l1 = $e.Extent.StartLineNumber
-              $c1 = $e.Extent.StartColumnNumber
-              $l2 = $e.Extent.EndLineNumber
+              $l1 = $e.Extent.StartLineNumber; $c1 = $e.Extent.StartColumnNumber; $l2 = $e.Extent.EndLineNumber
               Write-Host ("{0}:{1}  {2}" -f $l1,$c1,$e.Message)
               $from = [Math]::Max($l1-3,1); $to = [Math]::Min($l2+3,$lines.Count)
               "----- context $from..$to -----"
@@ -116,9 +111,7 @@ jobs:
               "-------------------------------"
             }
             throw "Parse errors found."
-          } else {
-            Write-Host "No parse errors."
-          }
+          } else { Write-Host "No parse errors." }
 
       - name: Build relations (FULL / CHANGED)
         shell: pwsh
@@ -128,12 +121,40 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           $full = ($env:WANT_FULL -eq 'true')
-          if ($full) {
-            & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1
-          } else {
-            & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly
-          }
+          if ($full) { & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 }
+          else       { & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly }
           if ($LASTEXITCODE -ne 0) { throw "Build-Relations.ps1 exit=$LASTEXITCODE" }
+
+      - name: Locate _inventory (auto-fix path)
+        id: locate
+        shell: pwsh
+        working-directory: src
+        run: |
+          $ErrorActionPreference='Stop'
+          $cands = @(
+            (Resolve-Path -LiteralPath "_inventory" -ErrorAction SilentlyContinue)?.Path,
+            (Get-ChildItem -Recurse -Directory -Filter "_inventory" -ErrorAction SilentlyContinue | Select-Object -First 1)?.FullName
+          ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+          if (-not $cands) {
+            # 혹시 루트에 만들어졌다면 끌어오기
+            $rootInv = Join-Path (Resolve-Path "..") "_inventory"
+            if (Test-Path $rootInv) {
+              New-Item -ItemType Directory -Force -Path "_inventory" | Out-Null
+              Copy-Item -Recurse -Force "$rootInv\*" "_inventory\" -ErrorAction SilentlyContinue
+              $cands = (Resolve-Path "_inventory").Path
+            }
+          }
+
+          if (-not $cands) {
+            # 마지막 보루: 비어 있어도 아티팩트가 생기도록 placeholder 생성
+            New-Item -ItemType Directory -Force -Path "_inventory" | Out-Null
+            Set-Content -Path "_inventory/EMPTY.txt" -Value "no data" -Encoding UTF8
+            $cands = (Resolve-Path "_inventory").Path
+          }
+
+          "dir=$cands" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "INVENTORY_DIR=$cands"
 
       - name: Job summary (counts + Mermaid preview)
         if: always()
@@ -142,9 +163,10 @@ jobs:
         run: |
           $s = @()
           $s += "## build-relations summary"
-          $idx = "_inventory/index.json"
-          $csv = "_inventory/relations.csv"
-          $mm  = "_inventory/graph.mermaid.md"
+          $inv = "${{ steps.locate.outputs.dir }}"
+          $idx = Join-Path $inv "index.json"
+          $csv = Join-Path $inv "relations.csv"
+          $mm  = Join-Path $inv "graph.mermaid.md"
 
           if (Test-Path $idx) {
             $j = Get-Content $idx -Raw | ConvertFrom-Json
@@ -186,5 +208,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: inventory-relations
-          path: src/_inventory/**
+          path: ${{ steps.locate.outputs.dir }}/**
           if-no-files-found: warn
