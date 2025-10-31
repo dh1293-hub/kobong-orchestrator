@@ -138,18 +138,44 @@ jobs:
           INVENTORY_DIR: ${{ env.INVENTORY_DIR }}
         run: |
           $inv = $env:INVENTORY_DIR
-          if ([string]::IsNullOrWhiteSpace($inv)) { throw "INVENTORY_DIR is empty." }
           $idx = Join-Path $inv "index.json"
           $csv = Join-Path $inv "relations.csv"
           $mm  = Join-Path $inv "graph.mermaid.md"
-          # ... (나머지 요약 코드는 그대로)
-      
+
+          $s = @()
+          $s += "## build-relations summary"
+          if (Test-Path $idx) {
+            $j = Get-Content $idx -Raw | ConvertFrom-Json
+            $s += ""
+            $s += "- generated_at: $($j.generated_at)"
+            $s += "- node_count  : $($j.node_count)"
+            $s += "- edge_count  : $($j.edge_count)"
+            $s += "- changed_only: $($j.changed_only_effective)"
+          } else { $s += "- index.json missing (no output?)" }
+
+          if (Test-Path $csv) {
+            $head = (Get-Content $csv -Raw) -split "`n"
+            $s += ""
+            $s += "#### relations.csv (head)"
+            $s += "````csv"
+            $s += ($head | Select-Object -First 15)
+            $s += "````"
+          } else { $s += "`n- relations.csv not found." }
+
+          if (Test-Path $mm) {
+            $s += ""
+            $s += "#### Mermaid Preview (first 100 edges)"
+            $s += (Get-Content $mm -Raw)
+          } else { $s += "`n- Mermaid preview not found." }
+
+          Set-Content -Path $env:GITHUB_STEP_SUMMARY -Value ($s -join "`n") -Encoding UTF8
+
       - name: Upload artifacts (_inventory)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: inventory-relations
-          path: ${{ env.INVENTORY_DIR }}   # ✅ 폴더 자체 업로드(/** 금지)
+          path: ${{ env.INVENTORY_DIR }}     # ✅ 폴더 자체 업로드 (/** 금지)
           if-no-files-found: error
 
 
