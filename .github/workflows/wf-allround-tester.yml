@@ -88,18 +88,23 @@ jobs:
         uses: actions/checkout@v4
 
       # 트리거(Dispatch/PR/댓글) 실행 → PR/브랜치/TS를 출력으로 전달
+      # 기존: pwsh -NoProfile -File scripts/g5/wf-allround-tester.ps1 ...
+      # 변경: 현재 pwsh 세션에서 직접 실행(환경변수 보존)
+      
       - name: Trigger allround tester (safe)
         id: trigger
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          pwsh -NoProfile -File scripts/g5/wf-allround-tester.ps1 `
+          run: |
+         
+            ./scripts/g5/wf-allround-tester.ps1 `
             -Repo "${{ github.repository }}" `
             -TestDispatch:$${{ inputs.test_dispatch }} `
             -TestPR:$${{ inputs.test_pr }} `
             -TestIssueComment:$${{ inputs.test_comment }} `
             -KeepPr:$${{ inputs.keep_pr }}
+
 
       # 실행 결과가 뜰 때까지 적당히 기다리고 수집(MD/CSV/JSON 생성)
       - name: Collect runs & checks
