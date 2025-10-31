@@ -1,0 +1,56 @@
+name: AK • Workflow Headers → Wiki
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/**'
+      - 'scripts/g5/Extract-WorkflowHeaders.ps1'
+
+permissions:
+  contents: write   # ← wiki 커밋에 필요
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (repo)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout (wiki repo)
+        uses: actions/checkout@v4
+        with:
+          # ex) kobong-orchestrator.wiki
+          repository: ${{ github.repository }}.wiki
+          path: wiki
+          fetch-depth: 0
+
+      - name: Generate header doc (MD)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./scripts/g5/Extract-WorkflowHeaders.ps1 -Out ./wiki/Workflow-Header-Comments.md
+          '## Preview (head)' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          Get-Content ./wiki/Workflow-Header-Comments.md -TotalCount 60 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+      - name: Commit to Wiki (if changed)
+        shell: bash
+        run: |
+          git -C wiki config user.name  "github-actions[bot]"
+          git -C wiki config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C wiki add Workflow-Header-Comments.md
+          if git -C wiki diff --cached --quiet; then
+            echo "No changes to wiki. Skip."
+            exit 0
+          fi
+          git -C wiki commit -m "docs(workflows): update header comments"
+          git -C wiki push origin HEAD
+
+      - name: Upload artifact (MD)
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-header-comments
+          path: wiki/Workflow-Header-Comments.md
+          if-no-files-found: error
