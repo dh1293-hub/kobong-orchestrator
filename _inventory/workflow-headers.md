@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-10-31 20:53:57+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-10-31 22:12:04+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -243,6 +243,14 @@ NO-SHELL
 안전 가드 : Git 미사용(Zipball), PSGallery(v3→v2) 다중 재시도, 갤러리 장애 시 문법 분석 폴백
 산출물    : artifacts/pssa-findings.txt
 =========================================================
+```
+
+## `.github/workflows/wf-allround-tester.yml`
+
+```text
+친절한 머리 주석:
+목적: 저장소 내 모든 워크플로를 자동으로 수집하고, 안전한 범위부터 스모크(Dispatch/PR/댓글) 실행
+보안: 최소 권한, concurrency, 라벨/드래프트 PR로 격리. 위험 액션은 모듈 /health OK일 때만.
 ```
 
 ## `.github/workflows/xp-summary-artifact.yml`
