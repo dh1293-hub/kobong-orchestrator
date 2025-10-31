@@ -123,14 +123,31 @@ jobs:
             _inventory/wf-allround/*.json
           if-no-files-found: warn
 
-      - name: Comment summary to PR
-        if: ${{ always() && steps.trigger.outputs.pr_number }}
+      - name: Commit & open PR
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $md = Get-ChildItem _inventory/wf-allround/*-summary.md -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
-          if ($md) { gh pr comment ${{ steps.trigger.outputs.pr_number }} --body-file $md.FullName }
+          git config user.name  "wf-allround-bot"
+          git config user.email "wf-allround-bot@users.noreply.github.com"
+      
+          $branch = "bot/wf-inventory-${{ github.run_id }}"
+          git checkout -b $branch
+      
+          git add -f _inventory/*            # <-- 강제 add로 무시 규칙 우회
+          if (git diff --cached --quiet) {
+            Write-Host "No changes in _inventory → skip PR."
+            exit 0
+          }
+      
+          git commit -m "[WF-TEST] _inventory snapshot (run=${{ github.run_id }})"
+          git push origin $branch
+      
+          $base = gh repo view --json defaultBranchRef -q .defaultBranchRef.name
+          gh pr create --base $base --head $branch `
+            --title "[WF-TEST] _inventory snapshot ${{ github.run_id }}" `
+            --body  "WF Allround Tester가 생성한 인벤토리/리포트를 자동 반영합니다."
+
 
       - name: Auto tidy (close PR & delete branch)
         if: ${{ always() && steps.trigger.outputs.pr_number && inputs.keep_pr == false }}
