@@ -1,15 +1,9 @@
 # 파일: scripts/g5/wf-inventory.ps1
-# 목적: 레포의 .github/workflows/*.yml 전수 수집 → _inventory/workflows.csv|json 생성
-# 동작:
-#   (A) 체크아웃된 워크스페이스에서 로컬 우선 스캔
-#   (B) 로컬이 비어있으면 zipball로 폴백(브랜치/태그명 사용 권장; SHA는 404 가능)
-# 사용:
-#   pwsh -NoProfile -File scripts/g5/wf-inventory.ps1 -Repo dh1293-hub/kobong-orchestrator -Ref main
-# 보안:
-#   - GH_TOKEN 있으면 API 헤더로 사용(레이트리밋 완화)
-#   - User-Agent / X-GitHub-Api-Version 명시
-# 산출: _inventory/workflows.csv, _inventory/workflows.json
-# 규칙: #주석(친절한) / 멱등 / 실패 시 원인(로컬 비어있음+zipball 실패) 명확히 출력
+# 목적: .github/workflows/*.yml 전수 수집 → _inventory/workflows.csv|json 생성
+# 동작: (A) 로컬 워크스페이스 우선 스캔 → (B) 없으면 zipball로 폴백(ref=브랜치/태그 권장)
+# 보안: GH_TOKEN이 있으면 API 헤더 사용(User-Agent/Api-Version 명시), 읽기 전용
+# 출력: _inventory/workflows.csv, _inventory/workflows.json
+
 param(
   [string]$Repo = "dh1293-hub/kobong-orchestrator",
   [string]$Ref  = "main"
@@ -29,34 +23,47 @@ function Get-WfFilesFromLocal {
   }
 }
 
+# zipball 폴백(핫픽스: 폴더 선생성, 예외 처리, 루트/.github/workflows만 수집)
 function Get-WfFilesFromZipball {
   $tmp = Join-Path (${env:RUNNER_TEMP} ?? ${env:TEMP}) "wfscan"
   Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
   New-Item $tmp -ItemType Directory | Out-Null
+
   $zip = Join-Path $tmp 'src.zip'
   $unz = Join-Path $tmp 'unz'
+  New-Item $unz -ItemType Directory -Force | Out-Null
+
   $h = @{
-    'User-Agent' = 'wf-inventory/1.1'
+    'User-Agent'           = 'wf-inventory/1.2'
     'X-GitHub-Api-Version' = '2022-11-28'
   }
   if($env:GH_TOKEN){ $h['Authorization'] = "Bearer $env:GH_TOKEN" }
 
   $zipUrl = "https://api.github.com/repos/$Repo/zipball/$Ref"
-  try{
-    Invoke-WebRequest -Uri $zipUrl -OutFile $zip -Headers $h
+  try {
+    Invoke-WebRequest -Uri $zipUrl -OutFile $zip -Headers $h -ErrorAction Stop
   } catch {
-    Write-Warning "zipball 실패(ref=$Ref): $($_.Exception.Message)"
+    Write-Warning "zipball 다운로드 실패(ref=$Ref): $($_.Exception.Message)"
     return @()
   }
-  # ...zipball 전개 후
+
+  try {
+    Expand-Archive -Path $zip -DestinationPath $unz -Force
+  } catch {
+    Write-Warning "압축 해제 실패: $($_.Exception.Message)"
+    return @()
+  }
+
+  if (-not (Test-Path $unz)) { return @() }
   $top = Get-ChildItem -Path $unz | Where-Object PSIsContainer | Select-Object -First 1
+  if (-not $top) { return @() }
+
   $wfRoot = Join-Path $top.FullName '.github/workflows'
   if (Test-Path $wfRoot) {
     Get-ChildItem -Path $wfRoot -Recurse -File -Include *.yml,*.yaml
   } else {
-    @() # 없으면 빈 배열
+    @()
   }
-
 }
 
 # 1) 로컬 우선
@@ -69,7 +76,7 @@ if(-not $files -or $files.Count -eq 0){
   }
 }
 
-# 2) 라이트 파싱(이름/권한/트리거 특징)
+# 2) 라이트 파싱
 $rows = foreach($f in $files){
   $t = Get-Content -LiteralPath $f.FullName -Raw
   $name = ([regex]::Match($t,'(?m)^\s*name:\s*(.+)$').Groups[1].Value).Trim()
