@@ -1,0 +1,94 @@
+# GENERATED @ 2025-10-31 19:08:07+00:00  (repo=/home/runner/work/kobong-orchestrator/kobong-orchestrator)
+# RULES: block+inline comments excluded, files-only, .github/workflows only, flat, exclude=inventory-ci.yml
+
+.github/workflows/ak-apply.yml
+  - patches/manifest.json
+  - scripts/g5/apply-patches.ps1
+
+.github/workflows/ak-auto.yml
+  - scripts/g5/ak-dispatch.ps1
+
+.github/workflows/ak-commands.yml
+  - scripts/g5/ak-dispatch.ps1
+
+.github/workflows/ak-dispatch.yml
+  - scripts/g5/ak-dispatch.ps1
+
+.github/workflows/ak-exec.yml
+  - scripts/g5/ak-dispatch.ps1
+
+.github/workflows/ak-loop.yml
+
+.github/workflows/ak-run.yml
+  - .github/workflows/ak-dispatch.yml
+
+.github/workflows/ak-selftest.yml
+  - .github/workflows/ak-selftest.yml
+  - scripts/g5/ak-dispatch.ps1
+
+.github/workflows/ak-workflow-inventory.yml
+  - .github/workflows/inventory-ci.yml
+
+.github/workflows/auto-github-release.yml
+  - CHANGELOG.md
+
+.github/workflows/ci.yml
+
+.github/workflows/contracts-ci.yml
+
+.github/workflows/dispatch-on-release.yml
+
+.github/workflows/guard-flush-queue.yml
+
+.github/workflows/guard-logs-ignored.yml
+
+.github/workflows/guard-readme-badge.yml
+  - README.md
+
+.github/workflows/guard-sentinel.yml
+
+.github/workflows/health-smoke.yml
+
+.github/workflows/housekeeping-smoke.yml
+  - .github/workflows/housekeeping-smoke.yml
+  - scripts/g5/housekeeping-smoke.ps1
+
+.github/workflows/inventory-relations.yml
+  - scripts/g5/Build-Relations.ps1
+
+.github/workflows/klc-append-release.yml
+
+.github/workflows/klc-nightly-aggregate.yml
+  - scripts/g5/klc-aggregate.ps1
+
+.github/workflows/klc-validate.yml
+  - scripts/g5/make-g5-context.ps1
+  - scripts/g5/update-docs-and-inventory.ps1
+
+.github/workflows/klc-verify.yml
+  - scripts/g5/klc-verify.ps1
+
+.github/workflows/lint-actions.yml
+
+.github/workflows/post-release-canary.yml
+
+.github/workflows/protect-manual.yml
+  - .github/workflows/ak-auto.yml
+  - .github/workflows/ak-commands.yml
+  - .github/workflows/protect-manual.yml
+  - AUTO-Kobong/AUTO-Kobong-메뉴얼.md
+
+.github/workflows/psanalyze.yml
+
+.github/workflows/release-docs.yml
+
+.github/workflows/release-one.yml
+  - scripts/g5/ak-scan.ps1
+  - scripts/g5/ak-test.ps1
+
+.github/workflows/weekly-auto-release-smoke.yml
+
+.github/workflows/weekly-housekeeping.yml
+
+.github/workflows/xp-summary-artifact.yml
+
