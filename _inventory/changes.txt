@@ -1,3 +1,4 @@
 ADDED
 CHANGED
+scripts/g5/wf-inventory.ps1
 REMOVED
