@@ -1,4 +1,4 @@
 ADDED
-.github/workflows/ak-workflow-headers.yml
 CHANGED
+scripts/g5/Extract-WorkflowHeaders.ps1
 REMOVED
