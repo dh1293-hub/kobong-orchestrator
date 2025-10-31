@@ -1,18 +1,11 @@
 #requires -Version 7.0
 <#
-[목적]  #주석(친절한)
-- .github/workflows/*.yml(yaml) 파일들의 "머리 주석(파일 시작부)"만 수집해서 Markdown으로 정리.
-- 머리 주석이 없는 파일은 "완전히 제외".
-- 머리 주석 패턴 2종:
-  1) 시작부 연속 `# ...` 라인
-  2) 시작부 펜스 블록: 첫 비공백 라인이 ``` 로 시작하고, 다음 ``` 를 만날 때까지
-
-[출력]
-- -Out 경로(기본 ./_inventory/workflow-headers.md)로 UTF-8 저장
-- 본문은 모두 ```text 코드블록으로 감싸 "문자 크기/진하기"를 통일
-
-[사용법]
-pwsh -NoProfile -File .\scripts\g5\Extract-WorkflowHeaders.v1.2.ps1 -Out .\_inventory\workflow-headers.md
+[목적] .github/workflows/*.yml(yaml)의 "머리 주석(파일 시작부)"만 수집해 Markdown으로 정리
+[규칙]
+- inventory-ci.yml 제외
+- 머리 주석 없는 파일은 제외
+- 머리 주석 패턴: (1) 시작부 연속 '# …'  (2) 시작부 펜스 블록: 첫 비공백 라인이 ``` 로 시작해 다음 ``` 까지
+[출력] ./_inventory/workflow-headers.md (UTF-8)
 #>
 
 param(
@@ -45,30 +38,30 @@ function Get-HeadComment([string]$file){
   $lines = $raw -split "`r?`n"
   if($lines.Length -gt 0){ $lines[0] = $lines[0].TrimStart([char]0xFEFF) }  # UTF-8 BOM 제거
 
-  # 1) 시작부 공백 라인 스킵
+  # 시작부 공백 스킵
   $i = 0
   while($i -lt $lines.Length -and [string]::IsNullOrWhiteSpace($lines[$i])){ $i++ }
   if($i -ge $lines.Length){ return $null }
 
-  # 2) 펜스 블록( ``` ) 우선 인식
+  # (A) 시작부 펜스 블록: ``` 로 시작
   if($lines[$i] -match '^\s*```'){
     $buf = New-Object System.Collections.Generic.List[string]
     $i++
     for(; $i -lt $lines.Length; $i++){
-      if($lines[$i] -match '^\s*```'){ break }  # 닫힘 펜스
+      if($lines[$i] -match '^\s*```'){ break }
       $buf.Add($lines[$i])
     }
     $txt = ($buf -join "`n").Trim()
     return ([string]::IsNullOrWhiteSpace($txt)) ? $null : $txt
   }
 
-  # 3) 연속 # 주석 블록
+  # (B) 연속 # 주석 블록
   if($lines[$i] -notmatch '^\s*#'){ return $null }
   $buf2 = New-Object System.Collections.Generic.List[string]
   for(; $i -lt $lines.Length; $i++){
     $ln = $lines[$i]
     if($ln -match '^\s*#(.*)$'){
-      $buf2.Add( ($Matches[1]).TrimStart() )   # 앞의 '# ' 제거
+      $buf2.Add( ($Matches[1]).TrimStart() )   # '# ' 제거
     } else { break }
   }
   $txt2 = ($buf2 -join "`n").Trim()
@@ -87,22 +80,22 @@ $files = @(
 
 $lines = New-Object System.Collections.Generic.List[string]
 $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ssK'
-$lines.Add("# Workflow Header Comments")
-$lines.Add("")
-$lines.Add("> Generated @ $stamp (`.github/workflows only, exclude=inventory-ci.yml`)")
-$lines.Add("")
+$lines.Add('# Workflow Header Comments')
+$lines.Add('')
+$lines.Add(('> Generated @ {0} (`.github/workflows only, exclude=inventory-ci.yml`)' -f $stamp))
+$lines.Add('')
 
 foreach($f in $files){
   $head = Get-HeadComment $f.FullName
-  if(-not $head){ continue }  # 머리 주석 없는 파일은 제외!
+  if(-not $head){ continue }  # 머리 주석 없는 파일은 제외
 
   $rel = To-Rel $root $f.FullName
-  $lines.Add(('## `{0}`' -f $rel))   # ← 백틱 출력은 -f 사용
-  $lines.Add("")
-  $lines.Add("```text")              # 크기/진하기 통일(코드블록)
+  $lines.Add(('## `{0}`' -f $rel))   # ← 백틱 안전 출력
+  $lines.Add('')
+  $lines.Add('```text')              # ← 삼중 백틱은 항상 홑따옴표
   $lines.Add($head)
-  $lines.Add("```")
-  $lines.Add("")
+  $lines.Add('```')
+  $lines.Add('')
 }
 
 # 저장(PS7/PS5 안전)
