@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-10-31 20:07:40+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-10-31 20:17:33+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -116,6 +116,25 @@ Help → Test → Scan(--all) → Fixloop preview → (조건) Apply
 참고:
 - 실제 /ak 명령 실행(스캔/수정 등)은 ak-dispatch.yml + scripts/g5/ak-dispatch.ps1에서 수행
 ===========================================
+```
+
+## `.github/workflows/ak-script-headers.yml`
+
+```text
+AK • Script Headers → Repo(_inventory) + Wiki   #주석(친절한)
+목적: scripts/g5/**/*.ps1 파일들의 "머리 주석"만 수집하여
+1) 레포의 _inventory/script-headers.md 로 저장(커밋/푸시)
+2) Wiki의 Script-Header-Comments.md 로도 반영(커밋/푸시)
+규칙:
+- 대상: scripts/g5/**/*.ps1
+- 머리 주석 없는 스크립트는 제외
+- 머리 주석 패턴: 연속 '#' / 펜스 블록 ```...``` / PowerShell 블록 <#...#>
+- 출력은 모두 ```text 코드블록으로 렌더(문자 크기/굵기 통일)
+실행 트리거:
+- 수동 실행(workflow_dispatch)
+- 스크립트/수집기 변경 push 시 자동 실행
+권한:
+- contents: write (레포/위키 커밋/푸시)
 ```
 
 ## `.github/workflows/ak-selftest.yml`
