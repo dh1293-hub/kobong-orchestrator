@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-10-31 22:12:04+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-10-31 22:34:31+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -248,9 +248,24 @@ NO-SHELL
 ## `.github/workflows/wf-allround-tester.yml`
 
 ```text
-친절한 머리 주석:
-목적: 저장소 내 모든 워크플로를 자동으로 수집하고, 안전한 범위부터 스모크(Dispatch/PR/댓글) 실행
-보안: 최소 권한, concurrency, 라벨/드래프트 PR로 격리. 위험 액션은 모듈 /health OK일 때만.
+파일: .github/workflows/wf-allround-tester.yml
+목적: 저장소 내 등록된 워크플로들의 실제 동작을 "원샷"으로 검증한다.
+핵심 시나리오:
+1) .github/workflows 전수 인벤토리 구축(_inventory/workflows.*)
+2) 안전 트리거(Dispatch/PR/IssueComment)로 스모크 실행
+3) 결과 수집(MD/CSV/JSON) → 아티팩트 업로드
+4) 생성된 산출물을 _inventory에 반영하는 자동 PR 생성
+트리거:
+- 수동: workflow_dispatch (옵션 플래그)
+권한(최소 권한 원칙):
+- contents: write        # publish 잡에서 _inventory 커밋/푸시
+- pull-requests: write   # PR 생성/코멘트
+- actions: write         # workflow_dispatch 실행
+- checks/statuses: read  # 집계
+안전 가드:
+- 포크/외부 이벤트 차단(스크립트 내부 if)
+- concurrency로 중복 실행 차단
+- run: | (멀티라인) + PowerShell 불리언 전달(-Switch:$${{ inputs.xx }})
 ```
 
 ## `.github/workflows/xp-summary-artifact.yml`
