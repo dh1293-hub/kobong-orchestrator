@@ -28,12 +28,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# == 기준 디렉터리: 현재 작업 디렉터리(워크플로에서 working-directory로 보장) ==
-$REPO = (Get-Location).Path
-
-# == 출력 폴더 준비 ==
-$OUT  = Join-Path $REPO $OutDir
+# 스크립트 기준으로 항상 리포 루트 고정 (scripts/g5/ -> ../../)
+try {
+  $REPO = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
+} catch {
+  # 예외적으로 $PSScriptRoot 사용 불가 시(드물게 inline 실행 등) 현재 폴더로 폴백
+  $REPO = (Get-Location).Path
+}
+$OUT = Join-Path $REPO $OutDir
 New-Item -ItemType Directory -Force -Path $OUT | Out-Null
+
 
 # == 허용 확장자 ==
 $ALLOW_EXT = @(
