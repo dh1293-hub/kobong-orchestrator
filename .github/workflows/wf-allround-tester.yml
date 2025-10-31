@@ -55,11 +55,15 @@ concurrency:
 
 jobs:
   inventory:
-    name: Build workflows inventory
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # PR 이면 HEAD 브랜치, 아니면 현재 ref
+          ref: ${{ github.head_ref || github.ref }}
+          fetch-depth: 0
+
 
       - name: Build workflows inventory (_inventory/workflows.*)
         shell: pwsh
