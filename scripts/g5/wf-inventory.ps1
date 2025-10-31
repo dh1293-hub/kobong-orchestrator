@@ -48,10 +48,15 @@ function Get-WfFilesFromZipball {
     Write-Warning "zipball 실패(ref=$Ref): $($_.Exception.Message)"
     return @()
   }
-  Expand-Archive -Path $zip -DestinationPath $unz
-  Get-ChildItem -Path $unz -Recurse -File -Include *.yml,*.yaml | Where-Object {
-    $_.FullName -match '\\.github\\workflows\\'
+  # ...zipball 전개 후
+  $top = Get-ChildItem -Path $unz | Where-Object PSIsContainer | Select-Object -First 1
+  $wfRoot = Join-Path $top.FullName '.github/workflows'
+  if (Test-Path $wfRoot) {
+    Get-ChildItem -Path $wfRoot -Recurse -File -Include *.yml,*.yaml
+  } else {
+    @() # 없으면 빈 배열
   }
+
 }
 
 # 1) 로컬 우선
