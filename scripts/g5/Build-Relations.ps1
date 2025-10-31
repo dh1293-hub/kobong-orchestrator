@@ -1,24 +1,24 @@
-<# =====================================================================
- 파일: scripts/g5/Build-Relations.ps1
- 목적:
-   - 리포지토리 내 파일 연관관계를 스캔하여 _inventory 산출물 생성
+# scripts/g5/Build-Relations.ps1
+<# 목적
+ - 리포지토리 내 파일 간 "연관 관계"를 스캔하여 _inventory 산출물 생성
 
- 산출물:
-   - _inventory/relations.csv
-   - _inventory/graph.json
-   - _inventory/graph.mermaid.md
-   - _inventory/index.json
+ 산출물
+ - _inventory/relations.csv
+ - _inventory/graph.json
+ - _inventory/graph.mermaid.md
+ - _inventory/index.json
 
- 핵심 개선(이번 수정):
-   1) ✅ YAML의 inline run:  run: pwsh -NoProfile -File scripts/g5/xxx.ps1  → 인식
-   2) ✅ Fallback: YAML 전체에서 .ps1/.js 경로 토큰을 추가로 수집(yml_path)
-   3) 🔒 null-safe 파일읽기 & 정규식 누수 차단(문법/런타임 에러 방지)
-   4) 0건이어도 CSV 헤더/미리보기 래퍼/인덱스는 항상 생성
+ 사용법
+ - pwsh -NoProfile -File scripts/g5/Build-Relations.ps1
+ - pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly
+ - pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -OutDir _inventory   # 기본값 동일
 
- 사용법:
-   pwsh -NoProfile -File scripts/g5/Build-Relations.ps1              # 전체 스캔
-   pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly # 변경만 (git 불가 시 자동 전체)
-===================================================================== #>
+ 친절한 주석
+ - zipball(.git 없음) 환경에서도 안전
+ - YAML run: 블록/인라인 + Fallback(.ps1/.js 토큰)까지 수집
+ - null-safe 파일 읽기, 정규식 누수 차단, 경로 안전 화이트리스트
+ - 0건이어도 CSV 헤더/메르메이드/인덱스 반드시 생성
+#>
 
 [CmdletBinding()]
 param(
@@ -28,8 +28,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# == 기본 경로 ==
+# == 기준 디렉터리: 현재 작업 디렉터리(워크플로에서 working-directory로 보장) ==
 $REPO = (Get-Location).Path
+
+# == 출력 폴더 준비 ==
 $OUT  = Join-Path $REPO $OutDir
 New-Item -ItemType Directory -Force -Path $OUT | Out-Null
 
@@ -44,7 +46,7 @@ $ALLOW_EXT = @(
 $IGNORE_RX = @('^\.git/','^_inventory/','^node_modules/','^dist/','^build/','^out/','^coverage/')
 function Test-Ignored([string]$rel){ foreach($r in $IGNORE_RX){ if($rel -match $r){return $true} } return $false }
 
-# == 항상 문자열을 반환하는 안전한 읽기 ==
+# == 항상 문자열 반환: null-safe ==
 function Read-TextSafe {
   param([string]$Path)
   try { return [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8) }
@@ -120,7 +122,7 @@ function Get-RepoFiles {
   $files | Select-Object -Unique | ForEach-Object { $_ }
 }
 
-# == 탐지 정규식 세트 ==
+# == 탐지 정규식 ==
 $RX = @{
   js_import     = [regex]"(?m)^\s*import\s+.*?\sfrom\s+['""](?<t>[^'""]+)['""]"
   js_req        = [regex]"(?m)require\(['""](?<t>[^'""]+)['""]\)"
@@ -128,25 +130,25 @@ $RX = @{
   ps_call       = [regex]"(?m)^\s*&\s+(?<t>(?:\.{0,2}[\\/])?[^\s#'""]+\.ps1)\b"
   ps_module     = [regex]"(?im)^\s*Import-Module\s+['""]?(?<t>[^'""]+?)(['""]|\s|$)"
   md_link       = [regex]"\[(?<text>[^\]]+)\]\((?<t>[^)]+)\)"
-  yml_uses      = [regex]"(?m)^\s*uses:\s*(?<t>\./[^\s#]+)"                      # 로컬 액션
-  yml_run_block = [regex]"(?s)^\s*run:\s*\|\s*(?:#.*)?\r?\n(?<t>(?:\s{1,}.*\r?\n?)+)"  # 블록 스타일
-  yml_run_line  = [regex]"(?m)^\s*run:\s*(?!\|)(?<t>.+)$"                             # ✅ 인라인 스타일
-  yml_any_path  = [regex]"(?im)(?<t>(?:\.{0,2}[\\/])?(?:[\w\.\-]+[\\/])*[\w\.\-]+\.(?:ps1|js))" # ✅ Fallback
+  yml_uses      = [regex]"(?m)^\s*uses:\s*(?<t>\./[^\s#]+)"                           # 로컬 액션
+  yml_run_block = [regex]"(?s)^\s*run:\s*\|\s*(?:#.*)?\r?\n(?<t>(?:\s{1,}.*\r?\n?)+)" # 블록 스타일
+  yml_run_line  = [regex]"(?m)^\s*run:\s*(?!\|)(?<t>.+)$"                             # 인라인 스타일
+  yml_any_path  = [regex]"(?im)(?<t>(?:\.{0,2}[\\/])?(?:[\w\.\-]+[\\/])*[\w\.\-]+\.(?:ps1|js))" # Fallback
 }
 
-# == run 블록에서 .ps1/.js 경로 추출 ==
+# == run 블록에서 .ps1/.js 경로 뽑기 ==
 function Find-YamlRunPaths {
   param([string]$block)
   if ([string]::IsNullOrWhiteSpace($block)) { return @() }
   $pat = [regex]@'
 (?im)(?:"|')?(?<path>(?:\.{0,2}[\\/])?(?:[\w\.\-]+[\\/])*[\w\.\-]+\.(?:ps1|js))(?:"|')?
 '@
-  $list = New-Object System.Collections.Generic.List[string]
+  $acc = New-Object System.Collections.Generic.List[string]
   foreach ($m in $pat.Matches($block)) {
     $p = $m.Groups['path'].Value
-    if (-not [string]::IsNullOrWhiteSpace($p)) { $list.Add($p) }
+    if (-not [string]::IsNullOrWhiteSpace($p)) { $acc.Add($p) }
   }
-  $list | Select-Object -Unique
+  $acc | Select-Object -Unique
 }
 
 # == 스캔 ==
@@ -158,106 +160,80 @@ foreach ($f in (Get-RepoFiles -Changed:$ChangedOnly)) {
   $text = Read-TextSafe -Path $full
 
   foreach($k in $RX.Keys){
-    # 1) run 블록(블록 스타일)
     if ($k -eq 'yml_run_block') {
       foreach($m in $RX[$k].Matches($text)) {
         foreach($raw in (Find-YamlRunPaths $m.Groups['t'].Value)) {
           $tp = Resolve-PathSafe -src $f -t $raw -kind 'yml_run'
-          if ($tp) {
-            $key = "$f|yml_run|$tp"
-            if ($edgeSet.Add($key)) {
-              $edges.Add([pscustomobject]@{ source_path=$f; relation='yml_run'; target_path=$tp; detected_by='run-block'; confidence=0.9 })
-            }
-          }
+          if ($tp) { $key = "$f|yml_run|$tp"; if ($edgeSet.Add($key)) { $edges.Add([pscustomobject]@{source_path=$f;relation='yml_run';target_path=$tp;detected_by='run-block';confidence=0.9}) } }
         }
       }
       continue
     }
-
-    # 2) run (인라인 스타일)  ← ✅ 이번 추가
     if ($k -eq 'yml_run_line') {
       foreach($m in $RX[$k].Matches($text)) {
         foreach($raw in (Find-YamlRunPaths $m.Groups['t'].Value)) {
           $tp = Resolve-PathSafe -src $f -t $raw -kind 'yml_run'
-          if ($tp) {
-            $key = "$f|yml_run|$tp"
-            if ($edgeSet.Add($key)) {
-              $edges.Add([pscustomobject]@{ source_path=$f; relation='yml_run'; target_path=$tp; detected_by='run-inline'; confidence=0.9 })
-            }
-          }
+          if ($tp) { $key = "$f|yml_run|$tp"; if ($edgeSet.Add($key)) { $edges.Add([pscustomobject]@{source_path=$f;relation='yml_run';target_path=$tp;detected_by='run-inline';confidence=0.9}) } }
         }
       }
       continue
     }
-
-    # 3) Fallback: YAML 내 임의 위치의 .ps1/.js 토큰  ← ✅ 이번 추가
     if ($k -eq 'yml_any_path' -and ($f -like '*.yml' -or $f -like '*.yaml')) {
       foreach($m in $RX[$k].Matches($text)) {
         $tp = Resolve-PathSafe -src $f -t $m.Groups['t'].Value -kind 'yml_path'
-        if ($tp) {
-          $key = "$f|yml_path|$tp"
-          if ($edgeSet.Add($key)) {
-            $edges.Add([pscustomobject]@{ source_path=$f; relation='yml_path'; target_path=$tp; detected_by='fallback'; confidence=0.6 })
-          }
-        }
+        if ($tp) { $key = "$f|yml_path|$tp"; if ($edgeSet.Add($key)) { $edges.Add([pscustomobject]@{source_path=$f;relation='yml_path';target_path=$tp;detected_by='fallback';confidence=0.6}) } }
       }
       continue
     }
-
-    # 4) 나머지 일반 규칙
     foreach($m in $RX[$k].Matches($text)) {
-      $raw = $m.Groups['t'].Value
-      $tp = Resolve-PathSafe -src $f -t $raw -kind $k
-      if ($tp) {
-        $key = "$f|$k|$tp"
-        if ($edgeSet.Add($key)) {
-          $edges.Add([pscustomobject]@{
-            source_path=$f; relation=$k; target_path=$tp; detected_by=("regex/{0}" -f $k); confidence=0.7
-          })
-        }
-      }
+      $tp = Resolve-PathSafe -src $f -t $m.Groups['t'].Value -kind $k
+      if ($tp) { $key = "$f|$k|$tp"; if ($edgeSet.Add($key)) { $edges.Add([pscustomobject]@{source_path=$f;relation=$k;target_path=$tp;detected_by=("regex/{0}" -f $k);confidence=0.7}) } }
     }
   }
 }
 
-# == 산출물 ==
-$CSV = Join-Path $OUT "relations.csv"
-$JSON= Join-Path $OUT "graph.json"
-$MM  = Join-Path $OUT "graph.mermaid.md"
-$IDX = Join-Path $OUT "index.json"
+# == 산출물 파일 경로 ==
+$CsvPath      = Join-Path $OUT "relations.csv"
+$GraphJson    = Join-Path $OUT "graph.json"
+$MermaidPath  = Join-Path $OUT "graph.mermaid.md"
+$IndexPath    = Join-Path $OUT "index.json"
 
+# == relations.csv ==
 if ($edges.Count -eq 0) {
-  Set-Content -Path $CSV -Encoding UTF8 -Value "source_path,relation,target_path,detected_by,confidence`n"
+  Set-Content -Path $CsvPath -Encoding UTF8 -Value "source_path,relation,target_path,detected_by,confidence`n"
 } else {
-  $edges | Sort-Object source_path, target_path, relation | Export-Csv -NoTypeInformation -Encoding UTF8 -Path $CSV
+  $edges | Sort-Object source_path, target_path, relation | Export-Csv -NoTypeInformation -Encoding UTF8 -Path $CsvPath
 }
 
+# == graph.json ==
 $nodes = @{}
 $edges | ForEach-Object { $nodes[$_.source_path]=$true; $nodes[$_.target_path]=$true }
-
 $g = [pscustomobject]@{
   nodes = @($nodes.Keys | Sort-Object | ForEach-Object { @{ id = $_ } })
   edges = @($edges | ForEach-Object { @{ from = $_.source_path; to = $_.target_path; type = $_.relation } })
 }
-$g | ConvertTo-Json -Depth 5 | Set-Content -Path $JSON -Encoding UTF8
+$g | ConvertTo-Json -Depth 5 | Set-Content -Path $GraphJson -Encoding UTF8
 
-$mm = New-Object System.Collections.Generic.List[string]
-$mm.Add('```mermaid'); $mm.Add('graph LR')
+# == Mermaid(100 edges) ==
+$MermaidLines = New-Object System.Collections.Generic.List[string]
+$MermaidLines.Add('```mermaid'); $MermaidLines.Add('graph LR')
 $edges | Select-Object -First 100 | ForEach-Object {
-  $a=$_.source_path.Replace(' ','_').Replace('/','__')
-  $b=$_.target_path.Replace(' ','_').Replace('/','__')
-  $mm.Add("  $a --> $b")
+  $a = $_.source_path.Replace(' ','_').Replace('/','__')
+  $b = $_.target_path.Replace(' ','_').Replace('/','__')
+  $MermaidLines.Add("  $a --> $b")
 }
-$mm.Add('```')
-$mm -join [Environment]::NewLine | Set-Content -Path $MM -Encoding UTF8
+$MermaidLines.Add('```')
+$MermaidContent = ($MermaidLines -join [Environment]::NewLine)
+Set-Content -Path $MermaidPath -Value $MermaidContent -Encoding UTF8 -ErrorAction Stop
 
+# == index.json ==
 [pscustomobject]@{
   generated_at           = (Get-Date -AsUtc -Format s) + 'Z'
   node_count             = $nodes.Count
   edge_count             = $edges.Count
-  changed_only_effective = [bool]$ChangedOnly  # (zipball이면 내부적으로 전체 스캔일 수 있음)
+  changed_only_effective = [bool]$ChangedOnly
   out_dir                = $OutDir
-} | ConvertTo-Json -Depth 3 | Set-Content -Path $IDX -Encoding UTF8
+} | ConvertTo-Json -Depth 3 | Set-Content -Path $IndexPath -Encoding UTF8
 
 Write-Host ("== relations.csv edges: {0}" -f $edges.Count)
 Write-Host ("== graph.json nodes : {0}" -f $nodes.Count)
