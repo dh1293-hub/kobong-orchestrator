@@ -97,7 +97,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           run: |
-         
             ./scripts/g5/wf-allround-tester.ps1 `
             -Repo "${{ github.repository }}" `
             -TestDispatch:$${{ inputs.test_dispatch }} `
