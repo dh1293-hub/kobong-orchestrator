@@ -1,4 +1,4 @@
 ADDED
+scripts/g5/wf-inventory.ps1
 CHANGED
-.github/workflows/auto-github-release.yml
 REMOVED
