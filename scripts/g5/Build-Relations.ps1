@@ -214,17 +214,31 @@ $g = [pscustomobject]@{
 }
 $g | ConvertTo-Json -Depth 5 | Set-Content -Path $GraphJson -Encoding UTF8
 
-# == Mermaid(100 edges) ==
-$MermaidLines = New-Object System.Collections.Generic.List[string]
-$MermaidLines.Add('```mermaid'); $MermaidLines.Add('graph LR')
-$edges | Select-Object -First 100 | ForEach-Object {
-  $a = $_.source_path.Replace(' ','_').Replace('/','__')
-  $b = $_.target_path.Replace(' ','_').Replace('/','__')
-  $MermaidLines.Add("  $a --> $b")
+# === Mermaid(100 edges) ===
+function To-MermaidId([string]$p) {
+  if ([string]::IsNullOrWhiteSpace($p)) { return '_' }
+  # 영숫자/언더스코어만 남기고 나머지는 모두 '_' 로 정규화
+  return ($p -replace '[^A-Za-z0-9_]', '_')
 }
+
+$MermaidPath  = Join-Path $OUT "graph.mermaid.md"
+$MermaidLines = New-Object System.Collections.Generic.List[string]
+
+$MermaidLines.Add('```mermaid')
+$MermaidLines.Add('graph LR')
+
+$edges | Select-Object -First 100 | ForEach-Object {
+  $aid = To-MermaidId $_.source_path
+  $bid = To-MermaidId $_.target_path
+  # 라벨은 생략(안전). 라벨을 넣고 싶으면  ->  $aid["$($_.source_path)"]  형식으로 확장 가능
+  $MermaidLines.Add("  $aid --> $bid")
+}
+
 $MermaidLines.Add('```')
+
 $MermaidContent = ($MermaidLines -join [Environment]::NewLine)
 Set-Content -Path $MermaidPath -Value $MermaidContent -Encoding UTF8 -ErrorAction Stop
+
 
 # == index.json ==
 [pscustomobject]@{
