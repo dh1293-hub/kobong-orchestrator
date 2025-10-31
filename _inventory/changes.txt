@@ -1,3 +1,4 @@
 ADDED
 CHANGED
 REMOVED
+.github/workflows/inventory-relations.yml
