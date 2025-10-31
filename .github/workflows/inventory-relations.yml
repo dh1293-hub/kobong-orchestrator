@@ -208,5 +208,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: inventory-relations
-          path: ${{ steps.locate.outputs.dir }}/**
-          if-no-files-found: warn
+          # ✅ 디렉터리 자체를 업로드 → ZIP 안에 `_inventory/` 폴더가 그대로 보임
+          path: ${{ steps.locate.outputs.dir }}
+          if-no-files-found: error
+
