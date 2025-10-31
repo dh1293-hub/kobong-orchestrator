@@ -1,6 +1,6 @@
 # Script Header Comments (scripts/g5)
 
-> Generated @ 2025-10-31 22:36:58+00:00 (`scripts/g5/**/*.ps1`, head comments only)
+> Generated @ 2025-10-31 22:39:27+00:00 (`scripts/g5/**/*.ps1`, head comments only)
 
 ## `scripts/g5/ak-audit.ps1`
 
@@ -1177,10 +1177,15 @@ requires -Version 7.0
 ## `scripts/g5/wf-allround-tester.ps1`
 
 ```text
-scripts/g5/wf-allround-tester.ps1
-친절한 주석: 목적/전제/정리
-- 전제: gh CLI 로그인(gh auth status), _inventory/workflows.json 존재
-- 전략: dispatch 가능한 워크플로는 즉시 run, PR/issue_comment형은 샌드박스 브랜치에서 DRAFT PR로만
+파일: scripts/g5/wf-allround-tester.ps1
+목적: 안전 범위에서 워크플로 스모크 트리거를 발생시킨다(Dispatch/PR/댓글).
+출력: GITHUB_OUTPUT로 pr_number/branch/ts 반환(후속 집계/정리에서 사용).
+사용:
+pwsh -NoProfile -File scripts/g5/wf-allround-tester.ps1 `
+-Repo owner/repo -TestDispatch:$true -TestPR:$true -TestIssueComment:$true -KeepPr:$false
+보안:
+- 포크/외부 저장소 방지: 현재 repo 이름 일치 확인
+- 샌드박스 브랜치: bot/wf-test-YYYYMMDD-HHMMSS
 ```
 
 ## `scripts/g5/wf-inventory.ps1`
