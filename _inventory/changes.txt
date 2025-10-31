@@ -1,4 +1,4 @@
 ADDED
 CHANGED
-scripts/g5/wf-inventory.ps1
+scripts/g5/wf-allround-tester.ps1
 REMOVED
