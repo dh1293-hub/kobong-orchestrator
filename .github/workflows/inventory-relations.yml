@@ -50,9 +50,11 @@ concurrency:
 
 jobs:
   build:
-    name: Build Relations
     runs-on: windows-latest
     timeout-minutes: 20
+    env:
+      INVENTORY_DIR: ${{ github.workspace }}\src\_inventory   # ✅ 여기로 강제
+
 
     steps:
       - name: Download source (zipball) to ./src
@@ -125,49 +127,36 @@ jobs:
           else       { & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly }
           if ($LASTEXITCODE -ne 0) { throw "Build-Relations.ps1 exit=$LASTEXITCODE" }
 
-      - name: Locate _inventory (auto-fix path)
-        id: locate
+      - name: Build relations (FULL / CHANGED)
         shell: pwsh
         working-directory: src
+        env:
+          WANT_FULL: ${{ inputs.full }}
+          INVENTORY_DIR: ${{ env.INVENTORY_DIR }}   # ✅ 전달
         run: |
           $ErrorActionPreference='Stop'
-          $cands = @(
-            (Resolve-Path -LiteralPath "_inventory" -ErrorAction SilentlyContinue)?.Path,
-            (Get-ChildItem -Recurse -Directory -Filter "_inventory" -ErrorAction SilentlyContinue | Select-Object -First 1)?.FullName
-          ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
-
-          if (-not $cands) {
-            # 혹시 루트에 만들어졌다면 끌어오기
-            $rootInv = Join-Path (Resolve-Path "..") "_inventory"
-            if (Test-Path $rootInv) {
-              New-Item -ItemType Directory -Force -Path "_inventory" | Out-Null
-              Copy-Item -Recurse -Force "$rootInv\*" "_inventory\" -ErrorAction SilentlyContinue
-              $cands = (Resolve-Path "_inventory").Path
-            }
+          $full = ($env:WANT_FULL -eq 'true')
+          if ($full) {
+            & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1   # 스크립트가 ENV를 읽음
+          } else {
+            & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly
           }
-
-          if (-not $cands) {
-            # 마지막 보루: 비어 있어도 아티팩트가 생기도록 placeholder 생성
-            New-Item -ItemType Directory -Force -Path "_inventory" | Out-Null
-            Set-Content -Path "_inventory/EMPTY.txt" -Value "no data" -Encoding UTF8
-            $cands = (Resolve-Path "_inventory").Path
-          }
-
-          "dir=$cands" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "INVENTORY_DIR=$cands"
-
+          if ($LASTEXITCODE -ne 0) { throw "Build-Relations.ps1 exit=$LASTEXITCODE" }
+      
       - name: Job summary (counts + Mermaid preview)
         if: always()
         shell: pwsh
         working-directory: src
+        env:
+          INVENTORY_DIR: ${{ env.INVENTORY_DIR }}
         run: |
           $s = @()
           $s += "## build-relations summary"
-          $inv = "${{ steps.locate.outputs.dir }}"
+          $inv = $env:INVENTORY_DIR
           $idx = Join-Path $inv "index.json"
           $csv = Join-Path $inv "relations.csv"
           $mm  = Join-Path $inv "graph.mermaid.md"
-
+      
           if (Test-Path $idx) {
             $j = Get-Content $idx -Raw | ConvertFrom-Json
             $s += ""
@@ -175,10 +164,8 @@ jobs:
             $s += "- node_count  : $($j.node_count)"
             $s += "- edge_count  : $($j.edge_count)"
             $s += "- changed_only: $($j.changed_only_effective)"
-          } else {
-            $s += "- index.json missing (no output?)"
-          }
-
+          } else { $s += "- index.json missing (no output?)" }
+      
           if (Test-Path $csv) {
             $head = (Get-Content $csv -Raw) -split "`n"
             $s += ""
@@ -186,29 +173,23 @@ jobs:
             $s += "````csv"
             $s += ($head | Select-Object -First 15)
             $s += "````"
-          } else {
-            $s += ""
-            $s += "- relations.csv not found."
-          }
-
+          } else { $s += "`n- relations.csv not found." }
+      
           if (Test-Path $mm) {
             $m = Get-Content $mm -Raw
             $s += ""
             $s += "#### Mermaid Preview (first 100 edges)"
             $s += $m
-          } else {
-            $s += ""
-            $s += "- Mermaid preview not found."
-          }
-
+          } else { $s += "`n- Mermaid preview not found." }
+      
           Set-Content -Path $env:GITHUB_STEP_SUMMARY -Value ($s -join "`n") -Encoding UTF8
-
+      
       - name: Upload artifacts (_inventory)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: inventory-relations
-          # ✅ 디렉터리 자체를 업로드 → ZIP 안에 `_inventory/` 폴더가 그대로 보임
-          path: ${{ steps.locate.outputs.dir }}
+          path: ${{ env.INVENTORY_DIR }}       # ✅ 폴더 자체를 업로드(/** 쓰지 말 것)
           if-no-files-found: error
+
 
