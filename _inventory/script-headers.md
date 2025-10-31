@@ -1,6 +1,6 @@
 # Script Header Comments (scripts/g5)
 
-> Generated @ 2025-10-31 22:07:40+00:00 (`scripts/g5/**/*.ps1`, head comments only)
+> Generated @ 2025-10-31 22:09:57+00:00 (`scripts/g5/**/*.ps1`, head comments only)
 
 ## `scripts/g5/ak-audit.ps1`
 
@@ -1172,6 +1172,15 @@ requires -Version 7.0
 
 ```text
 requires -Version 7.0
+```
+
+## `scripts/g5/wf-allround-tester.ps1`
+
+```text
+scripts/g5/wf-allround-tester.ps1
+친절한 주석: 목적/전제/정리
+- 전제: gh CLI 로그인(gh auth status), _inventory/workflows.json 존재
+- 전략: dispatch 가능한 워크플로는 즉시 run, PR/issue_comment형은 샌드박스 브랜치에서 DRAFT PR로만
 ```
 
 ## `scripts/g5/wf-inventory.ps1`
