@@ -1,4 +1,4 @@
 ADDED
-scripts/g5/wf-allround-tester.ps1
+.github/workflows/wf-allround-tester.yml
 CHANGED
 REMOVED
