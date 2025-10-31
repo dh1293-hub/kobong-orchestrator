@@ -1,18 +1,53 @@
-# 친절한 머리 주석:
-# 목적: 저장소 내 모든 워크플로를 자동으로 수집하고, 안전한 범위부터 스모크(Dispatch/PR/댓글) 실행
-# 보안: 최소 권한, concurrency, 라벨/드래프트 PR로 격리. 위험 액션은 모듈 /health OK일 때만.
+# 파일: .github/workflows/wf-allround-tester.yml
+# 목적: 저장소 내 등록된 워크플로들의 실제 동작을 "원샷"으로 검증한다.
+# 핵심 시나리오:
+#   1) .github/workflows 전수 인벤토리 구축(_inventory/workflows.*)
+#   2) 안전 트리거(Dispatch/PR/IssueComment)로 스모크 실행
+#   3) 결과 수집(MD/CSV/JSON) → 아티팩트 업로드
+#   4) 생성된 산출물을 _inventory에 반영하는 자동 PR 생성
+# 트리거:
+#   - 수동: workflow_dispatch (옵션 플래그)
+# 권한(최소 권한 원칙):
+#   - contents: write        # publish 잡에서 _inventory 커밋/푸시
+#   - pull-requests: write   # PR 생성/코멘트
+#   - actions: write         # workflow_dispatch 실행
+#   - checks/statuses: read  # 집계
+# 안전 가드:
+#   - 포크/외부 이벤트 차단(스크립트 내부 if)
+#   - concurrency로 중복 실행 차단
+#   - run: | (멀티라인) + PowerShell 불리언 전달(-Switch:$${{ inputs.xx }})
 name: WF Allround Tester
 
 on:
   workflow_dispatch:
     inputs:
-      test_pr:        {type: boolean, default: true,  description: "PR 트리거 스모크(드래프트)"}
-      test_comment:   {type: boolean, default: true,  description: "댓글(/ak) 스모크"}
-      test_dispatch:  {type: boolean, default: true,  description: "workflow_dispatch 스모크"}
+      test_pr:
+        description: "PR 트리거 스모크(드래프트 PR)"
+        type: boolean
+        default: true
+      test_comment:
+        description: "댓글(/ak) 스모크"
+        type: boolean
+        default: true
+      test_dispatch:
+        description: "workflow_dispatch 스모크"
+        type: boolean
+        default: true
+      keep_pr:
+        description: "테스트 PR/브랜치를 보존할지 여부"
+        type: boolean
+        default: false
+      mode:
+        description: "집계 강도 (quick|full)"
+        required: false
+        default: "quick"
 
 permissions:
+  contents: write
+  pull-requests: write
   actions: write
-  contents: read
+  checks: read
+  statuses: read
 
 concurrency:
   group: wf-allround-${{ github.ref }}
@@ -20,29 +55,134 @@ concurrency:
 
 jobs:
   inventory:
+    name: Build workflows inventory
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Build workflows inventory (_inventory/workflows.*)
-        shell: pwsh
-        run: |
-          pwsh -File scripts/g5/wf-inventory.ps1 -Repo "${{ github.repository }}" -Ref "${{ github.sha }}"
-      - uses: actions/upload-artifact@v4
-        with: { name: wf-inventory, path: _inventory/workflows.* }
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  smoke:
-    needs: [inventory]
-    if: ${{ inputs.test_dispatch || inputs.test_pr || inputs.test_comment }}
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run allround tester (safe)
+      - name: Build workflows inventory (_inventory/workflows.*)
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          pwsh -File scripts/g5/wf-allround-tester.ps1 `
+          pwsh -NoProfile -File scripts/g5/wf-inventory.ps1 `
+            -Repo "${{ github.repository }}" `
+            -Ref  "${{ github.ref_name }}"
+
+      - name: Upload inventory artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wf-inventory
+          path: |
+            _inventory/workflows.csv
+            _inventory/workflows.json
+          if-no-files-found: error
+
+  smoke:
+    name: Run smoke (dispatch / PR / comment)
+    needs: [inventory]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 트리거(Dispatch/PR/댓글) 실행 → PR/브랜치/TS를 출력으로 전달
+      - name: Trigger allround tester (safe)
+        id: trigger
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pwsh -NoProfile -File scripts/g5/wf-allround-tester.ps1 `
             -Repo "${{ github.repository }}" `
             -TestDispatch:$${{ inputs.test_dispatch }} `
             -TestPR:$${{ inputs.test_pr }} `
-            -TestIssueComment:$${{ inputs.test_comment }}
+            -TestIssueComment:$${{ inputs.test_comment }} `
+            -KeepPr:$${{ inputs.keep_pr }}
+
+      # 실행 결과가 뜰 때까지 적당히 기다리고 수집(MD/CSV/JSON 생성)
+      - name: Collect runs & checks
+        id: collect
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pwsh -NoProfile -File scripts/g5/AllRound-WF-Tester.ps1 `
+            -PrNumber ${{ steps.trigger.outputs.pr_number }} `
+            -Branch   "${{ steps.trigger.outputs.branch }}" `
+            -Mode     "${{ inputs.mode }}"
+
+      - name: Upload smoke artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wf-allround-report-${{ steps.trigger.outputs.ts }}
+          path: |
+            _inventory/wf-allround/*.md
+            _inventory/wf-allround/*.csv
+            _inventory/wf-allround/*.json
+          if-no-files-found: warn
+
+      - name: Comment summary to PR
+        if: ${{ always() && steps.trigger.outputs.pr_number }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $md = Get-ChildItem _inventory/wf-allround/*-summary.md -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
+          if ($md) { gh pr comment ${{ steps.trigger.outputs.pr_number }} --body-file $md.FullName }
+
+      - name: Auto tidy (close PR & delete branch)
+        if: ${{ always() && steps.trigger.outputs.pr_number && inputs.keep_pr == false }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr close ${{ steps.trigger.outputs.pr_number }} --delete-branch
+
+  publish:
+    name: Publish _inventory via PR
+    needs: [inventory, smoke]
+    if: always()
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: _inventory/_ci_artifacts
+          merge-multiple: true
+
+      - name: Stage _inventory
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path _inventory | Out-Null
+          Copy-Item -Recurse -Force _inventory/_ci_artifacts/* _inventory/ 2>$null
+
+      - name: Commit & open PR
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name  "wf-allround-bot"
+          git config user.email "wf-allround-bot@users.noreply.github.com"
+
+          $branch = "bot/wf-inventory-${{ github.run_id }}"
+          git checkout -b $branch
+
+          git add _inventory/*
+          if (git diff --cached --quiet) {
+            Write-Host "No changes in _inventory → skip PR."
+            exit 0
+          }
+
+          git commit -m "[WF-TEST] _inventory snapshot (run=${{ github.run_id }})"
+          git push origin $branch
+
+          $base = gh repo view --json defaultBranchRef -q .defaultBranchRef.name
+          gh pr create --base $base --head $branch `
+            --title "[WF-TEST] _inventory snapshot ${{ github.run_id }}" `
+            --body  "WF Allround Tester가 생성한 인벤토리/리포트를 자동 반영합니다."
