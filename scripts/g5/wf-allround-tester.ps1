@@ -75,7 +75,14 @@ if($TestPR -or $TestIssueComment){
 }
 
 # 3) 출력(후속 잡에서 사용)
-"pr_number=$prNumber" >> $GITHUB_OUTPUT
-"branch=$branch"      >> $GITHUB_OUTPUT
-"ts=$ts"              >> $GITHUB_OUTPUT
+# == GitHub Actions step outputs ==
+# 절대 $GITHUB_OUTPUT (변수) 쓰지 말 것! -> $env:GITHUB_OUTPUT (환경변수)만 사용
+$outFile = $env:GITHUB_OUTPUT
+if ([string]::IsNullOrEmpty($outFile)) {
+  Write-Warning "GITHUB_OUTPUT not set (local run?). Skip step outputs."
+} else {
+  "pr_number=$prNumber" | Out-File -FilePath $outFile -Append -Encoding utf8
+  "branch=$branch"      | Out-File -FilePath $outFile -Append -Encoding utf8
+  "ts=$ts"              | Out-File -FilePath $outFile -Append -Encoding utf8
+}
 Write-Host "[OK] trigger-done → pr=$prNumber, branch=$branch, ts=$ts"
