@@ -42,23 +42,24 @@ jobs:
           path: wiki
           fetch-depth: 0
 
-      - name: Generate script header docs  #주석(친절한)
+      - name: Generate script header docs
         shell: pwsh
         run: |
-          # 수집기 자동 탐색(버전/대소문자 오타 방지)
           $script = Get-ChildItem -File -Recurse "scripts/g5/Extract-ScriptHeaders*.ps1" |
                     Sort-Object Name -Descending | Select-Object -First 1
           if (-not $script) { throw "Extract-ScriptHeaders*.ps1 not found under scripts/g5" }
           Write-Host "Using script: $($script.FullName)"
-
-          # 1) _inventory 산출
+      
           pwsh -NoProfile -File $script.FullName -Out ./_inventory/script-headers.md
-          # 2) wiki 산출
           pwsh -NoProfile -File $script.FullName -Out ./wiki/Script-Header-Comments.md
+      
+          if (Test-Path ./_inventory/script-headers.md -PathType Leaf) {
+            '## Script Headers (head)' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+            Get-Content ./_inventory/script-headers.md -TotalCount 60 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          } else {
+            Write-Warning "script-headers.md not generated."
+          }
 
-          # 요약 출력(앞부분)
-          '## Script Headers (head of file)' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          Get-Content ./_inventory/script-headers.md -TotalCount 60 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
       - name: Commit back to repo (_inventory) if changed
         shell: bash
