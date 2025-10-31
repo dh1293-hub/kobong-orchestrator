@@ -242,22 +242,23 @@ Write-Host ("== relations.csv edges: {0}" -f $edges.Count)
 Write-Host ("== graph.json nodes : {0}" -f $nodes.Count)
 
 # === (파일 쓰기 직후) 산출물 보장 & 검증 & 로그 ===
-# 반드시 있어야 하는 파일 4종
-$must = @($CsvPath, $GraphPath, $MermaidPath, $IndexPath)
+# === 산출물 보장 & 검증 & 로그 (안전 버전) ===
 
 # 1) 누락되면 빈 헤더/플레이스홀더라도 강제로 생성
-if (-not (Test-Path $CsvPath))     { Set-Content -Path $CsvPath     -Encoding UTF8 -Value "source_path,relation,target_path,detected_by,confidence`n" }
-if (-not (Test-Path $GraphPath))   { Set-Content -Path $GraphPath   -Encoding UTF8 -Value "{ `"nodes`":[], `"edges`":[] }" }
-if (-not (Test-Path $MermaidPath)) { Set-Content -Path $MermaidPath -Encoding UTF8 -Value "```mermaid`ngraph LR`n```" }
-if (-not (Test-Path $IndexPath))   {
-  [pscustomobject]@{
-    generated_at           = (Get-Date -AsUtc -Format s) + 'Z'
-    node_count             = 0
-    edge_count             = 0
-    changed_only_effective = [bool]$ChangedOnly
-    out_dir                = (Resolve-Path $OUT).Path
-  } | ConvertTo-Json -Depth 3 | Set-Content -Path $IndexPath -Encoding UTF8
+if (-not (Test-Path $CsvPath)) {
+  Set-Content -Path $CsvPath -Encoding UTF8 -Value "source_path,relation,target_path,detected_by,confidence`n"
 }
+
+if (-not (Test-Path $GraphPath)) {
+  $jsonPlaceholder = '{"nodes":[],"edges":[]}'
+  Set-Content -Path $GraphPath -Encoding UTF8 -Value $jsonPlaceholder
+}
+
+if (-not (Test-Path $MermaidPath)) {
+  $mmPlaceholder = @"
+```mermaid
+graph LR
+
 
 # 2) 실제 어디에 썼는지 로그로 남김 (디버깅용)
 "== OUT listing =="
