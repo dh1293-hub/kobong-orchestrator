@@ -1,15 +1,19 @@
 # 파일: scripts/g5/wf-inventory.ps1
-# 목적: .github/workflows/*.yml 전수 수집 → _inventory/workflows.csv|json 생성
-# 동작: (A) 로컬 워크스페이스 스캔 우선  (B) 없으면 zipball로 폴백
-# 사용: pwsh -NoProfile -File scripts/g5/wf-inventory.ps1 -Repo dh1293-hub/kobong-orchestrator -Ref main
-# 보안: GH_TOKEN 있으면 API 헤더에 사용(속도/제한 완화). User-Agent/Api-Version 명시.
-# 산출: _inventory/workflows.csv, _inventory/workflows.json (멱등 생성)
-
+# 목적: 레포의 .github/workflows/*.yml 전수 수집 → _inventory/workflows.csv|json 생성
+# 동작:
+#   (A) 체크아웃된 워크스페이스에서 로컬 우선 스캔
+#   (B) 로컬이 비어있으면 zipball로 폴백(브랜치/태그명 사용 권장; SHA는 404 가능)
+# 사용:
+#   pwsh -NoProfile -File scripts/g5/wf-inventory.ps1 -Repo dh1293-hub/kobong-orchestrator -Ref main
+# 보안:
+#   - GH_TOKEN 있으면 API 헤더로 사용(레이트리밋 완화)
+#   - User-Agent / X-GitHub-Api-Version 명시
+# 산출: _inventory/workflows.csv, _inventory/workflows.json
+# 규칙: #주석(친절한) / 멱등 / 실패 시 원인(로컬 비어있음+zipball 실패) 명확히 출력
 param(
   [string]$Repo = "dh1293-hub/kobong-orchestrator",
-  [string]$Ref  = "main"   # 브랜치/태그명 권장(sha는 zipball 404 가능)
+  [string]$Ref  = "main"
 )
-
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $PSDefaultParameterValues['*:Encoding'] = 'utf8'
@@ -26,8 +30,9 @@ function Get-WfFilesFromLocal {
 }
 
 function Get-WfFilesFromZipball {
-  $tmp = Join-Path ($env:RUNNER_TEMP ?? $env:TEMP) "wfscan"
-  Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue; New-Item $tmp -ItemType Directory|Out-Null
+  $tmp = Join-Path (${env:RUNNER_TEMP} ?? ${env:TEMP}) "wfscan"
+  Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+  New-Item $tmp -ItemType Directory | Out-Null
   $zip = Join-Path $tmp 'src.zip'
   $unz = Join-Path $tmp 'unz'
   $h = @{
@@ -59,7 +64,7 @@ if(-not $files -or $files.Count -eq 0){
   }
 }
 
-# 2) 파싱(라이트)
+# 2) 라이트 파싱(이름/권한/트리거 특징)
 $rows = foreach($f in $files){
   $t = Get-Content -LiteralPath $f.FullName -Raw
   $name = ([regex]::Match($t,'(?m)^\s*name:\s*(.+)$').Groups[1].Value).Trim()
@@ -88,7 +93,7 @@ $rows = foreach($f in $files){
   }
 }
 
-# 3) 저장
+# 3) 저장(멱등)
 $csv  = Join-Path $Out 'workflows.csv'
 $json = Join-Path $Out 'workflows.json'
 $rows | Sort-Object path | Export-Csv -NoTypeInformation -Path $csv
