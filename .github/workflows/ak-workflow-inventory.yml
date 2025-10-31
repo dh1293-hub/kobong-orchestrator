@@ -1,0 +1,31 @@
+name: AK • Workflow Inventory (frozen)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/**'
+      - 'scripts/g5/Trace-WorkflowRefs.v3.3.ps1'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest   # pwsh 사용 가능 (cross-OS)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate workflows inventory
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File ./scripts/g5/Trace-WorkflowRefs.v3.3.ps1 -ScanDepth 1
+          Write-Host "== Done =="
+          '[Preview] First 50 lines:' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          Get-Content _inventory/workflows.txt -TotalCount 50 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+      - name: Upload artifact (_inventory/workflows.txt)
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflows-inventory
+          path: _inventory/workflows.txt
+          if-no-files-found: error
