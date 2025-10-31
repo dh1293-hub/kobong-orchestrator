@@ -24,12 +24,12 @@
 param(
   [switch]$ChangedOnly,
   [string]$OutDir = "_inventory",
-  [string]$OutDirPath   # ✅ 새로 추가: 절대/상대 강제 경로
+  [string]$OutDirPath   # ✅ 강제 출력 경로(절대/상대 모두 허용)
 )
 
 $ErrorActionPreference = 'Stop'
 
-# 1) 스크립트 기준 레포 루트(폴백)
+# 1) 스크립트 기준 repo 루트(폴백)
 $rootByScript = try { (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path } catch { (Get-Location).Path }
 
 # 2) 출력 경로 결론: OutDirPath > ENV:INVENTORY_DIR > 스크립트 기준 + OutDir
@@ -43,13 +43,17 @@ else {
   $OUT = Join-Path $rootByScript $OutDir
 }
 
-# 3) 비어있을 가능성 최종 차단
-if ([string]::IsNullOrWhiteSpace($OUT)) {
-  $OUT = Join-Path $rootByScript "_inventory"
-}
-
+# 3) 최종 안전장치 + 폴더 생성
+if ([string]::IsNullOrWhiteSpace($OUT)) { $OUT = Join-Path $rootByScript "_inventory" }
 New-Item -ItemType Directory -Force -Path $OUT | Out-Null
 Write-Host "OUT_DIR=$OUT"
+
+# (아래쪽 산출물 경로 생성부는 이렇게 보장된 $OUT을 그대로 사용)
+# $CsvPath   = Join-Path $OUT "relations.csv"
+# $GraphJson = Join-Path $OUT "graph.json"
+# $MermaidPath = Join-Path $OUT "graph.mermaid.md"
+# $IndexPath = Join-Path $OUT "index.json"
+
 
 
 
