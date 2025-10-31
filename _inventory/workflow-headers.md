@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-10-31 20:17:33+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-10-31 20:30:36+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
