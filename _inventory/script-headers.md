@@ -1,6 +1,6 @@
 # Script Header Comments (scripts/g5)
 
-> Generated @ 2025-10-31 22:23:08+00:00 (`scripts/g5/**/*.ps1`, head comments only)
+> Generated @ 2025-10-31 22:36:58+00:00 (`scripts/g5/**/*.ps1`, head comments only)
 
 ## `scripts/g5/ak-audit.ps1`
 
@@ -1187,10 +1187,16 @@ scripts/g5/wf-allround-tester.ps1
 
 ```text
 파일: scripts/g5/wf-inventory.ps1
-목적: .github/workflows/*.yml 전수 수집 → _inventory/workflows.csv|json 생성
-동작: (A) 로컬 워크스페이스 스캔 우선  (B) 없으면 zipball로 폴백
-사용: pwsh -NoProfile -File scripts/g5/wf-inventory.ps1 -Repo dh1293-hub/kobong-orchestrator -Ref main
-보안: GH_TOKEN 있으면 API 헤더에 사용(속도/제한 완화). User-Agent/Api-Version 명시.
-산출: _inventory/workflows.csv, _inventory/workflows.json (멱등 생성)
+목적: 레포의 .github/workflows/*.yml 전수 수집 → _inventory/workflows.csv|json 생성
+동작:
+(A) 체크아웃된 워크스페이스에서 로컬 우선 스캔
+(B) 로컬이 비어있으면 zipball로 폴백(브랜치/태그명 사용 권장; SHA는 404 가능)
+사용:
+pwsh -NoProfile -File scripts/g5/wf-inventory.ps1 -Repo dh1293-hub/kobong-orchestrator -Ref main
+보안:
+- GH_TOKEN 있으면 API 헤더로 사용(레이트리밋 완화)
+- User-Agent / X-GitHub-Api-Version 명시
+산출: _inventory/workflows.csv, _inventory/workflows.json
+규칙: #주석(친절한) / 멱등 / 실패 시 원인(로컬 비어있음+zipball 실패) 명확히 출력
 ```
 
