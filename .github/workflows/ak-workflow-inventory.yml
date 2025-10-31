@@ -1,39 +1,32 @@
-# ============================================
-# AK • Workflow Inventory (frozen)
-# - 목적: .github/workflows 하위 YML들을 스캔해, "주석 제외 + 파일만" 경로 인벤토리 생성
-# - 스캐너: scripts/g5/Trace-WorkflowRefs.v3.3.ps1 (고정 규칙)
-# - 산출물: _inventory/workflows.txt (UTF-8)
-# - 참고: inventory-ci.yml 은 스캐너에서 지정 제외됨
-# ============================================
+# AK • Workflow Inventory (frozen rules)
+# - 목적: 루트 ".github/workflows"의 YML을 스캔해, "주석 제외 + 단일 파일 경로만"을 _inventory/workflows.txt 로 산출
+# - 규칙: inventory-ci.yml 제외, 파일명 토큰도 해석, 반복 루프 -ScanDepth 지원(기본 1)
+# - 러너: ubuntu-latest (pwsh 사용) — 로컬과 동일 로직 유지
 
 name: AK • Workflow Inventory
 
 on:
-  workflow_dispatch:  # 수동 실행
-  push:               # 워크플로 또는 스캐너 수정 시 자동 실행
+  workflow_dispatch:   # 수동 실행
+  push:                # 워크플로/스캐너 변경 시 자동 실행
     branches: [ main ]
     paths:
       - '.github/workflows/**'
       - 'scripts/g5/Trace-WorkflowRefs.v3.3.ps1'
 
 jobs:
-  inventory:
-    runs-on: ubuntu-latest   # pwsh 제공됨 (Windows도 동작 가능)
+  build:
+    runs-on: ubuntu-latest   # pwsh 내장
     steps:
-      - name: Checkout (full)
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0     # 전체 히스토리 필요 없음이 기본이지만, 관례적으로 0
 
-      - name: Generate workflows inventory
+      - name: Generate workflows inventory (flat files only)
         shell: pwsh
         run: |
-          # 주석 제거/파일만/루트 workflows만/반복 루프(-ScanDepth) 규칙 고정
+          # PS 7 고정, 규칙 고정
           pwsh -NoProfile -File ./scripts/g5/Trace-WorkflowRefs.v3.3.ps1 -ScanDepth 1
-          Write-Host "Inventory generated at _inventory/workflows.txt"
-
-          # 결과 미리보기(요약)에 80줄 제한으로 출력
-          '[Preview] First 80 lines:' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          # 요약 출력(앞부분만)
+          '## Workflows Inventory (head)' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           Get-Content _inventory/workflows.txt -TotalCount 80 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
       - name: Upload artifact (_inventory/workflows.txt)
@@ -41,4 +34,4 @@ jobs:
         with:
           name: workflows-inventory
           path: _inventory/workflows.txt
-          if-no-files-found: error  # 산출물 없으면 실패로 처리(운영 가시성)
+          if-no-files-found: error
