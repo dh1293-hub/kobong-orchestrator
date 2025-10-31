@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-10-31 20:30:36+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-10-31 20:53:57+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -178,6 +178,37 @@ AK • Workflow Inventory (frozen rules)
 - 목적: 루트 ".github/workflows"의 YML을 스캔해, "주석 제외 + 단일 파일 경로만"을 _inventory/workflows.txt 로 산출
 - 규칙: inventory-ci.yml 제외, 파일명 토큰도 해석, 반복 루프 -ScanDepth 지원(기본 1)
 - 러너: ubuntu-latest (pwsh 사용) — 로컬과 동일 로직 유지
+```
+
+## `.github/workflows/auto-github-release.yml`
+
+```text
+파일: .github/workflows/auto-github-release.yml
+목적: 태그 push(`v*`) 또는 수동 실행 시 GitHub Release를 자동 생성/갱신하고 릴리스 노트를 자동 생성한다.
+핵심:
+- generate_release_notes: true (PR/커밋 기반 자동 릴리스 노트)
+- 필요 시 산출물(dist/** 등) 첨부
+트리거:
+- push.tags: v*    # v1.2.3 형식 권장(semver)
+- workflow_dispatch(tag 입력 지원)
+사용법:
+- 태그 배포:  git tag v1.2.3 && git push origin v1.2.3
+- 수동 배포:  Actions → 이 워크플로 → Run workflow → tag 입력
+권한(최소 권한 원칙):
+- permissions.contents: write (Release 작성/갱신에 필요)
+보안 가드:
+- 포크/외부 이벤트 차단: jobs.if에서 저장소 일치 확인
+- 동시 실행 방지: concurrency (동일 태그 중복 배포 차단)
+- 태그 유효성 검사: semver(vX.Y.Z[-pre]) 아닌 경우 실패 처리
+- checkout 시 persist-credentials: false (토큰 확산 방지)
+- (선택) prerelease 자동 판별: 태그에 '-' 포함 시 prerelease=true
+산출물/연동:
+- GitHub Release(노트/자산)
+- (선택) _inventory에 릴리스 리스트를 따로 수집하는 스크립트와 함께 운용
+롤백:
+- 잘못된 릴리스/태그는 GitHub에서 릴리스 삭제 → 태그 수정 후 재실행
+변경 이력(작성자/일시/사유): 
+- 2025-11-01: 보안 보강(permissions/concurrency/semver/포크가드), 머리 주석 추가
 ```
 
 ## `.github/workflows/guard-flush-queue.yml`
