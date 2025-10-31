@@ -98,11 +98,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           run: |
             ./scripts/g5/wf-allround-tester.ps1 `
-            -Repo "${{ github.repository }}" `
-            -TestDispatch:$${{ inputs.test_dispatch }} `
-            -TestPR:$${{ inputs.test_pr }} `
-            -TestIssueComment:$${{ inputs.test_comment }} `
-            -KeepPr:$${{ inputs.keep_pr }}
+              -Repo "${{ github.repository }}" `
+              -TestDispatch:$${{ inputs.test_dispatch }} `
+              -TestPR:$${{ inputs.test_pr }} `
+              -TestIssueComment:$${{ inputs.test_comment }} `
+              -KeepPr:$${{ inputs.keep_pr }}
 
 
       # 실행 결과가 뜰 때까지 적당히 기다리고 수집(MD/CSV/JSON 생성)
