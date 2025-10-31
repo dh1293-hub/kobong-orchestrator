@@ -23,20 +23,29 @@
 [CmdletBinding()]
 param(
   [switch]$ChangedOnly,
-  [string]$OutDir = "_inventory"
+  [string]$OutDir = "_inventory",
+  [string]$OutDirPath   # ✅ 추가
 )
 
 $ErrorActionPreference = 'Stop'
 
-# 스크립트 기준으로 항상 리포 루트 고정 (scripts/g5/ -> ../../)
-try {
-  $REPO = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
-} catch {
-  # 예외적으로 $PSScriptRoot 사용 불가 시(드물게 inline 실행 등) 현재 폴더로 폴백
-  $REPO = (Get-Location).Path
+# == 기준 디렉터리 후보 ==
+$rootByScript = try { (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path } catch { (Get-Location).Path }
+
+# == 출력 경로 결정 (우선순위: OutDirPath > ENV:INVENTORY_DIR > 스크립트 기준 + OutDir) ==
+if (-not [string]::IsNullOrWhiteSpace($OutDirPath)) {
+  $OUT = [System.IO.Path]::GetFullPath($OutDirPath)
 }
-$OUT = Join-Path $REPO $OutDir
+elseif (-not [string]::IsNullOrWhiteSpace($env:INVENTORY_DIR)) {
+  $OUT = [System.IO.Path]::GetFullPath($env:INVENTORY_DIR)
+}
+else {
+  $OUT = Join-Path $rootByScript $OutDir
+}
+
 New-Item -ItemType Directory -Force -Path $OUT | Out-Null
+Write-Host "OUT_DIR=$OUT"
+
 
 
 # == 허용 확장자 ==
