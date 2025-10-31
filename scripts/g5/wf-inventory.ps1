@@ -10,10 +10,12 @@
 #   - User-Agent / X-GitHub-Api-Version 명시
 # 산출: _inventory/workflows.csv, _inventory/workflows.json
 # 규칙: #주석(친절한) / 멱등 / 실패 시 원인(로컬 비어있음+zipball 실패) 명확히 출력
+
 param(
   [string]$Repo = "dh1293-hub/kobong-orchestrator",
   [string]$Ref  = "main"
 )
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $PSDefaultParameterValues['*:Encoding'] = 'utf8'
@@ -22,54 +24,112 @@ $RepoRoot = (Get-Location).Path
 $Out = Join-Path $RepoRoot '_inventory'
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 
+function Write-Info($msg){ Write-Host $msg -ForegroundColor Cyan }
+
+# === A) Local scan ============================================================
 function Get-WfFilesFromLocal {
   $dir = Join-Path $RepoRoot '.github/workflows'
-  if(Test-Path $dir){
-    Get-ChildItem $dir -File -Include *.yml,*.yaml -ErrorAction SilentlyContinue
+  if (Test-Path $dir) {
+    Write-Info "로컬 스캔: $dir"
+    return Get-ChildItem $dir -File -Include *.yml,*.yaml -ErrorAction SilentlyContinue
   }
+  return @()
 }
 
-function Get-WfFilesFromZipball {
-  $tmp = Join-Path (${env:RUNNER_TEMP} ?? ${env:TEMP}) "wfscan"
-  Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
-  New-Item $tmp -ItemType Directory | Out-Null
-  $zip = Join-Path $tmp 'src.zip'
-  $unz = Join-Path $tmp 'unz'
-  $h = @{
-    'User-Agent' = 'wf-inventory/1.1'
-    'X-GitHub-Api-Version' = '2022-11-28'
-  }
-  if($env:GH_TOKEN){ $h['Authorization'] = "Bearer $env:GH_TOKEN" }
+# 공통 헤더
+$Headers = @{
+  'User-Agent'           = 'wf-inventory/1.3'
+  'X-GitHub-Api-Version' = '2022-11-28'
+}
+if ($env:GH_TOKEN) { $Headers['Authorization'] = "Bearer $env:GH_TOKEN" }
 
-  $zipUrl = "https://api.github.com/repos/$Repo/zipball/$Ref"
-  try{
-    Invoke-WebRequest -Uri $zipUrl -OutFile $zip -Headers $h
+# 임시 경로
+$tmp = Join-Path (${env:RUNNER_TEMP} ?? ${env:TEMP}) "wfscan"
+Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+New-Item $tmp -ItemType Directory | Out-Null
+
+# === B) Contents API (가볍고 안정적인 2단계) ==================================
+function Get-WfFilesFromContents {
+  $api = "https://api.github.com/repos/$Repo/contents/.github/workflows?ref=$Ref"
+  Write-Info "Contents API 시도: $api"
+  try {
+    $resp = Invoke-WebRequest -Uri $api -Headers $Headers -ErrorAction Stop
+    $items = $resp.Content | ConvertFrom-Json
   } catch {
-    Write-Warning "zipball 실패(ref=$Ref): $($_.Exception.Message)"
+    Write-Warning "Contents API 실패: $($_.Exception.Message)"
     return @()
   }
-  # ...zipball 전개 후
-  $top = Get-ChildItem -Path $unz | Where-Object PSIsContainer | Select-Object -First 1
+  if (-not $items) { return @() }
+
+  $dir = Join-Path $tmp 'contents'
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  $acc = @()
+  foreach ($it in $items) {
+    if ($it.type -eq 'file' -and ($it.name -like '*.yml' -or $it.name -like '*.yaml')) {
+      $dst = Join-Path $dir $it.name
+      try {
+        Invoke-WebRequest -Uri $it.download_url -OutFile $dst -Headers $Headers -ErrorAction Stop
+        $acc += Get-Item $dst
+      } catch {
+        Write-Warning "파일 다운로드 실패: $($it.name) - $($_.Exception.Message)"
+      }
+    }
+  }
+  return $acc
+}
+
+# === C) Zipball (마지막 폴백) =================================================
+function Get-WfFilesFromZipball {
+  $zip = Join-Path $tmp 'src.zip'
+  $unz = Join-Path $tmp 'unz'
+  New-Item $unz -ItemType Directory -Force | Out-Null
+
+  $zipUrl = "https://api.github.com/repos/$Repo/zipball/$Ref"
+  Write-Info "Zipball 시도: $zipUrl"
+  try {
+    Invoke-WebRequest -Uri $zipUrl -OutFile $zip -Headers $Headers -ErrorAction Stop
+  } catch {
+    Write-Warning "zipball 다운로드 실패(ref=$Ref): $($_.Exception.Message)"
+    return @()
+  }
+
+  try {
+    Expand-Archive -Path $zip -DestinationPath $unz -Force
+  } catch {
+    Write-Warning "압축 해제 실패: $($_.Exception.Message)"
+    return @()
+  }
+
+  if (-not (Test-Path $unz)) { Write-Warning "unz 경로가 없음"; return @() }
+  $top = Get-ChildItem -Path $unz -Directory | Select-Object -First 1
+  if (-not $top) { Write-Warning "zipball 최상위 폴더 탐지 실패"; return @() }
+
   $wfRoot = Join-Path $top.FullName '.github/workflows'
   if (Test-Path $wfRoot) {
-    Get-ChildItem -Path $wfRoot -Recurse -File -Include *.yml,*.yaml
-  } else {
-    @() # 없으면 빈 배열
+    Write-Info "zipball 스캔: $wfRoot"
+    return Get-ChildItem -Path $wfRoot -Recurse -File -Include *.yml,*.yaml
   }
-
+  Write-Warning "zipball에 .github/workflows 폴더 없음"
+  return @()
 }
 
-# 1) 로컬 우선
+# 1) Local
 $files = @( Get-WfFilesFromLocal )
-if(-not $files -or $files.Count -eq 0){
-  Write-Host "로컬에 .github/workflows 없음 → zipball 폴백(ref=$Ref)"
+
+# 2) Contents API
+if (-not $files -or $files.Count -eq 0) { $files = @( Get-WfFilesFromContents ) }
+
+# 3) Zipball
+if (-not $files -or $files.Count -eq 0) {
+  Write-Host "로컬+Contents API 실패 → zipball 폴백(ref=$Ref)"
   $files = @( Get-WfFilesFromZipball )
-  if(-not $files -or $files.Count -eq 0){
-    throw "워크플로 파일을 찾지 못했습니다(로컬/zipball 모두 실패)."
-  }
 }
 
-# 2) 라이트 파싱(이름/권한/트리거 특징)
+if (-not $files -or $files.Count -eq 0) {
+  throw "워크플로 파일을 찾지 못했습니다(Local/Contents/Zipball 모두 실패). Repo=$Repo Ref=$Ref"
+}
+
+# 4) 라이트 파싱 & 저장
 $rows = foreach($f in $files){
   $t = Get-Content -LiteralPath $f.FullName -Raw
   $name = ([regex]::Match($t,'(?m)^\s*name:\s*(.+)$').Groups[1].Value).Trim()
@@ -98,7 +158,6 @@ $rows = foreach($f in $files){
   }
 }
 
-# 3) 저장(멱등)
 $csv  = Join-Path $Out 'workflows.csv'
 $json = Join-Path $Out 'workflows.json'
 $rows | Sort-Object path | Export-Csv -NoTypeInformation -Path $csv
