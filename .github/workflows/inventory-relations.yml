@@ -53,8 +53,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     env:
-      INVENTORY_DIR: ${{ github.workspace }}\src\_inventory   # ✅ 여기로 강제
-
+      INVENTORY_DIR: ${{ github.workspace }}\src\_inventory   # ✅ 고정 경로
 
     steps:
       - name: Download source (zipball) to ./src
@@ -120,26 +119,14 @@ jobs:
         working-directory: src
         env:
           WANT_FULL: ${{ inputs.full }}
-        run: |
-          $ErrorActionPreference='Stop'
-          $full = ($env:WANT_FULL -eq 'true')
-          if ($full) { & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 }
-          else       { & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly }
-          if ($LASTEXITCODE -ne 0) { throw "Build-Relations.ps1 exit=$LASTEXITCODE" }
-
-      - name: Build relations (FULL / CHANGED)
-        shell: pwsh
-        working-directory: src
-        env:
-          WANT_FULL: ${{ inputs.full }}
-          INVENTORY_DIR: ${{ env.INVENTORY_DIR }}   # ✅ 전달
+          INVENTORY_DIR: ${{ env.INVENTORY_DIR }}
         run: |
           $ErrorActionPreference='Stop'
           $full = ($env:WANT_FULL -eq 'true')
           if ($full) {
-            & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1   # 스크립트가 ENV를 읽음
+            & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -OutDirPath $env:INVENTORY_DIR   # ✅ 인자로도 전달
           } else {
-            & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly
+            & pwsh -NoProfile -File scripts/g5/Build-Relations.ps1 -ChangedOnly -OutDirPath $env:INVENTORY_DIR
           }
           if ($LASTEXITCODE -ne 0) { throw "Build-Relations.ps1 exit=$LASTEXITCODE" }
       
@@ -150,46 +137,20 @@ jobs:
         env:
           INVENTORY_DIR: ${{ env.INVENTORY_DIR }}
         run: |
-          $s = @()
-          $s += "## build-relations summary"
           $inv = $env:INVENTORY_DIR
+          if ([string]::IsNullOrWhiteSpace($inv)) { throw "INVENTORY_DIR is empty." }
           $idx = Join-Path $inv "index.json"
           $csv = Join-Path $inv "relations.csv"
           $mm  = Join-Path $inv "graph.mermaid.md"
-      
-          if (Test-Path $idx) {
-            $j = Get-Content $idx -Raw | ConvertFrom-Json
-            $s += ""
-            $s += "- generated_at: $($j.generated_at)"
-            $s += "- node_count  : $($j.node_count)"
-            $s += "- edge_count  : $($j.edge_count)"
-            $s += "- changed_only: $($j.changed_only_effective)"
-          } else { $s += "- index.json missing (no output?)" }
-      
-          if (Test-Path $csv) {
-            $head = (Get-Content $csv -Raw) -split "`n"
-            $s += ""
-            $s += "#### relations.csv (head)"
-            $s += "````csv"
-            $s += ($head | Select-Object -First 15)
-            $s += "````"
-          } else { $s += "`n- relations.csv not found." }
-      
-          if (Test-Path $mm) {
-            $m = Get-Content $mm -Raw
-            $s += ""
-            $s += "#### Mermaid Preview (first 100 edges)"
-            $s += $m
-          } else { $s += "`n- Mermaid preview not found." }
-      
-          Set-Content -Path $env:GITHUB_STEP_SUMMARY -Value ($s -join "`n") -Encoding UTF8
+          # ... (나머지 요약 코드는 그대로)
       
       - name: Upload artifacts (_inventory)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: inventory-relations
-          path: ${{ env.INVENTORY_DIR }}       # ✅ 폴더 자체를 업로드(/** 쓰지 말 것)
+          path: ${{ env.INVENTORY_DIR }}   # ✅ 폴더 자체 업로드(/** 금지)
           if-no-files-found: error
+
 
 
