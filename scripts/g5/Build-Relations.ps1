@@ -24,15 +24,15 @@
 param(
   [switch]$ChangedOnly,
   [string]$OutDir = "_inventory",
-  [string]$OutDirPath   # ✅ 추가
+  [string]$OutDirPath   # ✅ 새로 추가: 절대/상대 강제 경로
 )
 
 $ErrorActionPreference = 'Stop'
 
-# == 기준 디렉터리 후보 ==
+# 1) 스크립트 기준 레포 루트(폴백)
 $rootByScript = try { (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path } catch { (Get-Location).Path }
 
-# == 출력 경로 결정 (우선순위: OutDirPath > ENV:INVENTORY_DIR > 스크립트 기준 + OutDir) ==
+# 2) 출력 경로 결론: OutDirPath > ENV:INVENTORY_DIR > 스크립트 기준 + OutDir
 if (-not [string]::IsNullOrWhiteSpace($OutDirPath)) {
   $OUT = [System.IO.Path]::GetFullPath($OutDirPath)
 }
@@ -43,8 +43,14 @@ else {
   $OUT = Join-Path $rootByScript $OutDir
 }
 
+# 3) 비어있을 가능성 최종 차단
+if ([string]::IsNullOrWhiteSpace($OUT)) {
+  $OUT = Join-Path $rootByScript "_inventory"
+}
+
 New-Item -ItemType Directory -Force -Path $OUT | Out-Null
 Write-Host "OUT_DIR=$OUT"
+
 
 
 
