@@ -29,9 +29,29 @@ jobs:
       - name: Generate inventory
         shell: pwsh
         run: |
-          pwsh -NoProfile -File ./scripts/g5/Trace-WorkflowRefs.v3.3.2.ps1 -ScanDepth 1
-          '## Inventory (head)' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          # 1) 스크립트 자동 탐색(대소문자/버전 오타 방지)
+          $script = Get-ChildItem -File -Recurse "scripts/g5/Trace-WorkflowRefs*.ps1" |
+                    Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $script) {
+            Write-Error "Trace-WorkflowRefs*.ps1 not found under scripts/g5"
+            Get-ChildItem -Recurse scripts/g5 | Format-List FullName
+            exit 1
+          }
+          Write-Host "Using scanner: $($script.FullName)"
+      
+          # 2) 실행
+          pwsh -NoProfile -File $script.FullName -ScanDepth 1
+      
+          # 3) 산출물 검증(없으면 실패로 종료)
+          if (-not (Test-Path "_inventory/workflows.txt" -PathType Leaf)) {
+            Write-Error "_inventory/workflows.txt was not generated."
+            exit 2
+          }
+      
+          # 4) 요약 출력(앞부분만)
+          '## Workflows Inventory (head)' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           Get-Content _inventory/workflows.txt -TotalCount 80 | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
 
       - name: Create PR with updated inventory
         uses: peter-evans/create-pull-request@v6
