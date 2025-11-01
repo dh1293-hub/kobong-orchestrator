@@ -1,4 +1,4 @@
 ADDED
-.config/readme-badges.json
 CHANGED
+.github/workflows/guard-readme-badge.yml
 REMOVED
