@@ -212,8 +212,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          $ErrorActionPreference = 'Stop'
           git config user.name  "wf-allround-bot"
           git config user.email "wf-allround-bot@users.noreply.github.com"
+      
           $branch = "bot/wf-inventory-${{ github.run_id }}"
           git checkout -b $branch
       
@@ -225,12 +227,28 @@ jobs:
           git push origin $branch
       
           $base = gh repo view --json defaultBranchRef -q .defaultBranchRef.name
-          # PR 번호를 출력으로 남김
-          $pr = gh pr create --base $base --head $branch `
-                --title "[WF] _inventory snapshot ${{ github.run_id }}" `
-                --body  "자동 반영(_inventory/*)" --json number -q .number
+      
+          # NOTE: gh pr create 은 --json/-q 미지원 → URL 파싱 또는 후조회로 번호 구함
+          $out = gh pr create --base $base --head $branch `
+                  --title "[WF] _inventory snapshot ${{ github.run_id }}" `
+                  --body  "자동 반영(_inventory/*)"
+      
+          if ($LASTEXITCODE -ne 0) { throw "gh pr create failed: $out" }
+      
+          # 1차: 생성 출력의 URL에서 번호 추출
+          $pr = $null
+          if ($out -match '/pull/(\d+)') { $pr = $Matches[1] }
+      
+          # 2차: 못 찾으면 head 브랜치로 조회
+          if (-not $pr) {
+            $pr = gh pr view --head $branch --json number -q .number
+          }
+      
+          if (-not $pr) { throw "Failed to obtain PR number. Output:`n$out" }
+      
           "pr=$pr" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "Opened PR #$pr"
+
       
       - name: Enable auto-merge (squash) if safe
         if: ${{ steps.openpr.outputs.pr }}
