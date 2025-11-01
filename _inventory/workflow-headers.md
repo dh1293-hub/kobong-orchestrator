@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-11-01 21:33:00+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-11-01 21:42:18+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -297,6 +297,28 @@ glob:  logs/**/README.md
 - YAML 파서 오류 방지: 모든 스크립트는 run: | 블록, 탭 금지(스페이스만)
 - 정규식은 Bash ERE(확장 정규식) 기준. ^, $ 앵커 권장.
 - 글롭은 Bash 패턴 매칭(==) 기준.
+============================================================
+```
+
+## `.github/workflows/guard-readme-badge.yml`
+
+```text
+============================================================
+Guard: README 배지(Shields/Actions 등) 존재·유효성 검증
+목적:
+- README.md 안의 필수 배지(예: CI, Release, License)가 모두 존재하는지 점검
+- (선택) 배지 URL의 HTTP 응답(200)을 확인하여 죽은 링크 차단
+설정:
+- .config/readme-badges.json 에서 필수/선택 배지 규칙을 선언(없으면 안전한 기본값 사용)
+- workflow_dispatch 입력으로 report/enforce 모드 선택, HTTP 검증 on/off 가능
+트리거:
+- PR / main 푸시 (README 또는 설정이 바뀔 때만 실행: 경로 필터)
+보안/가드:
+- 최소 권한(contents: read)
+- 동시성 취소 / 타임아웃 5분
+구현 메모:
+- YAML 파서 오류 방지: 모든 스크립트는 run: | 블록 + 스페이스 들여쓰기(탭 금지)
+- 파싱은 Python3(기본 탑재)로 수행 → 복잡한 마크다운 정규식보다 안정
 ============================================================
 ```
 
