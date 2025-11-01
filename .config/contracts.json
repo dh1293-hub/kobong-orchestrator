@@ -1,0 +1,28 @@
+{
+  "_comment": "계약 검증 설정. html_globs: 검사 대상 HTML 경로 와일드카드. services[*]: 서비스별 필수 문자열(센티널/베이스URL/식별자). extra_required: 추가 필수 문자열.",
+  "html_globs": [
+    "**/*.html",
+    "webui/**/*.html"
+  ],
+  "services": [
+    {
+      "name": "AK7",
+      "sentinel": "__G5_SENTINEL:AK7_v1.1__",
+      "base_urls": ["http://localhost:5181"],
+      "identifiers": ["AK7_API_BASE"]
+    },
+    {
+      "name": "GHMON",
+      "sentinel": "__G5_SENTINEL:GHMON_v1.1__",
+      "base_urls": ["http://localhost:5182"],
+      "identifiers": ["GHMON_API_BASE"]
+    },
+    {
+      "name": "ORCHMON",
+      "sentinel": "__G5_SENTINEL:ORCHMON_v1.1__",
+      "base_urls": ["http://localhost:5183"],
+      "identifiers": ["ORCHMON_API_BASE"]
+    }
+  ],
+  "extra_required": []
+}
