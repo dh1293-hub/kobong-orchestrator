@@ -130,11 +130,30 @@ if (-not $files -or $files.Count -eq 0) {
 }
 
 # 4) 라이트 파싱 & 저장
-$rows = foreach($f in $files){
+# == 라이트 파싱 & 정규화 ==
+$rows = foreach ($f in $files) {
   $t = Get-Content -LiteralPath $f.FullName -Raw
+
+  # 머리 필드 추출
   $name = ([regex]::Match($t,'(?m)^\s*name:\s*(.+)$').Groups[1].Value).Trim()
   $perm = ([regex]::Match($t,'(?m)^\s*permissions:\s*(.+)$').Groups[1].Value).Trim()
   $conc = ([regex]::Match($t,'(?m)^\s*concurrency:\s*(.+)$').Groups[1].Value).Trim()
+
+  # 주석 제거(permissions)
+  if ($perm) { $perm = ($perm -split '#')[0].Trim() }
+
+  # 경로 정규화: .github/workflows/… 상대경로로 통일
+  $rel = $null
+  if ($f.FullName -match '[\\\/]\.github[\\\/]workflows[\\\/](.+)$') {
+    $rel = ".github/workflows/$($Matches[1] -replace '\\','/')"
+  } else {
+    # 로컬 체크아웃 케이스
+    $rel = ($f.FullName -replace [regex]::Escape((Get-Location).Path),'').TrimStart('\','/')
+    if (-not ($rel -like '.github/workflows/*')) {
+      $rel = ".github/workflows/$($f.Name)"   # 최후 폴백
+    }
+  }
+
   $has = @{
     dispatch = $t -match '(^|\n)\s*workflow_dispatch\s*:'
     pr       = $t -match '(^|\n)\s*(pull_request|pull_request_target)\s*:'
@@ -143,23 +162,26 @@ $rows = foreach($f in $files){
     release  = $t -match '(^|\n)\s*release\s*:'
     schedule = $t -match '(^|\n)\s*schedule\s*:'
   }
+
   [pscustomobject]@{
-    path = ($f.FullName -replace [regex]::Escape($RepoRoot), '').TrimStart('\','/')
-    name = if($name){$name}else{[IO.Path]::GetFileNameWithoutExtension($f.Name)}
-    permissions = if($perm){$perm}else{'(default)'}
-    concurrency = $conc
-    has_workflow_dispatch = $has.dispatch
-    has_pull_request      = $has.pr
-    has_push              = $has.push
-    has_issue_comment     = $has.issuecmt
-    has_release           = $has.release
-    has_schedule          = $has.schedule
-    updated_utc           = (Get-Item $f.FullName).LastWriteTimeUtc.ToString('yyyy-MM-ddTHH:mm:ssZ')
+    path                   = $rel
+    name                   = (if($name){$name}else{[IO.Path]::GetFileNameWithoutExtension($f.Name)})
+    permissions            = (if($perm){$perm}else{'(default)'})
+    concurrency            = $conc
+    has_workflow_dispatch  = $has.dispatch
+    has_pull_request       = $has.pr
+    has_push               = $has.push
+    has_issue_comment      = $has.issuecmt
+    has_release            = $has.release
+    has_schedule           = $has.schedule
+    updated_utc            = (Get-Item $f.FullName).LastWriteTimeUtc.ToString('yyyy-MM-ddTHH:mm:ssZ')
   }
 }
 
+# 저장(멱등)
 $csv  = Join-Path $Out 'workflows.csv'
 $json = Join-Path $Out 'workflows.json'
 $rows | Sort-Object path | Export-Csv -NoTypeInformation -Path $csv
 $rows | ConvertTo-Json -Depth 4 | Set-Content -Path $json
 Write-Host "[OK] inventory → $csv , $json"
+
