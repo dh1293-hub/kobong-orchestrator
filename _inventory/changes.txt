@@ -1,4 +1,4 @@
 ADDED
-.config/contracts.json
 CHANGED
+.github/workflows/contracts-ci.yml
 REMOVED
