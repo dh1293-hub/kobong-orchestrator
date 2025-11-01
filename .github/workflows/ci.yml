@@ -1,9 +1,39 @@
+# =========================================
+# CI: WebUI 스모크 (가벼운 안전망) — 강화판
+# - 트리거: PR / main 푸시 (경로 필터 적용)
+# - 보안: 최소 권한(contents: read), Git 미사용(zipball로 복제) → exit code 128 회피
+# - 동작:
+#   1) .github/actions 만 부트스트랩(로컬 액션 사용 준비)
+#   2) zip-fetch 로 소스 전개(깃 없는 복제)
+#   3) package.json 있으면 Node 22 + npm 캐시 + ci + build (옵션)
+#   4) HTML 파일이 비어있지 않은지 검사(기초 검증)
+#   5) Markdown 최소 린트(빈 파일 방지)
+#   6) logs/ 를 아티팩트 업로드
+# - 산출물: Actions 아티팩트(ci-logs)
+# - 강화점: 경로 필터, npm 캐시, 타임아웃(15분), 동시성 취소
+# =========================================
 name: ci/webui
 
 on:
   pull_request:
+    paths:
+      - 'webui/**'
+      - '**/*.html'
+      - '**/*.md'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/actions/**'   # 로컬 액션 변경 시 재검증
+      - '.github/workflows/ci.yml'
   push:
     branches: [ main ]
+    paths:
+      - 'webui/**'
+      - '**/*.html'
+      - '**/*.md'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/actions/**'
+      - '.github/workflows/ci.yml'
 
 permissions:
   contents: read
@@ -14,12 +44,13 @@ concurrency:
 
 jobs:
   check:
-    runs-on: windows-latest
+    runs-on: windows-latest            # PowerShell 스크립트 기반 (Ubuntu도 가능)
+    timeout-minutes: 15                # ⏱️ 과도런 방지(실패 처리)
     env:
       GH_TOKEN: ${{ github.token }}
 
     steps:
-      # 0) 로컬 액션 부트스트랩 (.github/actions만 전개)
+      # 0) 로컬 액션 부트스트랩 (.github/actions 만 가져옴)
       - name: Bootstrap local actions (no git)
         shell: pwsh
         run: |
@@ -46,46 +77,58 @@ jobs:
           Copy-Item -Path (Join-Path $root.FullName '.github\actions') -Destination $dst -Recurse -Force
           Remove-Item $zip -Force
 
-      # 1) Git 미사용: zip-fetch 액션으로 소스 전개
+      # 1) 깃 미사용: zip-fetch 액션으로 소스 전개
       - uses: ./.github/actions/zip-fetch
 
-      # 2) (옵션) Node 빌드: package.json 있을 때만
-      - name: Install & build (optional)
+      # 2) (옵션) Node 세팅 + npm 캐시
+      - name: Setup Node (with npm cache)
         if: hashFiles('package.json') != ''
         uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            **/package-lock.json
 
       - name: npm ci + build (optional)
         if: hashFiles('package.json') != ''
         shell: pwsh
         run: |
           npm ci
-          if (Test-Path package.json) { npm run -s build || exit 1 }
+          if (Test-Path package.json) { npm run -s build }
 
       # 3) 간단 HTML 존재/빈파일 검사
       - name: Validate HTML (basic)
         shell: pwsh
         run: |
           $files = Get-ChildItem -Recurse -Include *.html
-          if ($files.Count -eq 0) { "no html"; exit 0 }
+          if ($files.Count -eq 0) { Write-Host "No HTML files — skip."; exit 0 }
+          $bad = @()
           foreach ($f in $files) {
-            if (-not (Get-Content $f.FullName)) { Write-Error "empty file: $($f.FullName)"; exit 1 }
+            if (-not (Get-Content $f.FullName)) { $bad += $f.FullName }
+          }
+          if ($bad.Count -gt 0) {
+            Write-Error ("Empty HTML files:`n" + ($bad -join "`n"))
+            exit 1
           }
 
-      # 4) 문서 최소 린트
-      - name: Docs lint
+      # 4) 문서 최소 린트 (빈 md 방지)
+      - name: Docs lint (basic)
         shell: pwsh
         run: |
           $md = Get-ChildItem -Recurse -Include *.md
           if ($md.Count -eq 0) { exit 0 }
+          $bad = @()
           foreach ($m in $md) {
-            if ((Get-Content $m.FullName | Measure-Object -Line).Lines -lt 1) {
-              Write-Error "empty md: $($m.FullName)"; exit 1
-            }
+            if ((Get-Content $m.FullName | Measure-Object -Line).Lines -lt 1) { $bad += $m.FullName }
+          }
+          if ($bad.Count -gt 0) {
+            Write-Error ("Empty Markdown files:`n" + ($bad -join "`n"))
+            exit 1
           }
 
-      # 5) 로그 업로드(유일 이름 → 409 방지)
+      # 5) 로그 업로드 (없으면 경고만)
       - uses: ./.github/actions/publish-logs
         if: always()
         with:
