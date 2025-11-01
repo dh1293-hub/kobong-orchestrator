@@ -198,11 +198,16 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path _inventory | Out-Null
+      
           if (Test-Path _inventory/_ci_artifacts) {
             Copy-Item -Recurse -Force _inventory/_ci_artifacts/* _inventory/ 2>$null
-          } else {
-            Write-Host "No artifacts to stage."
+            # ✅ 중복 방지: 커밋 전에 캐시 폴더 삭제
+            Remove-Item -Recurse -Force _inventory/_ci_artifacts -ErrorAction SilentlyContinue
           }
+      
+          Write-Host "== _inventory tree =="
+          Get-ChildItem -Recurse _inventory | Format-Table -Auto
+
 
 # ... (Stage _inventory 까지는 그대로)
 
@@ -212,14 +217,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $ErrorActionPreference = 'Stop'
           git config user.name  "wf-allround-bot"
           git config user.email "wf-allround-bot@users.noreply.github.com"
-      
           $branch = "bot/wf-inventory-${{ github.run_id }}"
           git checkout -b $branch
       
           git add -f _inventory/*
+          # ✅ 혹시 남아 있다면 제외
+          git rm -r --cached _inventory/_ci_artifacts 2>$null
+      
           git diff --cached --quiet
           if ($LASTEXITCODE -eq 0) { Write-Host "No changes in _inventory → skip PR."; exit 0 }
       
@@ -227,27 +233,12 @@ jobs:
           git push origin $branch
       
           $base = gh repo view --json defaultBranchRef -q .defaultBranchRef.name
-      
-          # NOTE: gh pr create 은 --json/-q 미지원 → URL 파싱 또는 후조회로 번호 구함
           $out = gh pr create --base $base --head $branch `
-                  --title "[WF] _inventory snapshot ${{ github.run_id }}" `
-                  --body  "자동 반영(_inventory/*)"
-      
+                 --title "[WF] _inventory snapshot ${{ github.run_id }}" `
+                 --body  "자동 반영(_inventory/*)"
           if ($LASTEXITCODE -ne 0) { throw "gh pr create failed: $out" }
-      
-          # 1차: 생성 출력의 URL에서 번호 추출
-          $pr = $null
-          if ($out -match '/pull/(\d+)') { $pr = $Matches[1] }
-      
-          # 2차: 못 찾으면 head 브랜치로 조회
-          if (-not $pr) {
-            $pr = gh pr view --head $branch --json number -q .number
-          }
-      
-          if (-not $pr) { throw "Failed to obtain PR number. Output:`n$out" }
-      
+          $pr = ($out -match '/pull/(\d+)') ? $Matches[1] : (gh pr view --head $branch --json number -q .number)
           "pr=$pr" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "Opened PR #$pr"
 
       
       - name: Enable auto-merge (squash) if safe
@@ -256,16 +247,29 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          $ErrorActionPreference='Stop'
           $pr = [int]"${{ steps.openpr.outputs.pr }}"
-          # 변경 파일이 _inventory/ 이하인지 검사 (보수적으로)
+      
+          # _inventory 이외 변경 있으면 자동머지 스킵(보수적으로)
           $files = gh pr view $pr --json files -q ".files[].path"
           if ($files | Where-Object { $_ -notmatch '^_inventory/' }) {
             Write-Host "Skip automerge: non-inventory changes detected."
             exit 0
           }
-          # 라벨로 가드(원하면 주석 해제)
-          # gh pr edit $pr --add-label "auto-inventory"
       
-          # 승인 필요 없다면 바로 auto-merge 대기 상태 진입, 필요하면 승인 후 자동 머지
-          gh pr merge $pr --squash --auto
-          Write-Host "Auto-merge enabled for PR #$pr"
+          # 저장소가 auto-merge 허용하는지 선체크
+          $auto = gh repo view --json autoMergeAllowed -q .autoMergeAllowed
+          if (-not $auto -or $auto -eq 'false') {
+            Write-Host "Skip automerge: repository auto-merge is disabled."
+            exit 0
+          }
+      
+          try {
+            gh pr merge $pr --squash --auto
+            Write-Host "Auto-merge enabled for PR #$pr"
+          } catch {
+            Write-Warning "Automerge not enabled (policy): $($_.Exception.Message)"
+            # 정책상 불가면 경고만 남기고 성공 종료
+            exit 0
+          }
+
