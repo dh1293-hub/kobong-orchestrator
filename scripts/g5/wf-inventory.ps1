@@ -134,13 +134,16 @@ if (-not $files -or $files.Count -eq 0) {
 # == 라이트 파싱 & 정규화 ==
 $rows = foreach ($f in $files) {
   $t    = Get-Content -LiteralPath $f.FullName -Raw
+
+  # 머리 필드 추출
   $name = ([regex]::Match($t,'(?m)^\s*name:\s*(.+)$').Groups[1].Value).Trim()
   $perm = ([regex]::Match($t,'(?m)^\s*permissions:\s*(.+)$').Groups[1].Value).Trim()
   $conc = ([regex]::Match($t,'(?m)^\s*concurrency:\s*(.+)$').Groups[1].Value).Trim()
 
-  if ($perm) { $perm = ($perm -split '#')[0].Trim() }  # permissions의 주석 제거
+  # permissions 주석 삭제
+  if ($perm) { $perm = ($perm -split '#')[0].Trim() }
 
-  # 경로 정규화: 항상 .github/workflows/… 로
+  # 경로 정규화: 항상 .github/workflows/… 형태
   $rel = $null
   if ($f.FullName -match '[\\\/]\.github[\\\/]workflows[\\\/](.+)$') {
     $rel = ".github/workflows/$($Matches[1] -replace '\\','/')"
@@ -149,12 +152,14 @@ $rows = foreach ($f in $files) {
     if (-not ($rel -like '.github/workflows/*')) { $rel = ".github/workflows/$($f.Name)" }
   }
 
-  # 🔧 if 표현식은 미리 계산
+  # 🔧 인라인 if 금지 → 미리 계산
   $nameOut = if ([string]::IsNullOrWhiteSpace($name)) {
     [IO.Path]::GetFileNameWithoutExtension($f.Name)
-  } else {
-    $name
-  }
+  } else { $name }
+
+  $permOut = if ([string]::IsNullOrWhiteSpace($perm)) {
+    '(default)'
+  } else { $perm }
 
   $has = @{
     dispatch = $t -match '(^|\n)\s*workflow_dispatch\s*:'
@@ -168,7 +173,7 @@ $rows = foreach ($f in $files) {
   [pscustomobject]@{
     path                  = $rel
     name                  = $nameOut
-    permissions           = (if($perm){$perm}else{'(default)'})
+    permissions           = $permOut
     concurrency           = $conc
     has_workflow_dispatch = $has.dispatch
     has_pull_request      = $has.pr
@@ -186,4 +191,5 @@ $json = Join-Path $Out 'workflows.json'
 $rows | Sort-Object path | Export-Csv -NoTypeInformation -Path $csv
 $rows | ConvertTo-Json -Depth 4 | Set-Content -Path $json
 Write-Host "[OK] inventory → $csv , $json"
+
 
