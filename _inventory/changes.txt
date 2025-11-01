@@ -1,4 +1,4 @@
 ADDED
 CHANGED
+.github/workflows/housekeeping-smoke.yml
 REMOVED
-.github/workflows/guard-sentinel.yml
