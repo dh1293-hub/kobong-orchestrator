@@ -31,7 +31,8 @@ function Get-WfFilesFromLocal {
   $dir = Join-Path $RepoRoot '.github/workflows'
   if (Test-Path $dir) {
     Write-Info "로컬 스캔: $dir"
-    return Get-ChildItem $dir -File -Include *.yml,*.yaml -ErrorAction SilentlyContinue
+    return Get-ChildItem -Path $dir -Recurse -File |
+           Where-Object { $_.Extension -in @('.yml', '.yaml') }
   }
   return @()
 }
