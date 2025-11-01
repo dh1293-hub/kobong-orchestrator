@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-11-01 21:51:13+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-11-01 22:00:43+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -325,8 +325,29 @@ Guard: README 배지(Shields/Actions 등) 존재·유효성 검증
 ## `.github/workflows/housekeeping-smoke.yml`
 
 ```text
-.github/workflows/housekeeping-smoke.yml
-목적: 주간/수동/PR 트리거로 하우스키핑 스모크 실행 → 요약을 PR(또는 고정 이슈)에 코멘트, 아티팩트/Job Summary로도 보존.
+============================================================
+Health Smoke — 런타임 헬스 엔드포인트(예: /health) 스모크 체크
+목적:
+- 배포/변경 후 서비스가 "지금" 살아있는지(HTTP 2xx/3xx & 키워드) 빠르게 확인
+- self-hosted 러너 환경에서 내부 포트(예: 5182/5199/5183 등) 확인에 적합
+트리거:
+- 수동 실행(workflow_dispatch) 기본
+- (선택) schedule 주석 해제 시 주기 점검 가능
+입력:
+- targets: 줄바꿈으로 나눈 대상 URL 목록(비워두면 안전한 기본값 사용)
+- expect_substring: 응답 본문에 기대하는 문자열(비우면 본문 검사 생략, 상태코드만 확인)
+- timeout_ms: 개별 요청 타임아웃(ms)
+- retries: 실패 시 재시도 횟수
+- wait_ms: 재시도 사이 간격(ms)
+- report_only: 위반 시 실패 대신 경고만 (초기 도입·점진 적용에 유용)
+가드:
+- 최소 권한(contents: read), 동시성 취소, 5분 타임아웃
+출력:
+- _inventory/health/summary.json (성공/실패 카운트, 각 타겟 결과)
+- artifact: health-smoke-<run_id>
+참고:
+- YAML 파서 오류 방지: run: | 블록 사용, 탭 금지(스페이스만)
+============================================================
 ```
 
 ## `.github/workflows/post-release-canary.yml`
