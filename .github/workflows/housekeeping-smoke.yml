@@ -1,228 +1,134 @@
-# ============================================================
-# Health Smoke — 런타임 헬스 엔드포인트(예: /health) 스모크 체크
-# 목적:
-#   - 배포/변경 후 서비스가 "지금" 살아있는지(HTTP 2xx/3xx & 키워드) 빠르게 확인
-#   - self-hosted 러너 환경에서 내부 포트(예: 5182/5199/5183 등) 확인에 적합
-# 트리거:
-#   - 수동 실행(workflow_dispatch) 기본
-#   - (선택) schedule 주석 해제 시 주기 점검 가능
-# 입력:
-#   - targets: 줄바꿈으로 나눈 대상 URL 목록(비워두면 안전한 기본값 사용)
-#   - expect_substring: 응답 본문에 기대하는 문자열(비우면 본문 검사 생략, 상태코드만 확인)
-#   - timeout_ms: 개별 요청 타임아웃(ms)
-#   - retries: 실패 시 재시도 횟수
-#   - wait_ms: 재시도 사이 간격(ms)
-#   - report_only: 위반 시 실패 대신 경고만 (초기 도입·점진 적용에 유용)
-# 가드:
-#   - 최소 권한(contents: read), 동시성 취소, 5분 타임아웃
-# 출력:
-#   - _inventory/health/summary.json (성공/실패 카운트, 각 타겟 결과)
-#   - artifact: health-smoke-<run_id>
-# 참고:
-#   - YAML 파서 오류 방지: run: | 블록 사용, 탭 금지(스페이스만)
-# ============================================================
-name: health/smoke
+# .github/workflows/housekeeping-smoke.yml
+# 목적: 주간/수동/PR 트리거로 하우스키핑 스모크 실행 → 요약을 PR(또는 고정 이슈)에 코멘트, 아티팩트/Job Summary로도 보존.
+
+name: housekeeping-smoke
 
 on:
-  workflow_dispatch:
-    inputs:
-      targets:
-        description: "줄바꿈으로 나눈 대상 URL 목록(예: http://localhost:5182/health)"
-        required: false
-        type: string
-        default: ""
-      expect_substring:
-        description: "본문에 기대하는 문자열(비우면 본문 검사 생략)"
-        required: false
-        type: string
-        default: ""
-      timeout_ms:
-        description: "요청 타임아웃(ms)"
-        required: true
-        type: string
-        default: "1500"
-      retries:
-        description: "실패 시 재시도 횟수"
-        required: true
-        type: string
-        default: "2"
-      wait_ms:
-        description: "재시도 간격(ms)"
-        required: true
-        type: string
-        default: "400"
-      report_only:
-        description: "위반 시 실패 대신 경고만(report)"
-        required: true
-        type: choice
-        options: [false, true]
-        default: false
-
-  # (선택) 주기 점검 원하면 주석 해제
-  # schedule:
-  #   - cron: "*/15 * * * *"   # 15분마다
+  workflow_dispatch: {}
+  schedule:
+    - cron: '0 18 * * 6'          # 매주 토요일 18:00 UTC (= 일요일 03:00 KST)
+  pull_request:
+    paths:
+      - scripts/g5/**
+      - .github/workflows/housekeeping-smoke.yml
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 concurrency:
-  group: health-smoke-${{ github.ref }}
+  group: post-hk-smoke-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  probe:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+  smoke:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh
 
     steps:
-      - name: Prepare workspace
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ✅ v2: 스크립트가 '상세 표'가 들어간 MD를 직접 생성(-SummaryPath 사용)
+      - name: Run housekeeping smoke
+        id: smoke
+        continue-on-error: true
         run: |
-          mkdir -p _inventory/health _tmp
+          $ErrorActionPreference = 'Stop'
+          $summary = "housekeeping-summary.md"
+          Write-Host "HK-SMOKE v2: start"
 
-      - name: Run health probes
-        id: run
-        shell: bash
-        env:
-          INPUT_TARGETS: ${{ github.event.inputs.targets }}
-          EXPECT: ${{ github.event.inputs.expect_substring }}
-          TIMEOUT_MS: ${{ github.event.inputs.timeout_ms }}
-          RETRIES: ${{ github.event.inputs.retries }}
-          WAIT_MS: ${{ github.event.inputs.wait_ms }}
-        run: |
-          set -euo pipefail
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+          if (Test-Path "scripts/g5/housekeeping-smoke.ps1") {
+            & pwsh -NoProfile -File "scripts/g5/housekeeping-smoke.ps1" -SummaryPath $summary
+            $exit = $LASTEXITCODE
+          } else {
+            "# Housekeeping Smoke" | Out-File $summary -Encoding UTF8
+            "" | Out-File $summary -Append
+            "| Check | Status | Message | Duration(ms) |" | Out-File $summary -Append
+            "|---|---|---|---:|" | Out-File $summary -Append
+            "| script | SKIPPED | scripts/g5/housekeeping-smoke.ps1 not found | 0 |" | Out-File $summary -Append
+            $exit = 0
+          }
+          $sw.Stop()
+          "" | Out-File $summary -Append
+          "**Exit**: $exit" | Out-File $summary -Append
+          "**Duration(s)**: ${($sw.Elapsed.TotalSeconds).ToString('0.000')}" | Out-File $summary -Append
+          Write-Host "HK-SMOKE v2: end (exit=$exit)"
+          exit $exit
 
-          # 1) 대상 구성: 입력이 비었으면 안전한 기본값(로컬 self-hosted 환경 가정)
-          #    - 필요 시 이 기본값은 팀 표준 포트로 바꿔주세요.
-          readarray -t targets <<<"$INPUT_TARGETS"
-          if [[ ${#targets[@]} -eq 0 || -z "${targets[0]// }" ]]; then
-            targets=(
-              "http://localhost:5182/health"   # GHMON
-              "http://localhost:5199/health"   # GHMON (alt)
-              "http://localhost:5183/health"   # ORCHMON
-            )
-          fi
-
-          expect="${EXPECT:-}"
-          timeout_ms="${TIMEOUT_MS:-1500}"
-          retries="${RETRIES:-2}"
-          wait_ms="${WAIT_MS:-400}"
-
-          # ms → s (소수) 변환
-          to_sec() { awk "BEGIN { printf \"%.3f\", ($1/1000) }"; }
-
-          jq_escape() { python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'; }
-
-          results_json="[]"
-          failures=0
-
-          echo "::group::Health probe targets"
-          printf '  - %s\n' "${targets[@]}"
-          echo "::endgroup::"
-
-          for url in "${targets[@]}"; do
-            url="$(echo "$url" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-            [[ -z "$url" ]] && continue
-            out="$(mktemp)"
-            code="" time_total="" ok=0 attempt=0
-
-            while :; do
-              attempt=$((attempt+1))
-              # curl: -sS 조용, -m 타임아웃(초), -w 코드/시간 추출
-              cto="$(to_sec "$timeout_ms")"
-              resp="$(curl -sS -o "$out" -w '%{http_code} %{time_total}' -m "$cto" "$url" || true)"
-              code="${resp%% *}"
-              time_total="${resp#* }"
-
-              # 성공 판정: 2xx/3xx + (옵션) expect 서브스트링
-              if [[ "$code" =~ ^[23][0-9][0-9]$ ]]; then
-                if [[ -n "$expect" ]]; then
-                  if grep -q -- "$expect" "$out"; then ok=1; fi
-                else
-                  ok=1
-                fi
-              fi
-
-              if [[ "$ok" -eq 1 || "$attempt" -gt $((retries+1)) ]]; then
-                break
-              fi
-              # 재시도 대기
-              python3 - <<PY
-import time
-time.sleep(${wait_ms}/1000.0)
-PY
-            done
-
-            body="$(cat "$out" | head -c 2000)"   # 본문 앞부분만 저장(로그 과다 방지)
-            rm -f "$out"
-
-            # 결과 수집(JSON)
-            esc_body="$(printf "%s" "$body" | jq -Rsa .)"
-            esc_url="$(printf "%s" "$url"  | jq -Rsa .)"
-
-            item=$(cat <<EOF
-{
-  "url": $(echo "$url"  | jq -R .),
-  "http_code": "$code",
-  "time_total_s": "$time_total",
-  "ok": $([[ "$ok" -eq 1 ]] && echo true || echo false),
-  "attempts": $attempt,
-  "expect": $(echo "${expect:-}" | jq -R .),
-  "body_snippet": ${esc_body}
-}
-EOF
-)
-            results_json=$(python3 - <<PY
-import json,sys
-arr=json.loads(sys.stdin.read())
-arr.append($item)
-print(json.dumps(arr))
-PY
-<<<"$results_json")
-
-            if [[ "$ok" -ne 1 ]]; then
-              failures=$((failures+1))
-              echo "::error::FAIL $url (code=$code, time=$time_total s, attempts=$attempt)"
-            else
-              echo "OK   $url (code=$code, time=$time_total s, attempts=$attempt)"
-            fi
-          done
-
-          # 요약 저장
-          cat > _inventory/health/summary.json <<JSON
-{
-  "targets": ${#targets[@]},
-  "failures": $failures,
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "results": $results_json
-}
-JSON
-
-          echo "failures=$failures" >> "$GITHUB_OUTPUT"
-
-      - name: Upload artifact
+      - name: Upload summary artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: health-smoke-${{ github.run_id }}
-          path: _inventory/health
-          if-no-files-found: warn
+          name: housekeeping-smoke-summary
+          path: housekeeping-summary.md
+          retention-days: 14
 
-      - name: Enforce / Report
-        shell: bash
-        env:
-          REPORT_ONLY: ${{ github.event.inputs.report_only }}
+      - name: Write job summary
+        if: always()
         run: |
-          set -euo pipefail
-          fails="${{ steps.run.outputs.failures }}"
-          [[ -z "$fails" ]] && fails=0
-          if [[ "$fails" -gt 0 ]]; then
-            if [[ "$REPORT_ONLY" == "true" ]]; then
-              echo "::warning::Health failures=$fails (report-only mode: not failing)."
-              exit 0
-            else
-              echo "::error::Health failures=$fails"
-              exit 1
-            fi
-          else
-            echo "✅ All targets healthy."
-          fi
+          if (Test-Path 'housekeeping-summary.md') {
+            Get-Content 'housekeeping-summary.md' -Raw | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          } else {
+            "No summary file." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          }
+
+      # ✅ PR이면 PR에, 그 외(스케줄/수동)면 고정 이슈에 코멘트(헤더 마커 업데이트)
+      - name: Post or update summary comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const {owner, repo} = context.repo;
+            const pr = context.payload.pull_request || null;
+
+            // 포크 PR이면 토큰이 read-only → 코멘트 스킵
+            const isForkPR = !!pr && pr.head && pr.head.repo && pr.head.repo.fork === true;
+            if (isForkPR) {
+              core.notice('Fork PR → skip commenting (token read-only). Check Job Summary & Artifact.');
+              return;
+            }
+
+            const header = '<!-- hk-summary -->';
+            const body = fs.existsSync('housekeeping-summary.md')
+              ? fs.readFileSync('housekeeping-summary.md', 'utf8')
+              : '_No summary file_';
+            const newBody = `${header}\n${body}`;
+
+            let issue_number = pr ? pr.number : null;
+
+            // 스케줄/수동 실행: 고정 이슈(제목) 생성/탐색
+            if (!issue_number) {
+              const title = 'Housekeeping Smoke Report';
+              const { data: issues } = await github.rest.issues.listForRepo({
+                owner, repo, state: 'open', labels: 'housekeeping',
+              });
+              const found = issues.find(i => i.title === title);
+              if (found) {
+                issue_number = found.number;
+              } else {
+                const created = await github.rest.issues.create({
+                  owner, repo, title,
+                  labels: ['housekeeping','automation']
+                });
+                issue_number = created.data.number;
+              }
+            }
+
+            // 기존 봇 코멘트(헤더 포함) 업데이트, 없으면 신규
+            const { data: comments } = await github.rest.issues.listComments({
+              owner, repo, issue_number, per_page: 100
+            });
+            const prev = comments.find(c => (c.user?.type === 'Bot') && (c.body || '').includes(header));
+            if (prev) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: prev.id, body: newBody });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: newBody });
+            }
