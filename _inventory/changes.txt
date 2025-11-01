@@ -1,4 +1,4 @@
 ADDED
-.config/health-smoke.json
 CHANGED
+.github/workflows/health-smoke.yml
 REMOVED
