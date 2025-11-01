@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-11-01 18:52:01+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-11-01 19:49:47+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -209,6 +209,25 @@ AK • Workflow Inventory (frozen rules)
 - 잘못된 릴리스/태그는 GitHub에서 릴리스 삭제 → 태그 수정 후 재실행
 변경 이력(작성자/일시/사유): 
 - 2025-11-01: 보안 보강(permissions/concurrency/semver/포크가드), 머리 주석 추가
+```
+
+## `.github/workflows/ci.yml`
+
+```text
+=========================================
+CI: WebUI 스모크 (가벼운 안전망) — 강화판
+- 트리거: PR / main 푸시 (경로 필터 적용)
+- 보안: 최소 권한(contents: read), Git 미사용(zipball로 복제) → exit code 128 회피
+- 동작:
+1) .github/actions 만 부트스트랩(로컬 액션 사용 준비)
+2) zip-fetch 로 소스 전개(깃 없는 복제)
+3) package.json 있으면 Node 22 + npm 캐시 + ci + build (옵션)
+4) HTML 파일이 비어있지 않은지 검사(기초 검증)
+5) Markdown 최소 린트(빈 파일 방지)
+6) logs/ 를 아티팩트 업로드
+- 산출물: Actions 아티팩트(ci-logs)
+- 강화점: 경로 필터, npm 캐시, 타임아웃(15분), 동시성 취소
+=========================================
 ```
 
 ## `.github/workflows/guard-flush-queue.yml`
