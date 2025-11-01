@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-11-01 20:12:04+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-11-01 20:29:27+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -226,6 +226,27 @@ CI: WebUI 스모크 (가벼운 안전망) — B안(인라인)
 5) logs/ 를 아티팩트 업로드     ← 로컬 액션 publish-logs 대체
 - 강화점: 경로 필터, npm 캐시, 타임아웃(15분), 동시성 취소, 실패 시 워크스페이스 트리 덤프
 =========================================
+```
+
+## `.github/workflows/contracts-ci.yml`
+
+```text
+============================================================
+Contracts CI — 설정 파일(.config/contracts.json) 기반 컨트랙트 검증
+목적:
+- 프런트 산출물(HTML)에 필수 문자열이 존재하는지 PR 단계에서 스모크 검사
+- 필수 목록은 JSON 설정으로 관리(포트/버전/식별자 변경 시 YML 수정 불필요)
+트리거:
+- main 대상 PR (HTML/설정/YML 변경시에만 실행: 경로 필터)
+보안/가드:
+- 최소 권한(contents: read)
+- 동시성: 동일 ref 중복 실행 취소
+- 타임아웃: 5분
+러너:
+- ubuntu-latest (빠르고 안정적). PowerShell(pwsh) 사용.
+참고:
+- 설정 파일 경로: .config/contracts.json (이름 변경 시 paths와 스크립트 경로도 함께 변경)
+============================================================
 ```
 
 ## `.github/workflows/guard-flush-queue.yml`
