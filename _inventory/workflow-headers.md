@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-11-01 01:01:46+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-11-01 02:10:56+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -249,22 +249,19 @@ NO-SHELL
 
 ```text
 파일: .github/workflows/wf-allround-tester.yml
-목적: 저장소 내 등록된 워크플로들의 실제 동작을 "원샷"으로 검증한다.
-핵심 시나리오:
-1) .github/workflows 전수 인벤토리 구축(_inventory/workflows.*)
-2) 안전 트리거(Dispatch/PR/IssueComment)로 스모크 실행
-3) 결과 수집(MD/CSV/JSON) → 아티팩트 업로드
-4) 생성된 산출물을 _inventory에 반영하는 자동 PR 생성
+목적: 저장소 내 워크플로를 전수 수집(인벤토리) → 안전 스모크(Dispatch/PR/댓글) → 결과 요약(MD/CSV/JSON) →
+_inventory 반영용 PR 자동생성까지 원샷으로 수행.
 트리거:
 - 수동: workflow_dispatch (옵션 플래그)
-권한(최소 권한 원칙):
-- contents: write        # publish 잡에서 _inventory 커밋/푸시
-- pull-requests: write   # PR 생성/코멘트
-- actions: write         # workflow_dispatch 실행
-- checks/statuses: read  # 집계
-안전 가드:
-- 포크/외부 이벤트 차단(스크립트 내부 if)
-- concurrency로 중복 실행 차단
+- 자동: .github/workflows/** 변경 시(push/pr) 실행
+보안/가드:
+- permissions 최소화(필요 범위만 write)
+- concurrency 중복 실행 방지
+- github-actions[bot] 루프 방지(if)
+YAML 작성 규칙:
+- 탭(\t) 금지, 들여쓰기는 스페이스 2칸
+- 셸 스크립트는 반드시 run: | (블록 스칼라) 사용
+- run: | 아래의 #은 PowerShell 주석(실행되지 않음)
 ```
 
 ## `.github/workflows/xp-summary-artifact.yml`
