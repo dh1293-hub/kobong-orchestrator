@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-11-01 21:18:11+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-11-01 21:33:00+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -261,6 +261,42 @@ Guard / Flush Queue — GitHub Actions 대기열(queued/in_progress) 정리기
 주의:
 - 취소에는 actions: write 권한이 필요
 - 각 워크플로 안의 concurrency 가드와 병행하면 가장 효과적
+============================================================
+```
+
+## `.github/workflows/guard-logs-ignored.yml`
+
+```text
+============================================================
+Guard: logs/ 폴더 추적(Tracked) 금지 — 예외 허용(유연) 버전
+
+목적:
+- 보안/용량/리뷰 노이즈 방지를 위해 logs/* 경로의 "커밋된 파일"을 차단.
+- 기본 허용은 logs/.gitkeep 만. 그 외는 실패 처리.
+- 단, 아래 3가지 경로로 "예외"를 유연하게 허용:
+(A) 수동 실행(workflow_dispatch) 입력으로 1회성 예외 (정규식/글롭)
+(B) PR에 .config/logs-allowlist.txt 포함 → 그 PR에서만 허용
+(C) 보고 모드(report)로 전환 → 실패 대신 경고만
+
+사용법(핵심):
+1) 기본 금지: logs/ 경로의 커밋 파일은 실패 (logs/.gitkeep 제외)
+2) 1회성 허용(수동 실행):
+- Actions → guard/logs-ignored → Run workflow
+- extra_allow_regex:  한 줄에 하나의 ERE 정규식 (예: ^logs/README\.md$)
+- extra_allow_globs:  한 줄에 하나의 글롭(와일드카드) (예: logs/**/README.md)
+- enforce_mode:       enforce(실패) | report(경고만)
+3) PR에서만 허용(설정 파일):
+- PR에 .config/logs-allowlist.txt를 추가/수정
+- 각 줄 규칙:
+# 주석
+regex: ^logs/README\.md$
+glob:  logs/**/README.md
+- 이 파일은 그 PR에만 적용(메인 병합 전까지)
+
+주의/안전:
+- YAML 파서 오류 방지: 모든 스크립트는 run: | 블록, 탭 금지(스페이스만)
+- 정규식은 Bash ERE(확장 정규식) 기준. ^, $ 앵커 권장.
+- 글롭은 Bash 패턴 매칭(==) 기준.
 ============================================================
 ```
 
