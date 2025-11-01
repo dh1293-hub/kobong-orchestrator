@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-11-01 00:58:40+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-11-01 01:01:46+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -265,7 +265,6 @@ NO-SHELL
 안전 가드:
 - 포크/외부 이벤트 차단(스크립트 내부 if)
 - concurrency로 중복 실행 차단
-- run: | (멀티라인) + PowerShell 불리언 전달(-Switch:$${{ inputs.xx }})
 ```
 
 ## `.github/workflows/xp-summary-artifact.yml`
