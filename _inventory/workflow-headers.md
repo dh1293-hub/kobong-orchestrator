@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-11-01 20:38:29+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-11-01 21:18:11+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -252,7 +252,16 @@ Contracts CI — 설정 파일(.config/contracts.json) 기반 컨트랙트 검�
 ## `.github/workflows/guard-flush-queue.yml`
 
 ```text
-NO-SHELL
+============================================================
+Guard / Flush Queue — GitHub Actions 대기열(queued/in_progress) 정리기
+목적:
+- 중복/방치된 실행을 일괄 취소해 새 실행이 빨리 시작되도록 대기열을 비움
+사용처:
+- 수동(Dispatch) 또는 스케줄로 운영팀이 “큐 청소”를 원클릭 수행
+주의:
+- 취소에는 actions: write 권한이 필요
+- 각 워크플로 안의 concurrency 가드와 병행하면 가장 효과적
+============================================================
 ```
 
 ## `.github/workflows/housekeeping-smoke.yml`
