@@ -1,0 +1,12 @@
+{
+  "_comment": "README 배지 규칙. alt_match/url_match 중 하나라도 부분일치하면 매칭으로 간주.",
+  "required": [
+    { "alt_match": "ci",      "url_match": "actions/workflows/ci.yml/badge.svg" },
+    { "alt_match": "license", "url_match": "img.shields.io/github/license" }
+  ],
+  "optional": [
+    { "alt_match": "release", "url_match": "img.shields.io/github/v/release" },
+    { "alt_match": "issues",  "url_match": "img.shields.io/github/issues" }
+  ],
+  "verify_http": false
+}
