@@ -100,7 +100,6 @@ jobs:
           TEST_COMMENT:  ${{ inputs.test_comment }}
           KEEP_PR:       ${{ inputs.keep_pr }}
         run: |
-          # 백틱 없이 splatting으로 안전 호출
           $params = @{
             Repo             = "${{ github.repository }}"
             TestDispatch     = ($env:TEST_DISPATCH -ieq 'true')
@@ -153,18 +152,18 @@ jobs:
                 Sort-Object LastWriteTime | Select-Object -Last 1
           if ($md) { gh pr comment ${{ steps.trigger.outputs.pr_number }} --body-file $md.FullName }
 
-- name: Auto tidy (close PR & delete branch)
-  if: ${{ always() && steps.trigger.outputs.pr_number && steps.trigger.outputs.pr_number != '0' && inputs.keep_pr == false }}
-  env:
-    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  shell: pwsh
-  run: |
-    $pr = [int]"${{ steps.trigger.outputs.pr_number }}"
-    gh pr close $pr --delete-branch -R "${{ github.repository }}"
-    if ($LASTEXITCODE -ne 0) {
-      Write-Warning "PR close or branch delete failed (likely rate-limit/permission). Keeping PR/branch for inspection."
-      exit 0
-    }
+      - name: Auto tidy (close PR & delete branch)
+        if: ${{ always() && steps.trigger.outputs.pr_number && steps.trigger.outputs.pr_number != '0' && inputs.keep_pr == false }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $pr = [int]"${{ steps.trigger.outputs.pr_number }}"
+          gh pr close $pr --delete-branch -R "${{ github.repository }}"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning "PR close or branch delete failed (likely rate-limit/permission). Keeping PR/branch for inspection."
+            exit 0
+          }
 
 
   publish:                        # ← inventory/smoke와 같은 레벨
