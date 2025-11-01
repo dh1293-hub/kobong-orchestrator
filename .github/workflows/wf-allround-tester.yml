@@ -112,14 +112,26 @@ jobs:
 
       - name: Collect runs & checks
         if: ${{ steps.trigger.outputs.pr_number && steps.trigger.outputs.pr_number != '0' }}
+        id: collect
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          $script = Join-Path $env:GITHUB_WORKSPACE 'scripts/g5/AllRound-WF-Tester.ps1'
+          if (-not (Test-Path $script)) {
+            Write-Host "== DEBUG: repo root = $env:GITHUB_WORKSPACE"
+            Write-Host "== DEBUG: listing scripts/g5"
+            Get-ChildItem -Force -Recurse (Join-Path $env:GITHUB_WORKSPACE 'scripts/g5') -ErrorAction SilentlyContinue
+            throw "Not found: $script"
+          }
+      
           $pr  = [int]"${{ steps.trigger.outputs.pr_number }}"
           $br  = "${{ steps.trigger.outputs.branch }}"
           $mod = "${{ inputs.mode }}"
-          ./scripts/g5/AllRound-WF-Tester.ps1 -PrNumber $pr -Branch $br -Mode $mod
+      
+          # 절대경로로 안전 호출
+          pwsh -NoProfile -File $script -PrNumber $pr -Branch $br -Mode $mod
+
 
       - name: Upload smoke artifacts
         uses: actions/upload-artifact@v4
