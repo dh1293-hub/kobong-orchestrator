@@ -1,40 +1,236 @@
-name: guard-logs-ignored
+# ============================================================
+# Guard: logs/ 폴더 추적(Tracked) 금지 — 예외 허용(유연) 버전
+#
+# 목적:
+#   - 보안/용량/리뷰 노이즈 방지를 위해 logs/* 경로의 "커밋된 파일"을 차단.
+#   - 기본 허용은 logs/.gitkeep 만. 그 외는 실패 처리.
+#   - 단, 아래 3가지 경로로 "예외"를 유연하게 허용:
+#       (A) 수동 실행(workflow_dispatch) 입력으로 1회성 예외 (정규식/글롭)
+#       (B) PR에 .config/logs-allowlist.txt 포함 → 그 PR에서만 허용
+#       (C) 보고 모드(report)로 전환 → 실패 대신 경고만
+#
+# 사용법(핵심):
+#   1) 기본 금지: logs/ 경로의 커밋 파일은 실패 (logs/.gitkeep 제외)
+#   2) 1회성 허용(수동 실행):
+#        - Actions → guard/logs-ignored → Run workflow
+#        - extra_allow_regex:  한 줄에 하나의 ERE 정규식 (예: ^logs/README\.md$)
+#        - extra_allow_globs:  한 줄에 하나의 글롭(와일드카드) (예: logs/**/README.md)
+#        - enforce_mode:       enforce(실패) | report(경고만)
+#   3) PR에서만 허용(설정 파일):
+#        - PR에 .config/logs-allowlist.txt를 추가/수정
+#        - 각 줄 규칙:
+#            # 주석
+#            regex: ^logs/README\.md$
+#            glob:  logs/**/README.md
+#        - 이 파일은 그 PR에만 적용(메인 병합 전까지)
+#
+# 주의/안전:
+#   - YAML 파서 오류 방지: 모든 스크립트는 run: | 블록, 탭 금지(스페이스만)
+#   - 정규식은 Bash ERE(확장 정규식) 기준. ^, $ 앵커 권장.
+#   - 글롭은 Bash 패턴 매칭(==) 기준.
+# ============================================================
+name: guard/logs-ignored (flex)
+
 on:
   pull_request:
+    paths:
+      - 'logs/**'
+      - '.gitignore'
+      - '.config/logs-allowlist.txt'
+      - '.github/workflows/guard-logs-ignored.yml'
   push:
+    branches: [ main ]
+    paths:
+      - 'logs/**'
+      - '.gitignore'
+      - '.config/logs-allowlist.txt'
+      - '.github/workflows/guard-logs-ignored.yml'
+  workflow_dispatch:
+    inputs:
+      extra_allow_regex:
+        description: "추가 허용 정규식 (한 줄 하나, ERE). 예: ^logs/README\\.md$"
+        required: false
+        type: string
+        default: ""
+      extra_allow_globs:
+        description: "추가 허용 글롭(와일드카드) (한 줄 하나). 예: logs/**/README.md"
+        required: false
+        type: string
+        default: ""
+      enforce_mode:
+        description: "위반 시 동작: enforce=실패, report=경고만"
+        required: true
+        type: choice
+        options: [enforce, report]
+        default: enforce
+
 permissions:
   contents: read
-  statuses: write
+
+concurrency:
+  group: guard-logs-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   no-tracked-logs:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+
     steps:
-      - uses: actions/checkout@v4
-      - id: scan
+      - name: Checkout (shallow)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build allow-list & scan tracked files
+        id: scan
+        shell: bash
+        env:
+          # 기본 허용: logs/.gitkeep 만
+          ALLOW_BASE_REGEX: '^logs/\.gitkeep$'
+          EXTRA_ALLOW_REGEX: ${{ github.event.inputs.extra_allow_regex }}
+          EXTRA_ALLOW_GLOBS: ${{ github.event.inputs.extra_allow_globs }}
+          DISPATCH_MODE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.enforce_mode || '' }}
+        run: |
+          set -euo pipefail
+
+          printf "::group::Allow-list sources\n"
+
+          # === 1) 기본 허용(정규식) ===
+          regexes=()
+          regexes+=("${ALLOW_BASE_REGEX}")
+
+          # === 2) 수동 실행 입력(정규식/글롭) 파싱 ===
+          globs=()
+
+          if [[ -n "${EXTRA_ALLOW_REGEX:-}" ]]; then
+            # 멀티라인 분해 (빈 줄/공백 라인 제외)
+            while IFS= read -r line; do
+              line="${line#"${line%%[![:space:]]*}"}"; line="${line%"${line##*[![:space:]]}"}"  # trim
+              [[ -z "$line" ]] && continue
+              regexes+=("$line")
+            done <<< "${EXTRA_ALLOW_REGEX}"
+            echo "extra_allow_regex (dispatch):"
+            printf '  - %s\n' "${regexes[@]}"
+          else
+            echo "extra_allow_regex (dispatch): <none>"
+          fi
+
+          if [[ -n "${EXTRA_ALLOW_GLOBS:-}" ]]; then
+            while IFS= read -r line; do
+              line="${line#"${line%%[![:space:]]*}"}"; line="${line%"${line##*[![:space:]]}"}"
+              [[ -z "$line" ]] && continue
+              globs+=("$line")
+            done <<< "${EXTRA_ALLOW_GLOBS}"
+            echo "extra_allow_globs (dispatch):"
+            printf '  - %s\n' "${globs[@]}"
+          else
+            echo "extra_allow_globs (dispatch): <none>"
+          fi
+
+          # === 3) 설정 파일(.config/logs-allowlist.txt) 읽기 ===
+          #  파일 포맷:
+          #    # 주석
+          #    regex: ^logs/README\.md$
+          #    glob:  logs/**/README.md
+          if [[ -f ".config/logs-allowlist.txt" ]]; then
+            echo ".config/logs-allowlist.txt:"
+            while IFS= read -r raw || [[ -n "$raw" ]]; do
+              line="${raw#"${raw%%[![:space:]]*}"}"; line="${line%"${line##*[![:space:]]}"}"
+              [[ -z "$line" || "${line:0:1}" == "#" ]] && continue
+              key="${line%%:*}"; val="${line#*:}"
+              # trim key/val
+              key="${key#"${key%%[![:space:]]*}"}"; key="${key%"${key##*[![:space:]]}"}"
+              val="${val#"${val%%[![:space:]]*}"}"; val="${val%"${val##*[![:space:]]}"}"
+              case "$key" in
+                regex) regexes+=("$val"); echo "  + regex: $val" ;;
+                glob)  globs+=("$val");  echo "  + glob : $val" ;;
+                *)     echo "  ! ignore (unknown key): $key" ;;
+              esac
+            done < ".config/logs-allowlist.txt"
+          else
+            echo ".config/logs-allowlist.txt: <none>"
+          fi
+
+          printf "::endgroup::\n"
+
+          # === 4) 추적(Tracked) 파일 목록 ===
+          mapfile -d '' -t tracked < <(git ls-files -z -- logs || true)
+
+          if (( ${#tracked[@]} == 0 )); then
+            echo "found=" >> "$GITHUB_OUTPUT"
+            echo "No tracked files under logs/ (ok)."
+            exit 0
+          fi
+
+          # === 5) 허용 검사 ===
+          violations=()
+          for f in "${tracked[@]}"; do
+            allow=false
+
+            # (a) 정규식 허용
+            for r in "${regexes[@]}"; do
+              if [[ "$f" =~ $r ]]; then
+                allow=true
+                break
+              fi
+            done
+
+            # (b) 글롭 허용
+            if [[ "$allow" == false && ${#globs[@]} -gt 0 ]]; then
+              for g in "${globs[@]}"; do
+                if [[ "$f" == $g ]]; then
+                  allow=true
+                  break
+                fi
+              done
+            fi
+
+            if [[ "$allow" == false ]]; then
+              violations+=("$f")
+            fi
+          done
+
+          if (( ${#violations[@]} > 0 )); then
+            printf 'found<<EOF\n' >> "$GITHUB_OUTPUT"
+            printf '%s\n' "${violations[@]}" >> "$GITHUB_OUTPUT"
+            printf 'EOF\n' >> "$GITHUB_OUTPUT"
+            echo "count=${#violations[@]}" >> "$GITHUB_OUTPUT"
+
+            echo "::group::Tracked files under logs/ (NOT allowed)"
+            printf '%s\n' "${violations[@]}"
+            echo "::endgroup::"
+          else
+            echo "found=" >> "$GITHUB_OUTPUT"
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            echo "All tracked files under logs/ are allowed."
+          fi
+
+          # ENFORCE 모드 결정: dispatch면 입력값, 그 외는 enforce 고정
+          ENFORCE="enforce"
+          if [[ -n "${DISPATCH_MODE:-}" ]]; then
+            ENFORCE="${DISPATCH_MODE}"
+          fi
+          echo "mode=${ENFORCE}" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce or Report
         shell: bash
         run: |
           set -euo pipefail
-          found="$(git ls-files 'logs/*' | grep -v '^logs/.gitkeep$' || true)"
-          {
-            echo "found<<EOF"
-            echo "$found"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-      - name: Set commit status (guard-logs-ignored/no-tracked-logs)
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const found = core.getInput('found') || '';
-            const has = found.trim().length > 0;
-            const state = has ? 'failure' : 'success';
-            const desc  = has ? 'logs/ contains tracked files (except .gitkeep)' : 'no tracked files under logs/';
-            await github.request('POST /repos/{owner}/{repo}/statuses/{sha}', {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha:   context.sha,
-              state,
-              context: 'guard-logs-ignored/no-tracked-logs',
-              description: desc
-            });
-            if (has) core.setFailed('Tracked files under logs/:\n' + found);
-          found: ${{ steps.scan.outputs.found }}
+          mode="${{ steps.scan.outputs.mode }}"
+          cnt="${{ steps.scan.outputs.count }}"
+          if [[ -z "$cnt" ]]; then cnt=0; fi
+
+          if (( cnt > 0 )); then
+            if [[ "$mode" == "report" ]]; then
+              echo "::warning::logs/ 추적 파일이 ${cnt}개 있습니다 (report mode: 실패하지 않음)."
+              printf '%s\n' "${{ steps.scan.outputs.found }}"
+              exit 0
+            else
+              echo "::error::logs/ 추적 파일이 ${cnt}개 있습니다."
+              printf '%s\n' "${{ steps.scan.outputs.found }}"
+              exit 1
+            fi
+          else
+            echo "✅ No violations."
+          fi
