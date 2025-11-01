@@ -1,22 +1,134 @@
+# ============================================================
+# Contracts CI — 설정 파일(.config/contracts.json) 기반 컨트랙트 검증
+# 목적:
+#   - 프런트 산출물(HTML)에 필수 문자열이 존재하는지 PR 단계에서 스모크 검사
+#   - 필수 목록은 JSON 설정으로 관리(포트/버전/식별자 변경 시 YML 수정 불필요)
+# 트리거:
+#   - main 대상 PR (HTML/설정/YML 변경시에만 실행: 경로 필터)
+# 보안/가드:
+#   - 최소 권한(contents: read)
+#   - 동시성: 동일 ref 중복 실행 취소
+#   - 타임아웃: 5분
+# 러너:
+#   - ubuntu-latest (빠르고 안정적). PowerShell(pwsh) 사용.
+# 참고:
+#   - 설정 파일 경로: .config/contracts.json (이름 변경 시 paths와 스크립트 경로도 함께 변경)
+# ============================================================
 name: Contracts CI
+
 on:
   pull_request:
     branches: [ main ]
+    paths:
+      - '**/*.html'
+      - '.config/contracts.json'
+      - '.github/workflows/contracts-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contracts-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   contracts:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
     steps:
+      # 얕은 체크아웃(정적 검사만 필요)
       - uses: actions/checkout@v4
-      - name: Verify sentinel & port matrix
+        with:
+          fetch-depth: 1
+
+      - name: Validate contracts from .config/contracts.json
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          $htmls = Get-ChildItem -Recurse -Include *.html
-          if (-not $htmls) { throw "No HTML files found" }
-          $must = @(
-            '__G5_SENTINEL:AK7_v1.1__','AK7_API_BASE','http://localhost:5181',
-            '__G5_SENTINEL:GHMON_v1.1__','GHMON_API_BASE','http://localhost:5182',
-            '__G5_SENTINEL:ORCHMON_v1.1__','ORCHMON_API_BASE','http://localhost:5183'
-          )
-          foreach($m in $must){ if(-not ($htmls | Select-String -SimpleMatch $m)){ throw "Missing: $m"} }
-          Write-Host "OK: sentinel/ports wired"
+
+          # === 1) 설정 로드 & 스키마 최소 검증 =========================
+          $jsonPath = Join-Path $env:GITHUB_WORKSPACE '.config/contracts.json'
+          if (-not (Test-Path $jsonPath)) {
+            throw "Config not found: .config/contracts.json"
+          }
+          $cfg = Get-Content $jsonPath -Raw | ConvertFrom-Json
+
+          if (-not $cfg.html_globs -or -not ($cfg.html_globs -is [System.Collections.IEnumerable])) {
+            throw "Invalid config: 'html_globs' must be an array of glob patterns."
+          }
+          if (-not $cfg.services -or -not ($cfg.services -is [System.Collections.IEnumerable])) {
+            throw "Invalid config: 'services' must be an array."
+          }
+
+          # === 2) 검사 대상 HTML 목록 수집 =============================
+          # - globs 는 PowerShell -like 와일드카드로 매칭 (경로는 / 로 정규화)
+          $workspace = $env:GITHUB_WORKSPACE
+          $allFiles = Get-ChildItem -Path $workspace -Recurse -File -ErrorAction SilentlyContinue
+          $htmls = @()
+          foreach ($f in $allFiles) {
+            $rel = $f.FullName.Substring($workspace.Length).TrimStart('\','/').Replace('\','/')
+            if ($rel -like 'node_modules/*' -or $rel -like '.git/*') { continue }
+            foreach ($g in $cfg.html_globs) {
+              if ($rel -like $g) { $htmls += $f; break }
+            }
+          }
+          if ($htmls.Count -eq 0) { throw "No HTML files matched by html_globs in config." }
+
+          # === 3) 필수 문자열 집계(서비스별 센티널/베이스URL/식별자 + extra_required) ===
+          $required = [System.Collections.Generic.List[object]]::new()
+          $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+
+          foreach ($svc in $cfg.services) {
+            if (-not $svc.name) { throw "Invalid service item: missing 'name'." }
+
+            if ($svc.sentinel) {
+              if ($seen.Add($svc.sentinel)) { $required.Add(@{ str=$svc.sentinel; tag="$($svc.name).sentinel" }) }
+            }
+
+            if ($svc.base_urls) {
+              foreach ($u in $svc.base_urls) {
+                if ([string]::IsNullOrWhiteSpace($u)) { continue }
+                if ($seen.Add($u)) { $required.Add(@{ str=$u; tag="$($svc.name).base" }) }
+              }
+            }
+
+            if ($svc.identifiers) {
+              foreach ($id in $svc.identifiers) {
+                if ([string]::IsNullOrWhiteSpace($id)) { continue }
+                if ($seen.Add($id)) { $required.Add(@{ str=$id; tag="$($svc.name).id" }) }
+              }
+            }
+          }
+
+          if ($cfg.extra_required) {
+            foreach ($ex in $cfg.extra_required) {
+              if ([string]::IsNullOrWhiteSpace($ex)) { continue }
+              if ($seen.Add($ex)) { $required.Add(@{ str=$ex; tag='extra' }) }
+            }
+          }
+
+          if ($required.Count -eq 0) { throw "Nothing to verify: required set is empty. Please review config." }
+
+          # === 4) 검사 실행(누락 항목 집계 후 단일 실패) ==================
+          $paths = $htmls | ForEach-Object FullName
+          $missing = New-Object System.Collections.Generic.List[object]
+
+          foreach ($req in $required) {
+            $hit = Select-String -Path $paths -SimpleMatch $req.str -Quiet
+            if (-not $hit) {
+              $missing.Add($req)
+            }
+          }
+
+          if ($missing.Count -gt 0) {
+            Write-Host "::group::Missing contract strings"
+            foreach ($m in $missing) {
+              $msg = "{0}  ({1})" -f $m.str, $m.tag
+              Write-Host "::error::missing: $msg"
+            }
+            Write-Host "::endgroup::"
+            throw "Contract check failed: $($missing.Count) item(s) missing."
+          }
+
+          Write-Host "✅ OK: all required strings found in HTML set. (checked=$($paths.Count), rules=$($required.Count))"
