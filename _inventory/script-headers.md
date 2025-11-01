@@ -1,6 +1,6 @@
 # Script Header Comments (scripts/g5)
 
-> Generated @ 2025-11-01 16:57:53+00:00 (`scripts/g5/**/*.ps1`, head comments only)
+> Generated @ 2025-11-01 17:00:39+00:00 (`scripts/g5/**/*.ps1`, head comments only)
 
 ## `scripts/g5/ak-audit.ps1`
 
