@@ -81,6 +81,7 @@ jobs:
 
 smoke:
     name: Run smoke (dispatch / PR / comment)
+    if: github.actor != 'github-actions[bot]'
     needs: [inventory]
     runs-on: windows-latest
     steps:
@@ -97,19 +98,17 @@ smoke:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-
           $dispatch = [bool]::Parse("${{ inputs.test_dispatch }}")
           $pr       = [bool]::Parse("${{ inputs.test_pr }}")
           $comment  = [bool]::Parse("${{ inputs.test_comment }}")
           $keep     = [bool]::Parse("${{ inputs.keep_pr }}")
-      
+
           ./scripts/g5/wf-allround-tester.ps1 `
             -Repo "${{ github.repository }}" `
             -TestDispatch:$dispatch `
             -TestPR:$pr `
             -TestIssueComment:$comment `
             -KeepPr:$keep
-
 
 
       # 실행 결과가 뜰 때까지 적당히 기다리고 수집(MD/CSV/JSON 생성)
@@ -124,6 +123,7 @@ smoke:
             -PrNumber ${{ steps.trigger.outputs.pr_number }} `
             -Branch   "${{ steps.trigger.outputs.branch }}" `
             -Mode     "${{ inputs.mode }}"
+
 
 
       - name: Upload smoke artifacts
