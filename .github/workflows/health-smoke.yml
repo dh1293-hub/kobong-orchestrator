@@ -1,100 +1,170 @@
-name: health/smoke
+# ============================================================
+# Smoke / Health — 초경량 헬스 체크(여러 엔드포인트 일괄 확인)
+# 목적:
+#   - 수동/예약으로 여러 헬스 URL을 빠르게 확인(HTTP 200/본문 포함 여부)
+#   - 실패 시 enforce(잡 실패) 또는 report(경고만) 모드 선택
+# 트리거:
+#   - workflow_dispatch(수동). 필요하다면 schedule 주석 해제.
+# 보안/가드:
+#   - 최소 권한(contents: read)
+#   - 동시성 취소, 5분 타임아웃, Ubuntu 러너(빠르고 안정)
+# 참고:
+#   - YAML 파서 오류 방지: 모든 스크립트는 run: | 블록, 탭 금지(스페이스만)
+#   - 입력에 여러 줄을 넣을 때는 줄 단위로 파싱합니다.
+# ============================================================
+name: smoke/health
 
 on:
-  schedule:
-    - cron: "0 0 * * *"     # 09:00 KST
   workflow_dispatch:
     inputs:
-      base5182:
-        description: "override GHMON base (empty -> http://localhost:5182)"
+      targets:
+        description: |-
+          헬스 체크 대상 URL(한 줄 하나).
+          예)
+            http://localhost:5181/health
+            http://localhost:5182/health
+            http://localhost:5183/health
         required: false
-        default: ""
-      base5199:
-        description: "override GHMON MOCK base (empty -> http://localhost:5199)"
+        type: string
+        default: |
+          http://localhost:5181/health
+          http://localhost:5182/health
+          http://localhost:5183/health
+      expect_substr:
+        description: '본문에 포함되어야 할 문자열(선택). 없으면 상태코드만 검사'
         required: false
-        default: ""
+        type: string
+        default: ''
+      timeout_sec:
+        description: '요청 타임아웃(초)'
+        required: true
+        type: string
+        default: '5'
+      mode:
+        description: '위반 시 동작: enforce=실패, report=경고만'
+        required: true
+        type: choice
+        options: [enforce, report]
+        default: enforce
+  # schedule:
+  #   - cron: '*/15 * * * *'   # 15분마다(필요 시 주석 해제)
 
 permissions:
   contents: read
 
 concurrency:
-  group: health-smoke-${{ github.ref }}
-  cancel-in-progress: false
+  group: smoke-health-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  ping:
-    runs-on: [self-hosted, ghmon-safe]
-    # PR(특히 fork)로는 self-hosted 실행 금지
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
-    env:
-      GH_TOKEN: ${{ github.token }}
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
-      # 0) 로컬 액션 부트스트랩 (.github/actions만 전개)
-      - name: Bootstrap local actions (no git)
-        shell: pwsh
+      - name: Parse inputs
+        id: parse
+        shell: bash
         run: |
-          $ErrorActionPreference='Stop'
-          $repo='${{ github.repository }}'
-          $ref ='${{ github.sha }}'
-          $zip = Join-Path $env:RUNNER_TEMP 'repo.zip'
-          $tmp = Join-Path $env:RUNNER_TEMP 'repo'
-          if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
-          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-          $Headers=@{
-            Authorization="Bearer $env:GH_TOKEN"
-            "X-GitHub-Api-Version"="2022-11-28"
-            "User-Agent"="bootstrap-actions"
-            Accept="application/vnd.github+json"
-          }
-          $owner,$name = $repo.Split('/')
-          $url = "https://api.github.com/repos/$owner/$name/zipball/$ref"
-          Invoke-WebRequest -Uri $url -Headers $Headers -OutFile $zip
-          Expand-Archive -Path $zip -DestinationPath $tmp -Force
-          $root = Get-ChildItem -Directory $tmp | Select-Object -First 1
-          $dst  = Join-Path $env:GITHUB_WORKSPACE '.github'
-          New-Item -ItemType Directory -Force -Path $dst | Out-Null
-          Copy-Item -Path (Join-Path $root.FullName '.github\actions') -Destination $dst -Recurse -Force
-          Remove-Item $zip -Force
+          set -euo pipefail
+          # 입력 문자열을 안전하게 줄 단위 분해(앞뒤 공백/빈줄 제거)
+          readarray -t URLS < <(printf '%s\n' "${{ github.event.inputs.targets }}" | sed '/^[[:space:]]*$/d')
+          if (( ${#URLS[@]} == 0 )); then
+            echo "::error::No targets provided"; exit 1
+          fi
+          printf 'urls<<EOF\n' >> "$GITHUB_OUTPUT"
+          printf '%s\n' "${URLS[@]}" >> "$GITHUB_OUTPUT"
+          printf 'EOF\n' >> "$GITHUB_OUTPUT"
+          echo "expect=${{ github.event.inputs.expect_substr }}"   >> "$GITHUB_OUTPUT"
+          echo "timeout=${{ github.event.inputs.timeout_sec }}"    >> "$GITHUB_OUTPUT"
+          echo "mode=${{ github.event.inputs.mode }}"              >> "$GITHUB_OUTPUT"
 
-      # 1) (옵션) 소스 전개
-      - uses: ./.github/actions/zip-fetch
-        with:
-          ref: ${{ github.sha }}
-
-      # 2) localhost 기본값 해석 (입력 비우면 localhost)
-      - name: Resolve base URLs (self-hosted defaults)
-        id: bases
-        shell: pwsh
-        env:
-          IN_5182: ${{ github.event.inputs.base5182 }}
-          IN_5199: ${{ github.event.inputs.base5199 }}
+      - name: Probe endpoints (HTTP)
+        id: probe
+        shell: bash
         run: |
-          $b1 = if ([string]::IsNullOrWhiteSpace($env:IN_5182)) { 'http://localhost:5182' } else { $env:IN_5182 }
-          $b2 = if ([string]::IsNullOrWhiteSpace($env:IN_5199)) { 'http://localhost:5199' } else { $env:IN_5199 }
-          "B1=$b1" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "B2=$b2" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          set -euo pipefail
+          IFS=$'\n' read -r -d '' -a URLS < <(printf '%s\0' "${{ steps.parse.outputs.urls }}")
+          EXPECT="${{ steps.parse.outputs.expect }}"
+          TOUT="${{ steps.parse.outputs.timeout }}"
+          mkdir -p _inventory/health-smoke
+          ok=(); bad=()
 
-      # 3) 실제 헬스 체크
-      - name: Ping GHMON 5182 / 5199
-        shell: pwsh
-        run: |
-          $ErrorActionPreference='Continue'
-          $B1='${{ steps.bases.outputs.B1 }}'
-          $B2='${{ steps.bases.outputs.B2 }}'
-          function Test-Health($base){
-            try { (Invoke-RestMethod "$base/api/ghmon/health" -TimeoutSec 8).ok } catch { $false }
-          }
-          $ok1 = Test-Health $B1
-          $ok2 = Test-Health $B2
-          if (-not (Test-Path logs)) { New-Item -ItemType Directory -Force -Path logs | Out-Null }
-          "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] 5182=$ok1  5199=$ok2  B1=$B1  B2=$B2" |
-            Tee-Object -FilePath "logs/health-smoke.log" -Append
-          if (-not ($ok1 -and $ok2)) { Write-Error "health failed"; exit 1 }
+          for u in "${URLS[@]}"; do
+            u="$(echo "$u" | xargs)"   # trim
+            [[ -z "$u" ]] && continue
 
-      # 4) 항상 로그 업로드 (409 방지: 유일 이름)
-      - uses: ./.github/actions/publish-logs
+            # HTTP 요청(HEAD 우선, 실패 시 GET로 재시도) — 짧은 타임아웃
+            code="$(curl -fsSLI --max-time "$TOUT" -o /dev/null -w '%{http_code}' "$u" || true)"
+            body=""
+            if [[ -z "$code" || "$code" -ge 400 || "$code" -eq 000 ]]; then
+              body="$(curl -fsSL --max-time "$TOUT" "$u" 2>/dev/null || true)"
+              if [[ -z "$body" ]]; then code="000"; fi
+            else
+              # HEAD 2xx라면 본문은 생략(옵션)
+              body=""
+            fi
+
+            pass=false
+            if [[ "$code" =~ ^2[0-9][0-9]$ ]]; then
+              if [[ -n "$EXPECT" ]]; then
+                if printf '%s' "$body" | grep -Fq -- "$EXPECT"; then pass=true; fi
+              else
+                pass=true
+              fi
+            fi
+
+            if $pass; then
+              echo "OK  $u  (code=$code)"
+              ok+=("$u")
+            else
+              echo "::error::FAIL $u (code=${code:-NA})"
+              if [[ -n "$EXPECT" && -n "$body" ]]; then
+                echo "::notice title=Body snippet::$(printf '%s' "$body" | head -c 200)"
+              fi
+              bad+=("$u")
+            fi
+          done
+
+          # 요약 파일 생성
+          {
+            echo "# Health Smoke Summary"
+            echo ""
+            echo "- OK    : ${#ok[@]}"
+            echo "- Failed: ${#bad[@]}"
+            echo ""
+            echo "## Targets"
+            for x in "${ok[@]}";  do echo "- ✅ $x"; done
+            for x in "${bad[@]}"; do echo "- ❌ $x"; done
+          } > _inventory/health-smoke/summary.md
+
+          # 출력값
+          echo "ok=${#ok[@]}"     >> "$GITHUB_OUTPUT"
+          echo "fail=${#bad[@]}"  >> "$GITHUB_OUTPUT"
+
+      - name: Upload summary
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          logdir: logs
-          name: health-logs
+          name: health-smoke-${{ github.run_id }}
+          path: _inventory/health-smoke/summary.md
+          if-no-files-found: warn
+
+      - name: Enforce or report
+        shell: bash
+        run: |
+          set -euo pipefail
+          mode="${{ steps.parse.outputs.mode }}"
+          fail="${{ steps.probe.outputs.fail }}"
+          [[ -z "$fail" ]] && fail=0
+          if (( fail > 0 )); then
+            if [[ "$mode" == "report" ]]; then
+              echo "::warning::Health failures: $fail (report mode: not failing)."
+              exit 0
+            else
+              echo "::error::Health failures: $fail"
+              exit 1
+            fi
+          else
+            echo "✅ All health checks passed."
+          fi
