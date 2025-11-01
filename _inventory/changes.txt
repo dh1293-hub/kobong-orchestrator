@@ -1,4 +1,4 @@
 ADDED
 CHANGED
-scripts/g5/wf-inventory.ps1
+.github/workflows/wf-allround-tester.yml
 REMOVED
