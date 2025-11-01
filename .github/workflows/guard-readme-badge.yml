@@ -1,46 +1,33 @@
 # ============================================================
-# Guard: README 배지(Shields/Actions 등) 존재·유효성 검증
+# Guard: README 릴리즈 배지 링크 포맷 검증
 # 목적:
-#   - README.md 안의 필수 배지(예: CI, Release, License)가 모두 존재하는지 점검
-#   - (선택) 배지 URL의 HTTP 응답(200)을 확인하여 죽은 링크 차단
-# 설정:
-#   - .config/readme-badges.json 에서 필수/선택 배지 규칙을 선언(없으면 안전한 기본값 사용)
-#   - workflow_dispatch 입력으로 report/enforce 모드 선택, HTTP 검증 on/off 가능
+#   - README.md 안의 "releases/tag/vX.Y.Z" 배지 링크가
+#     *정상 포맷*인지 확인하고,
+#     "v0\.1\.11"처럼 점(.) 앞에 백슬래시를 넣은 *잘못된* 패턴을 차단.
 # 트리거:
-#   - PR / main 푸시 (README 또는 설정이 바뀔 때만 실행: 경로 필터)
+#   - README 또는 워크플로/스크립트가 바뀔 때만 실행(경로 필터)
 # 보안/가드:
 #   - 최소 권한(contents: read)
-#   - 동시성 취소 / 타임아웃 5분
-# 구현 메모:
-#   - YAML 파서 오류 방지: 모든 스크립트는 run: | 블록 + 스페이스 들여쓰기(탭 금지)
-#   - 파싱은 Python3(기본 탑재)로 수행 → 복잡한 마크다운 정규식보다 안정
+#   - 동시성 취소 / 3분 타임아웃 / 얕은 체크아웃
+# 참고:
+#   - YAML 파서 오류 방지: 모든 스크립트는 run: | 블록, 탭 금지(스페이스만)
 # ============================================================
 name: guard/readme-badge
 
 on:
   pull_request:
     paths:
-      - 'README.md'
-      - '.config/readme-badges.json'
-      - '.github/workflows/guard-readme-badge.yml'
+      - README.md
+      - .github/workflows/**
+      - scripts/g5/**
+      - .github/workflows/guard-readme-badge.yml
   push:
     branches: [ main ]
     paths:
-      - 'README.md'
-      - '.config/readme-badges.json'
-      - '.github/workflows/guard-readme-badge.yml'
-  workflow_dispatch:
-    inputs:
-      mode:
-        description: "위반 시 동작"
-        type: choice
-        options: [enforce, report]
-        default: enforce
-      verify_http:
-        description: "배지 URL의 HTTP(HEAD) 응답 확인(느릴 수 있음)"
-        type: choice
-        options: [true, false]
-        default: false
+      - README.md
+      - .github/workflows/**
+      - scripts/g5/**
+      - .github/workflows/guard-readme-badge.yml
 
 permissions:
   contents: read
@@ -50,11 +37,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    env:
-      REPO: ${{ github.repository }}
+    timeout-minutes: 3
 
     steps:
       - name: Checkout (shallow)
@@ -62,214 +47,24 @@ jobs:
         with:
           fetch-depth: 1
 
-      # 1) 설정 로드(없으면 기본값), README 파싱 → badges_found.json 생성
-      - name: Parse README & load config
-        id: parse
+      # ⛔ README 배지에서 "v0\.1\.11"처럼 '버전 내부의 점'에 백슬래시를 넣은 잘못된 링크 감지
+      #   올바른 예: .../releases/tag/v0.1.11
+      #   잘못된 예: .../releases/tag/v0\.1\.11 (← 이 패턴을 *금지*)
+      - name: Fail if version dots are escaped inside the link (e.g. v0\.1\.11)
         shell: bash
         run: |
           set -euo pipefail
-
-          mkdir -p _tmp
-          # === 기본 규칙(설정 파일이 없을 경우) =========================
-          cat > _tmp/default_config.json <<'JSON'
-          {
-            "_comment": "없으면 사용하는 안전 기본값(필요 최소만)",
-            "required": [
-              { "alt_match": "ci",       "url_match": "actions/workflows/ci.yml/badge.svg" },
-              { "alt_match": "license",  "url_match": "img.shields.io/github/license" }
-            ],
-            "optional": [
-              { "alt_match": "release",  "url_match": "img.shields.io/github/v/release" }
-            ],
-            "verify_http": false
-          }
-          JSON
-
-          # === 외부 설정 파일 합치기(.config/readme-badges.json) ========
-          cfg="_tmp/default_config.json"
-          if [ -f ".config/readme-badges.json" ]; then
-            # 형식검사(간단): 키 존재 여부만 확인 (jq가 없으면 python으로 validate)
-            python3 - <<'PY' ".config/readme-badges.json"
-import sys, json, pathlib
-p = pathlib.Path(sys.argv[1])
-data = json.loads(p.read_text(encoding="utf-8"))
-# 아주 느슨한 검증
-for key in ("required","optional"):
-    if key in data and not isinstance(data[key], list):
-        raise SystemExit(f"Invalid config: '{key}' must be an array")
-print("OK")
-PY
-            cfg=".config/readme-badges.json"
-          fi
-
-          # === README 파싱: 마크다운 이미지 배지 추출 ===================
-          if [ ! -f README.md ]; then
-            echo "found_json=[]" >> "$GITHUB_OUTPUT"
-            echo "cfg=$cfg" >> "$GITHUB_OUTPUT"
-            echo "::error::README.md not found"
+          if grep -qE 'releases/tag/v[0-9]+\\\.[0-9]+\\\.[0-9]+' README.md; then
+            echo "::error::Escaped version (e.g. v0\\.1\\.11) found in README badge link."
             exit 1
           fi
 
-          python3 - <<'PY' README.md "$cfg" > _tmp/badges_found.json
-import sys, json, re, pathlib
-readme = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-cfgp   = pathlib.Path(sys.argv[2])
-cfg    = json.loads(cfgp.read_text(encoding="utf-8"))
-
-# Markdown 이미지 패턴: ![alt](url "title")
-pattern = re.compile(r'!\[(?P<alt>[^\]]*)\]\((?P<url>[^)\s]+)(?:\s+"[^"]*")?\)', re.IGNORECASE)
-found = []
-for m in pattern.finditer(readme):
-    alt = (m.group("alt") or "").strip()
-    url = (m.group("url") or "").strip()
-    # 흥미 없는 data:, svg inline 등은 제외 가능(옵션) — 일단 수집만
-    found.append({"alt": alt, "url": url})
-print(json.dumps({"badges": found, "config_used": str(cfgp), "config": cfg}, ensure_ascii=False))
-PY
-
-          echo "found_json=$(cat _tmp/badges_found.json | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
-          echo "cfg=$cfg" >> "$GITHUB_OUTPUT"
-
-      # 2) 규칙 검증(존재/패턴 매칭) + (선택) HTTP 검증 → 결과 요약 출력/아티팩트
-      - name: Validate badges (presence / optional HTTP)
-        id: validate
-        shell: bash
-        env:
-          DISPATCH_MODE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode || '' }}
-          DISPATCH_HTTP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.verify_http || '' }}
-        run: |
-          set -euo pipefail
-
-          jqbin="$(command -v jq || true)"
-          if [ -z "$jqbin" ]; then
-            # jq가 없으면 Python으로 후처리
-            python3 - <<'PY' _tmp/badges_found.json > _tmp/validate_input.json
-import sys, json, pathlib
-obj = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
-print(json.dumps(obj))
-PY
-          else
-            cp _tmp/badges_found.json _tmp/validate_input.json
-          fi
-
-          python3 - <<'PY' "_tmp/validate_input.json" "${DISPATCH_MODE:-}" "${DISPATCH_HTTP:-}" > _tmp/summary.json
-import sys, json, pathlib, re, subprocess
-
-inp = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
-mode_inp = (sys.argv[2] or '').strip().lower()
-http_inp = (sys.argv[3] or '').strip().lower()
-
-badges = inp.get("badges", [])
-cfg    = inp.get("config", {})
-reqs   = cfg.get("required", [])
-opts   = cfg.get("optional", [])
-verify_http = cfg.get("verify_http", False)
-
-if http_inp in ("true","false"):
-    verify_http = (http_inp == "true")
-mode = mode_inp if mode_inp in ("enforce","report") else "enforce"
-
-def contains(hay, needle):
-    return (needle or "").lower() in (hay or "").lower()
-
-def match_rule(badges, rule):
-    # 규칙: alt_match(부분일치) 또는 url_match(부분일치)가 하나라도 매칭되면 OK
-    am = (rule.get("alt_match") or "").strip()
-    um = (rule.get("url_match") or "").strip()
-    for b in badges:
-        if (am and contains(b.get("alt"), am)) or (um and contains(b.get("url"), um)):
-            return True, b
-    return False, None
-
-missing = []
-matched = []
-
-for r in reqs:
-    ok, hit = match_rule(badges, r)
-    if ok: matched.append({"rule": r, "hit": hit})
-    else:  missing.append({"rule": r})
-
-# Optional도 통계만
-opt_hit = []
-for r in opts:
-    ok, hit = match_rule(badges, r)
-    if ok: opt_hit.append({"rule": r, "hit": hit})
-
-dead = []
-if verify_http:
-    # 중복 URL 제거 후 HEAD 요청
-    seen = set()
-    urls = []
-    for x in matched + opt_hit:
-        u = x["hit"]["url"]
-        if u and (u not in seen):
-            seen.add(u); urls.append(u)
-    for u in urls:
-        try:
-            # 5초 타임아웃, 리다이렉트 허용
-            ret = subprocess.run(
-                ["curl","-fsSLI","--max-time","5","-o","/dev/null","-w","%{http_code}", u],
-                check=False, capture_output=True, text=True
-            )
-            code = ret.stdout.strip()
-            if not code or not code.isdigit() or int(code) >= 400:
-                dead.append({"url": u, "code": code or "NA"})
-        except Exception as e:
-            dead.append({"url": u, "code": "ERR"})
-summary = {
-  "mode": mode, "verify_http": verify_http,
-  "required_missing": missing, "required_matched": matched,
-  "optional_matched": opt_hit, "http_dead": dead,
-  "found_count": len(badges)
-}
-print(json.dumps(summary))
-PY
-
-          cat _tmp/summary.json | jq . || cat _tmp/summary.json
-
-          # 아웃풋/리포트 파일 생성
-          mkdir -p _inventory/readme-badge
-          cp _tmp/badges_found.json _inventory/readme-badge/badges_found.json
-          cp _tmp/summary.json      _inventory/readme-badge/summary.json
-
-          # GITHUB_OUTPUT 세팅
-          missing_cnt=$(jq -r '.required_missing | length' _tmp/summary.json || echo "0")
-          dead_cnt=$(jq -r '.http_dead | length' _tmp/summary.json || echo "0")
-          mode=$(jq -r '.mode' _tmp/summary.json || echo "enforce")
-          echo "missing_cnt=$missing_cnt" >> "$GITHUB_OUTPUT"
-          echo "dead_cnt=$dead_cnt"       >> "$GITHUB_OUTPUT"
-          echo "mode=$mode"               >> "$GITHUB_OUTPUT"
-
-      - name: Upload report artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-            name: readme-badge-${{ github.run_id }}
-            path: _inventory/readme-badge
-            if-no-files-found: warn
-
-      - name: Enforce / Report
+      # ✅ 정상 링크가 반드시 하나 이상 있어야 함 (vX.Y.Z 형태)
+      - name: Ensure a clean version link exists (vX.Y.Z)
         shell: bash
         run: |
           set -euo pipefail
-          m="${{ steps.validate.outputs.mode }}"
-          miss="${{ steps.validate.outputs.missing_cnt }}"
-          dead="${{ steps.validate.outputs.dead_cnt }}"
-          if [ -z "$miss" ]; then miss=0; fi
-          if [ -z "$dead" ]; then dead=0; fi
-
-          if [ "$m" = "report" ]; then
-            if [ "$miss" -gt 0 ] || [ "$dead" -gt 0 ]; then
-              echo "::warning::README badge issues — missing=$miss, dead=$dead (report mode: not failing)."
-            else
-              echo "README badge OK (report mode)."
-            fi
-            exit 0
-          else
-            if [ "$miss" -gt 0 ] || [ "$dead" -gt 0 ]; then
-              echo "::error::README badge failed — missing=$miss, dead=$dead"
-              exit 1
-            else
-              echo "✅ README badge OK (enforce)."
-            fi
+          if ! grep -qE 'releases/tag/v[0-9]+\.[0-9]+\.[0-9]+' README.md; then
+            echo "::error::No clean release tag link (vX.Y.Z) found in README."
+            exit 1
           fi
