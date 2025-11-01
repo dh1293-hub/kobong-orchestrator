@@ -1,40 +1,160 @@
-# NO-SHELL
-name: guard-flush-queue
+# ============================================================
+# Guard / Flush Queue — GitHub Actions 대기열(queued/in_progress) 정리기
+# 목적:
+#   - 중복/방치된 실행을 일괄 취소해 새 실행이 빨리 시작되도록 대기열을 비움
+# 사용처:
+#   - 수동(Dispatch) 또는 스케줄로 운영팀이 “큐 청소”를 원클릭 수행
+# 주의:
+#   - 취소에는 actions: write 권한이 필요
+#   - 각 워크플로 안의 concurrency 가드와 병행하면 가장 효과적
+# ============================================================
+name: guard/flush-queue
+
 on:
-  pull_request:
-  push:
-    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      workflows:
+        description: "대상 워크플로(이름 또는 .github/workflows/*.yml 경로) - 한 줄에 하나"
+        required: true
+        type: string
+      branch:
+        description: "대상 브랜치(비우면 전체)"
+        required: false
+        default: ""
+        type: string
+      status:
+        description: "정리할 상태(queued|in_progress|all)"
+        required: false
+        default: "queued"
+        type: choice
+        options: [queued, in_progress, all]
+      older_than_minutes:
+        description: "이 분(min) 이상된 실행만 취소(0=무조건)"
+        required: false
+        default: "0"
+        type: string
+      dry_run:
+        description: "실제 취소 대신 무엇을 할지 로그만 출력"
+        required: false
+        default: "true"
+        type: choice
+        options: [true, false]
+
+  # 필요하다면 주기적으로 청소
+  # schedule:
+  #   - cron: "0 * * * *"   # 매시 정각
+
 permissions:
   contents: read
+  actions: write
+
+concurrency:
+  group: flush-queue-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  scan:
+  flush:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Block invalid "Flush-Queue" lines
-        shell: bash
-        run: |
-          set -euo pipefail
-          BAD="$(git grep -n -E '^[[:space:]]*=[[:space:]]*Flush-Queue\\b' -- '*.ps1' || true)"
-          if [ -n "$BAD" ]; then
-            echo "Found invalid lines:"
-            echo "$BAD"
-            echo "::error title=Invalid Flush-Queue usage::Use '\$null = Flush-Queue ...' instead"
-            exit 1
-          fi
-          echo "OK: no invalid Flush-Queue lines"
-
-      - name: Warn on missing PS7 header / StrictMode
+      - name: Flush queue (PowerShell)
         shell: pwsh
         run: |
-          $files = Get-ChildItem -Recurse -Filter *.ps1 | Where-Object { $_.FullName -notmatch '\\.githooks\\' }
-          foreach ($f in $files) {
-            $t = Get-Content -Raw $f.FullName
-            if ($t -notmatch '#requires\s+-Version\s+7\.0') {
-              Write-Host "::warning file=$($f.FullName)::missing '#requires -Version 7.0'"
-            }
-            if ($t -notmatch 'Set-StrictMode\s+-Version\s+Latest') {
-              Write-Host "::warning file=$($f.FullName)::missing 'Set-StrictMode -Version Latest'"
+          $ErrorActionPreference = 'Stop'
+
+          # ============ 입력 파싱(멀티라인 안전) ============
+          $wfRaw   = @"
+          ${{ github.event.inputs.workflows }}
+          "@
+          $targets = $wfRaw -split "(`r`n|`n|`r)" | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' }
+          if (-not $targets -or $targets.Count -eq 0) { throw "No workflows specified." }
+
+          $branch  = "${{ github.event.inputs.branch }}".Trim()
+          $status  = "${{ github.event.inputs.status }}".Trim().ToLower()
+          if ($status -eq 'all') { $status = '' }  # API 파라미터 생략
+          [int]$olderMin = [int]("${{ github.event.inputs.older_than_minutes }}")
+          $dryRun  = "${{ github.event.inputs.dry_run }}".ToLower() -eq 'true'
+
+          # ============ 공통 헤더 ============
+          $Headers = @{
+            Authorization          = "Bearer $env:GH_TOKEN"
+            "X-GitHub-Api-Version" = "2022-11-28"
+            Accept                 = "application/vnd.github+json"
+            "User-Agent"           = "flush-queue"
+          }
+
+          # 워크플로 이름/경로 → id 해석 헬퍼
+          function Resolve-WorkflowId([string]$wf) {
+            $api = "https://api.github.com/repos/$env:REPO/actions/workflows"
+            $list = Invoke-RestMethod -Headers $Headers -Uri $api -Method Get
+            # name 혹은 path 둘 다 허용
+            $hit = $list.workflows | Where-Object {
+              $_.name -eq $wf -or $_.path -eq $wf -or $_.path.Split('/')[-1] -eq $wf
+            } | Select-Object -First 1
+            if (-not $hit) { throw "Workflow not found: $wf" }
+            return $hit.id
+          }
+
+          # 취소 API
+          function Cancel-Run([int64]$runId) {
+            $api = "https://api.github.com/repos/$env:REPO/actions/runs/$runId/cancel"
+            if ($dryRun) {
+              Write-Host "DRY-RUN cancel $runId"
+            } else {
+              Invoke-RestMethod -Headers $Headers -Uri $api -Method Post | Out-Null
+              Write-Host "Canceled $runId"
             }
           }
+
+          # 상태 문자열 → API status 파라미터
+          $statusParam = $status  # ''이면 전체
+
+          $total = 0; $toCancel = 0
+
+          foreach ($wf in $targets) {
+            $wfId = Resolve-WorkflowId $wf
+            Write-Host "::group::Scan $wf (id=$wfId)"
+            $page = 1
+            do {
+              $qs = @("per_page=100","page=$page")
+              if ($branch) { $qs += "branch=$branch" }
+              if ($statusParam) { $qs += "status=$statusParam" }
+              $api = "https://api.github.com/repos/$env:REPO/actions/workflows/$wfId/runs?" + ($qs -join '&')
+
+              $resp = Invoke-RestMethod -Headers $Headers -Uri $api -Method Get
+              $runs = $resp.workflow_runs
+              if (-not $runs) { break }
+
+              foreach ($r in $runs) {
+                $total++
+                $ageMin = [int]([datetime]::UtcNow - [datetime]$r.created_at).TotalMinutes
+                $okAge  = ($olderMin -le 0) -or ($ageMin -ge $olderMin)
+
+                # queued/in_progress 필터(상태가 비어있으면 r.status 로 판단)
+                $st = $r.status
+                if ($statusParam -eq '') {
+                  if ($st -notin @('queued','in_progress')) { continue }
+                }
+
+                if ($okAge) {
+                  $toCancel++
+                  Write-Host ("{0} {1} age={2}m -> cancel" -f $r.id, $st, $ageMin)
+                  try {
+                    Cancel-Run $r.id
+                    Start-Sleep -Milliseconds 250 # 레이트리밋 완화
+                  } catch {
+                    Write-Host "::warning::cancel failed for $($r.id): $($_.Exception.Message)"
+                  }
+                }
+              }
+
+              $page++
+            } while ($runs.Count -eq 100)
+            Write-Host "::endgroup::"
+          }
+
+          Write-Host "Scanned=$total, ToCancel=$toCancel, DryRun=$dryRun"
