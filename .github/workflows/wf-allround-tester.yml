@@ -269,5 +269,3 @@ jobs:
           # 승인 필요 없다면 바로 auto-merge 대기 상태 진입, 필요하면 승인 후 자동 머지
           gh pr merge $pr --squash --auto
           Write-Host "Auto-merge enabled for PR #$pr"
-
-
