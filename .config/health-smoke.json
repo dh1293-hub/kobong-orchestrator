@@ -1,0 +1,8 @@
+{
+  "_comment": "헬스 스모크 URL 선언. 한 줄 하나씩 URL.",
+  "urls": [
+    "http://localhost:5181/health",
+    "http://localhost:5182/health",
+    "http://localhost:5183/health"
+  ]
+}
