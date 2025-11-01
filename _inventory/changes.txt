@@ -1,4 +1,4 @@
 ADDED
 CHANGED
-.github/workflows/guard-readme-badge.yml
 REMOVED
+.github/workflows/guard-sentinel.yml
