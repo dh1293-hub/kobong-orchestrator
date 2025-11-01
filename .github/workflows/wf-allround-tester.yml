@@ -119,17 +119,12 @@ jobs:
           $script = Join-Path $env:GITHUB_WORKSPACE 'scripts/g5/AllRound-WF-Tester.ps1'
           if (-not (Test-Path $script)) {
             Write-Host "== DEBUG: repo root = $env:GITHUB_WORKSPACE"
-            Write-Host "== DEBUG: listing scripts/g5"
             Get-ChildItem -Force -Recurse (Join-Path $env:GITHUB_WORKSPACE 'scripts/g5') -ErrorAction SilentlyContinue
             throw "Not found: $script"
           }
-      
-          $pr  = [int]"${{ steps.trigger.outputs.pr_number }}"
-          $br  = "${{ steps.trigger.outputs.branch }}"
-          $mod = "${{ inputs.mode }}"
-      
-          # 절대경로로 안전 호출
-          pwsh -NoProfile -File $script -PrNumber $pr -Branch $br -Mode $mod
+          $pr = [int]"${{ steps.trigger.outputs.pr_number }}"
+          $br = "${{ steps.trigger.outputs.branch }}"
+          pwsh -NoProfile -File $script -PrNumber $pr -Branch $br -Mode full
 
 
       - name: Upload smoke artifacts
@@ -198,13 +193,24 @@ jobs:
         run: |
           git config user.name  "wf-allround-bot"
           git config user.email "wf-allround-bot@users.noreply.github.com"
+      
           $branch = "bot/wf-inventory-${{ github.run_id }}"
           git checkout -b $branch
+      
           git add -f _inventory/*
-          if (git diff --cached --quiet) { Write-Host "No changes"; exit 0 }
+      
+          # 🔧 변경 여부는 종료코드로 판정 (0 = 차이 없음)
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "No changes in _inventory → skip PR."
+            exit 0
+          }
+      
           git commit -m "[WF-TEST] _inventory snapshot (run=${{ github.run_id }})"
           git push origin $branch
+      
           $base = gh repo view --json defaultBranchRef -q .defaultBranchRef.name
           gh pr create --base $base --head $branch `
             --title "[WF-TEST] _inventory snapshot ${{ github.run_id }}" `
-            --body  "자동 반영"
+            --body  "WF Allround Tester가 생성한 인벤토리/리포트를 자동 반영합니다."
+
