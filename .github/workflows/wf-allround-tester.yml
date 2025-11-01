@@ -109,23 +109,41 @@ jobs:
           }
           ./scripts/g5/wf-allround-tester.ps1 @params
 
-      - name: Collect runs & checks
+      - name: Collect runs & checks (inline)
         if: ${{ steps.trigger.outputs.pr_number && steps.trigger.outputs.pr_number != '0' }}
         id: collect
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $script = Join-Path $env:GITHUB_WORKSPACE 'scripts/g5/AllRound-WF-Tester.ps1'
-          if (-not (Test-Path $script)) {
-            Write-Host "== DEBUG: repo root = $env:GITHUB_WORKSPACE"
-            Get-ChildItem -Force -Recurse (Join-Path $env:GITHUB_WORKSPACE 'scripts/g5') -ErrorAction SilentlyContinue
-            throw "Not found: $script"
+          $ErrorActionPreference = 'Stop'
+          $repo   = "${{ github.repository }}"
+          $prNum  = [int]"${{ steps.trigger.outputs.pr_number }}"
+          $branch = "${{ steps.trigger.outputs.branch }}"
+      
+          # PR 최신 커밋과 체크 결과 수집
+          $json = gh pr view $prNum -R $repo --json number,headRefName,headRefOid,mergeable,statusCheckRollup
+          $o = $json | ConvertFrom-Json
+          $checks = @($o.statusCheckRollup)
+      
+          $ok   = ($checks | Where-Object { $_.state -eq 'SUCCESS' }).Count
+          $fail = ($checks | Where-Object { $_.state -in @('FAILURE','ERROR','CANCELLED','TIMED_OUT') }).Count
+          $pend = ($checks | Where-Object { $_.state -in @('PENDING','IN_PROGRESS','QUEUED') }).Count
+      
+          New-Item -ItemType Directory -Force -Path _inventory/wf-allround | Out-Null
+          $md = @()
+          $md += "# WF Allround Smoke Result"
+          $md += ""
+          $md += "* PR: #$($o.number) (branch `$branch`)"
+          $md += "* Commit: $($o.headRefOid)"
+          $md += "* Checks: success=$ok, pending=$pend, failed=$fail"
+          $md += ""
+          foreach ($c in $checks) {
+            $md += "- **$($c.name)** : $($c.state)"
           }
-          $pr = [int]"${{ steps.trigger.outputs.pr_number }}"
-          $br = "${{ steps.trigger.outputs.branch }}"
-          pwsh -NoProfile -File $script -PrNumber $pr -Branch $br -Mode full
-
+          $out = "_inventory/wf-allround/${{ github.run_id }}-summary.md"
+          $md -join "`n" | Set-Content -Path $out -Encoding utf8
+          Write-Host "Wrote $out"
 
       - name: Upload smoke artifacts
         uses: actions/upload-artifact@v4
