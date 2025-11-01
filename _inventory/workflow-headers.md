@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-11-01 22:55:28+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-11-01 23:05:51+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -341,8 +341,25 @@ Smoke / Health — 초경량 헬스 체크(여러 엔드포인트 일괄 확인)
 ## `.github/workflows/housekeeping-smoke.yml`
 
 ```text
-.github/workflows/housekeeping-smoke.yml
-목적: 주간/수동/PR 트리거로 하우스키핑 스모크 실행 → 요약을 PR(또는 고정 이슈)에 코멘트, 아티팩트/Job Summary로도 보존.
+============================================================
+Housekeeping Smoke — 레포 위생(비밀/대용량/금지 확장자) 초경량 검사
+목적:
+- PR/메인 반영 전에 치명적 실수만 빠르게 차단
+* 대용량 파일(기본 > 5MB)
+* 비밀/키/토큰 패턴
+* 금지 확장자(.pem/.key/.p12/.jks/.db 등)
+역할 분리(중복 방지):
+- logs/ 트래킹 금지: guard-logs-ignored
+- README 배지/센티널 검증: guard-readme-badge / contracts-ci
+트리거:
+- PR / main 푸시 / 수동(dispatch)
+보안·안전:
+- 최소 권한(contents: read)
+- 동시성 취소 + 5분 타임아웃
+- YAML 안전: 모든 스크립트 run: |, 탭 금지(스페이스만)
+커스터마이즈(수동 실행):
+- mode(enforce/report), max_mb, exclude_globs(멀티라인)
+============================================================
 ```
 
 ## `.github/workflows/post-release-canary.yml`
