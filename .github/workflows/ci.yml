@@ -22,7 +22,7 @@ on:
       - '**/*.md'
       - 'package.json'
       - 'package-lock.json'
-      - '.github/actions/**'   # 로컬 액션 변경 시 재검증
+      - '.github/actions/**'
       - '.github/workflows/ci.yml'
   push:
     branches: [ main ]
@@ -44,13 +44,12 @@ concurrency:
 
 jobs:
   check:
-    runs-on: windows-latest            # PowerShell 스크립트 기반 (Ubuntu도 가능)
-    timeout-minutes: 15                # ⏱️ 과도런 방지(실패 처리)
+    runs-on: ubuntu-latest         # ✅ Ubuntu 러너로 전환
+    timeout-minutes: 15
     env:
       GH_TOKEN: ${{ github.token }}
 
     steps:
-      # 0) 로컬 액션 부트스트랩 (.github/actions 만 가져옴)
       - name: Bootstrap local actions (no git)
         shell: pwsh
         run: |
@@ -74,13 +73,15 @@ jobs:
           $root = Get-ChildItem -Directory $tmp | Select-Object -First 1
           $dst  = Join-Path $env:GITHUB_WORKSPACE '.github'
           New-Item -ItemType Directory -Force -Path $dst | Out-Null
-          Copy-Item -Path (Join-Path $root.FullName '.github\actions') -Destination $dst -Recurse -Force
+          # ✅ 경로 구분자 섞임 방지: Join-Path로 조합
+          Copy-Item -Path (Join-Path $root.FullName '.github') -Destination $dst -Recurse -Force
           Remove-Item $zip -Force
+          # actions만 남기고 나머지 .github 내 폴더는 선택적으로 정리
+          Get-ChildItem (Join-Path $dst '*') -Directory |
+            Where-Object { $_.Name -ne 'actions' } | ForEach-Object { Remove-Item $_.FullName -Recurse -Force }
 
-      # 1) 깃 미사용: zip-fetch 액션으로 소스 전개
       - uses: ./.github/actions/zip-fetch
 
-      # 2) (옵션) Node 세팅 + npm 캐시
       - name: Setup Node (with npm cache)
         if: hashFiles('package.json') != ''
         uses: actions/setup-node@v4
@@ -93,42 +94,30 @@ jobs:
 
       - name: npm ci + build (optional)
         if: hashFiles('package.json') != ''
-        shell: pwsh
+        shell: bash
         run: |
+          set -euo pipefail
           npm ci
-          if (Test-Path package.json) { npm run -s build }
+          [ -f package.json ] && npm run -s build || true
 
-      # 3) 간단 HTML 존재/빈파일 검사
       - name: Validate HTML (basic)
         shell: pwsh
         run: |
           $files = Get-ChildItem -Recurse -Include *.html
           if ($files.Count -eq 0) { Write-Host "No HTML files — skip."; exit 0 }
-          $bad = @()
-          foreach ($f in $files) {
-            if (-not (Get-Content $f.FullName)) { $bad += $f.FullName }
-          }
-          if ($bad.Count -gt 0) {
-            Write-Error ("Empty HTML files:`n" + ($bad -join "`n"))
-            exit 1
-          }
+          $bad = foreach ($f in $files) { if (-not (Get-Content $f.FullName)) { $f.FullName } }
+          if ($bad) { throw "Empty HTML files:`n$($bad -join "`n")" }
 
-      # 4) 문서 최소 린트 (빈 md 방지)
       - name: Docs lint (basic)
         shell: pwsh
         run: |
           $md = Get-ChildItem -Recurse -Include *.md
           if ($md.Count -eq 0) { exit 0 }
-          $bad = @()
-          foreach ($m in $md) {
-            if ((Get-Content $m.FullName | Measure-Object -Line).Lines -lt 1) { $bad += $m.FullName }
+          $bad = foreach ($m in $md) {
+            if ((Get-Content $m.FullName | Measure-Object -Line).Lines -lt 1) { $m.FullName }
           }
-          if ($bad.Count -gt 0) {
-            Write-Error ("Empty Markdown files:`n" + ($bad -join "`n"))
-            exit 1
-          }
+          if ($bad) { throw "Empty Markdown files:`n$($bad -join "`n")" }
 
-      # 5) 로그 업로드 (없으면 경고만)
       - uses: ./.github/actions/publish-logs
         if: always()
         with:
