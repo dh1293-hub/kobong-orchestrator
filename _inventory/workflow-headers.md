@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-11-01 22:00:43+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-11-01 22:34:47+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -319,6 +319,25 @@ Guard: README 배지(Shields/Actions 등) 존재·유효성 검증
 구현 메모:
 - YAML 파서 오류 방지: 모든 스크립트는 run: | 블록 + 스페이스 들여쓰기(탭 금지)
 - 파싱은 Python3(기본 탑재)로 수행 → 복잡한 마크다운 정규식보다 안정
+============================================================
+```
+
+## `.github/workflows/health-smoke.yml`
+
+```text
+============================================================
+Smoke / Health — 초경량 헬스 체크(여러 엔드포인트 일괄 확인)
+목적:
+- 수동/예약으로 여러 헬스 URL을 빠르게 확인(HTTP 200/본문 포함 여부)
+- 실패 시 enforce(잡 실패) 또는 report(경고만) 모드 선택
+트리거:
+- workflow_dispatch(수동). 필요하다면 schedule 주석 해제.
+보안/가드:
+- 최소 권한(contents: read)
+- 동시성 취소, 5분 타임아웃, Ubuntu 러너(빠르고 안정)
+참고:
+- YAML 파서 오류 방지: 모든 스크립트는 run: | 블록, 탭 금지(스페이스만)
+- 입력에 여러 줄을 넣을 때는 줄 단위로 파싱합니다.
 ============================================================
 ```
 
