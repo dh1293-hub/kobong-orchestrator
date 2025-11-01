@@ -204,31 +204,52 @@ jobs:
             Write-Host "No artifacts to stage."
           }
 
+# ... (Stage _inventory 까지는 그대로)
+
       - name: Commit & open PR
+        id: openpr
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name  "wf-allround-bot"
           git config user.email "wf-allround-bot@users.noreply.github.com"
-      
           $branch = "bot/wf-inventory-${{ github.run_id }}"
           git checkout -b $branch
       
           git add -f _inventory/*
-      
-          # 🔧 변경 여부는 종료코드로 판정 (0 = 차이 없음)
           git diff --cached --quiet
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "No changes in _inventory → skip PR."
-            exit 0
-          }
+          if ($LASTEXITCODE -eq 0) { Write-Host "No changes in _inventory → skip PR."; exit 0 }
       
-          git commit -m "[WF-TEST] _inventory snapshot (run=${{ github.run_id }})"
+          git commit -m "[WF] _inventory snapshot (run=${{ github.run_id }})"
           git push origin $branch
       
           $base = gh repo view --json defaultBranchRef -q .defaultBranchRef.name
-          gh pr create --base $base --head $branch `
-            --title "[WF-TEST] _inventory snapshot ${{ github.run_id }}" `
-            --body  "WF Allround Tester가 생성한 인벤토리/리포트를 자동 반영합니다."
+          # PR 번호를 출력으로 남김
+          $pr = gh pr create --base $base --head $branch `
+                --title "[WF] _inventory snapshot ${{ github.run_id }}" `
+                --body  "자동 반영(_inventory/*)" --json number -q .number
+          "pr=$pr" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Opened PR #$pr"
+      
+      - name: Enable auto-merge (squash) if safe
+        if: ${{ steps.openpr.outputs.pr }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $pr = [int]"${{ steps.openpr.outputs.pr }}"
+          # 변경 파일이 _inventory/ 이하인지 검사 (보수적으로)
+          $files = gh pr view $pr --json files -q ".files[].path"
+          if ($files | Where-Object { $_ -notmatch '^_inventory/' }) {
+            Write-Host "Skip automerge: non-inventory changes detected."
+            exit 0
+          }
+          # 라벨로 가드(원하면 주석 해제)
+          # gh pr edit $pr --add-label "auto-inventory"
+      
+          # 승인 필요 없다면 바로 auto-merge 대기 상태 진입, 필요하면 승인 후 자동 머지
+          gh pr merge $pr --squash --auto
+          Write-Host "Auto-merge enabled for PR #$pr"
+
 
