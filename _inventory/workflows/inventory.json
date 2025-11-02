@@ -1,0 +1,801 @@
+{
+  "schema": "kobong.inventory.workflows",
+  "schema_version": "1.0.0",
+  "generated_at": "2025-11-02T06:12:18Z",
+  "generated_by": "inventory-ci",
+  "repo": "dh1293-hub/kobong-orchestrator",
+  "count": 36,
+  "workflows": [
+    {
+      "path": ".github/workflows/ak-apply.yml",
+      "workflow": "ak-apply",
+      "triggers": [],
+      "permissions": {
+        "contents": "read",
+        "actions": "read"
+      },
+      "concurrency": {
+        "group": "ak-apply-${{ github.ref }}",
+        "cancel-in-progress": false
+      },
+      "jobs": [
+        {
+          "job": "apply",
+          "runs_on": "windows-latest",
+          "timeout": 20,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/ak-auto.yml",
+      "workflow": "ak-auto",
+      "triggers": [
+        "pull_request_target",
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "contents": "read",
+        "issues": "write",
+        "pull-requests": "write",
+        "checks": "write"
+      },
+      "concurrency": {
+        "group": "ak-auto-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.pull_request.number }}",
+        "cancel-in-progress": false
+      },
+      "jobs": [
+        {
+          "job": "auto",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/ak-commands.yml",
+      "workflow": "ak-commands",
+      "triggers": [
+        "issue_comment",
+        "workflow_dispatch"
+      ],
+      "permissions": {
+        "contents": "read",
+        "issues": "write",
+        "pull-requests": "write",
+        "checks": "write"
+      },
+      "concurrency": {
+        "group": "ak-commands-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.issue.number || github.event.pull_request.number }}-${{ github.event_name == 'workflow_dispatch' && inputs.command || 'cmd' }}",
+        "cancel-in-progress": false
+      },
+      "jobs": [
+        {
+          "job": "run-ak",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/ak-dispatch.yml",
+      "workflow": "ak-dispatch",
+      "triggers": [],
+      "permissions": {
+        "contents": "read",
+        "pull-requests": "write",
+        "issues": "write"
+      },
+      "concurrency": {
+        "group": "ak-dispatch-${{ github.ref }}",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "run",
+          "runs_on": [
+            "self-hosted",
+            "ghmon-safe"
+          ],
+          "timeout": 30,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/ak-exec.yml",
+      "workflow": "ak-exec",
+      "triggers": [],
+      "permissions": {
+        "contents": "read",
+        "issues": "write",
+        "pull-requests": "read",
+        "checks": "write"
+      },
+      "concurrency": {
+        "group": "ak-exec-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.issue.number }}-${{ github.event_name == 'workflow_dispatch' && inputs.command || 'cmd' }}",
+        "cancel-in-progress": false
+      },
+      "jobs": [
+        {
+          "job": "exec",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/ak-loop.yml",
+      "workflow": "ak-loop",
+      "triggers": [],
+      "permissions": {
+        "issues": "write",
+        "contents": "read",
+        "pull-requests": "read"
+      },
+      "concurrency": {},
+      "jobs": [
+        {
+          "job": "loop",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/ak-run.yml",
+      "workflow": "AK run (/ak comment gateway)",
+      "triggers": [],
+      "permissions": {
+        "contents": "read",
+        "issues": "write",
+        "pull-requests": "write",
+        "actions": "write"
+      },
+      "concurrency": {
+        "group": "ak-run-${{ github.event.issue.number || github.run_id }}",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "ak",
+          "runs_on": "windows-latest",
+          "timeout": 10,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/ak-script-headers.yml",
+      "workflow": "AK • Script Headers → Wiki & Repo",
+      "triggers": [],
+      "permissions": {
+        "contents": "write"
+      },
+      "concurrency": {},
+      "jobs": [
+        {
+          "job": "publish",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/ak-selftest.yml",
+      "workflow": "ak-selftest",
+      "triggers": [],
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": {},
+      "jobs": [
+        {
+          "job": "analyze",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        },
+        {
+          "job": "smoke",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/ak-workflow-headers.yml",
+      "workflow": "AK • Workflow Headers → Wiki & Repo",
+      "triggers": [],
+      "permissions": {
+        "contents": "write"
+      },
+      "concurrency": {},
+      "jobs": [
+        {
+          "job": "publish",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/ak-workflow-inventory.yml",
+      "workflow": "AK • Workflow Inventory",
+      "triggers": [],
+      "permissions": {
+        "contents": "write",
+        "pull-requests": "write"
+      },
+      "concurrency": {},
+      "jobs": [
+        {
+          "job": "build",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/auto-github-release.yml",
+      "workflow": "auto-github-release",
+      "triggers": [],
+      "permissions": {
+        "contents": "write",
+        "actions": "read"
+      },
+      "concurrency": {
+        "group": "release-${{ github.event.inputs.tag || github.ref_name || github.run_id }}",
+        "cancel-in-progress": false
+      },
+      "jobs": [
+        {
+          "job": "release",
+          "runs_on": "ubuntu-latest",
+          "timeout": 30,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "workflow": "ci/webui",
+      "triggers": [],
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": {
+        "group": "ci-webui-${{ github.ref }}",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "check",
+          "runs_on": "ubuntu-latest",
+          "timeout": 15,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/connector-oauth-probe.yml",
+      "workflow": "connector/oauth-probe",
+      "triggers": [],
+      "permissions": {
+        "contents": "write",
+        "pull-requests": "write"
+      },
+      "concurrency": {
+        "group": "oauth-probe-${{ github.ref }}",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "probe",
+          "runs_on": "ubuntu-latest",
+          "timeout": 8,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/contracts-ci.yml",
+      "workflow": "Contracts CI",
+      "triggers": [],
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": {
+        "group": "contracts-${{ github.ref }}",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "contracts",
+          "runs_on": "ubuntu-latest",
+          "timeout": 5,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/guard-flush-queue.yml",
+      "workflow": "guard/flush-queue",
+      "triggers": [],
+      "permissions": {
+        "contents": "read",
+        "actions": "write"
+      },
+      "concurrency": {
+        "group": "flush-queue-${{ github.ref }}",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "flush",
+          "runs_on": "ubuntu-latest",
+          "timeout": 10,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/guard-logs-ignored.yml",
+      "workflow": "guard/logs-ignored (flex)",
+      "triggers": [],
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": {
+        "group": "guard-logs-${{ github.ref }}",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "no-tracked-logs",
+          "runs_on": "ubuntu-latest",
+          "timeout": 5,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/guard-readme-badge.yml",
+      "workflow": "guard/readme-badge",
+      "triggers": [],
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": {
+        "group": "guard-readme-badge-${{ github.ref }}",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "verify",
+          "runs_on": "ubuntu-latest",
+          "timeout": 3,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/health-smoke.yml",
+      "workflow": "smoke/health",
+      "triggers": [],
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": {
+        "group": "smoke-health-${{ github.ref }}",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "health",
+          "runs_on": "ubuntu-latest",
+          "timeout": 5,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/housekeeping-smoke.yml",
+      "workflow": "housekeeping/smoke",
+      "triggers": [],
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": {
+        "group": "housekeeping-${{ github.ref }}",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "hk",
+          "runs_on": "ubuntu-latest",
+          "timeout": 5,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/inventory-ci.yml",
+      "workflow": "inventory/ci",
+      "triggers": [],
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": {},
+      "jobs": [
+        {
+          "job": "build",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        },
+        {
+          "job": "publish",
+          "runs_on": "ubuntu-latest",
+          "timeout": 5,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/klc-append-release.yml",
+      "workflow": "KLC Append Release",
+      "triggers": [],
+      "permissions": {
+        "contents": "write"
+      },
+      "concurrency": {
+        "group": "klc-append-release",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "append",
+          "runs_on": "ubuntu-latest",
+          "timeout": 5,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/klc-nightly-aggregate.yml",
+      "workflow": "KLC Nightly Aggregate",
+      "triggers": [],
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": {
+        "group": "klc-nightly-aggregate",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "aggregate",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/klc-validate.yml",
+      "workflow": "CI · KLC v1.3 validate",
+      "triggers": [],
+      "permissions": {},
+      "concurrency": {},
+      "jobs": [
+        {
+          "job": "klc",
+          "runs_on": "windows-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/klc-verify.yml",
+      "workflow": "KLC Verify",
+      "triggers": [],
+      "permissions": {},
+      "concurrency": {},
+      "jobs": [
+        {
+          "job": "klc-verify",
+          "runs_on": "windows-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/lint-actions.yml",
+      "workflow": "Lint GitHub Actions",
+      "triggers": [],
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": {},
+      "jobs": [
+        {
+          "job": "actionlint",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/post-release-canary.yml",
+      "workflow": "Post-release Canary",
+      "triggers": [],
+      "permissions": {
+        "contents": "read",
+        "issues": "write"
+      },
+      "concurrency": {
+        "group": "post-release-canary-${{ github.ref }}",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "canary",
+          "runs_on": "windows-latest",
+          "timeout": 15,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/protect-manual.yml",
+      "workflow": "Protect Manual",
+      "triggers": [],
+      "permissions": {
+        "contents": "read",
+        "pull-requests": "write"
+      },
+      "concurrency": {},
+      "jobs": [
+        {
+          "job": "guard",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/psanalyze.yml",
+      "workflow": "PS-analyze",
+      "triggers": [],
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": {
+        "group": "psanalyze-${{ github.ref }}",
+        "cancel-in-progress": false
+      },
+      "jobs": [
+        {
+          "job": "psanalyze",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/release-docs.yml",
+      "workflow": "Release Docs",
+      "triggers": [],
+      "permissions": {
+        "contents": "write"
+      },
+      "concurrency": {
+        "group": "release-docs",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "docs",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/release-one.yml",
+      "workflow": "Release One-Click",
+      "triggers": [],
+      "permissions": {
+        "contents": "write"
+      },
+      "concurrency": {},
+      "jobs": [
+        {
+          "job": "gates",
+          "runs_on": "windows-latest",
+          "timeout": 20,
+          "uses": null
+        },
+        {
+          "job": "release",
+          "runs_on": "ubuntu-latest",
+          "timeout": 20,
+          "uses": null
+        },
+        {
+          "job": "canary",
+          "runs_on": "windows-latest",
+          "timeout": 20,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/weekly-auto-release-smoke.yml",
+      "workflow": "Weekly Auto Release Smoke",
+      "triggers": [],
+      "permissions": {
+        "contents": "write"
+      },
+      "concurrency": {
+        "group": "weekly-auto-release-smoke",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "smoke",
+          "runs_on": "ubuntu-latest",
+          "timeout": 20,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/weekly-housekeeping.yml",
+      "workflow": "Weekly Housekeeping",
+      "triggers": [],
+      "permissions": {
+        "actions": "write",
+        "contents": "read"
+      },
+      "concurrency": {},
+      "jobs": [
+        {
+          "job": "clean",
+          "runs_on": "ubuntu-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/wf-allround-tester.yml",
+      "workflow": "WF Allround Tester",
+      "triggers": [],
+      "permissions": {
+        "actions": "write",
+        "contents": "write",
+        "pull-requests": "write",
+        "checks": "read",
+        "statuses": "read"
+      },
+      "concurrency": {
+        "group": "wf-allround-${{ github.ref }}",
+        "cancel-in-progress": false
+      },
+      "jobs": [
+        {
+          "job": "inventory",
+          "runs_on": "windows-latest",
+          "timeout": null,
+          "uses": null
+        },
+        {
+          "job": "smoke",
+          "runs_on": "windows-latest",
+          "timeout": null,
+          "uses": null
+        },
+        {
+          "job": "publish",
+          "runs_on": "windows-latest",
+          "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/wf-inventory-publisher.yml",
+      "workflow": "WF / Inventory Publisher (single PR, no spam)",
+      "triggers": [],
+      "permissions": {
+        "contents": "write",
+        "pull-requests": "write"
+      },
+      "concurrency": {
+        "group": "wf-inventory-publisher",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "publish",
+          "runs_on": "windows-latest",
+          "timeout": 10,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/xp-summary-artifact.yml",
+      "workflow": "xp-summary-artifact",
+      "triggers": [],
+      "permissions": {
+        "contents": "read",
+        "pull-requests": "write"
+      },
+      "concurrency": {
+        "group": "xp-summary-${{ github.ref }}",
+        "cancel-in-progress": false
+      },
+      "jobs": [
+        {
+          "job": "xp",
+          "runs_on": "ubuntu-latest",
+          "timeout": 5,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    }
+  ]
+}
