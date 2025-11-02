@@ -1,4 +1,4 @@
 ADDED
+.github/tools/gen_inventory.py
 CHANGED
-.github/workflows/housekeeping-smoke.yml
 REMOVED
