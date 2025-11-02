@@ -6,38 +6,24 @@
 #             - 명령 파싱은 /ak <cmd> [raw args] 형태
 # 산출물    : PR 코멘트(시작/요약), Artifact: ak7-logs
 # =========================================================
-name: ak-exec
-
+# DEPRECATED / QUARANTINE STUB
+name: AK / Exec (quarantined)
 on:
-  issue_comment:
-    types: [created]
-  workflow_dispatch:
-    inputs:
-      pr:
-        description: "Pull request number"
-        required: true
-      command:
-        description: "help | test | scan | fixloop"
-        required: true
-      rawargs:
-        description: "Optional raw args (e.g. --all, preview, apply)"
-        required: false
-        default: ""
+  workflow_dispatch: {}
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: read
-  checks: write
 
 concurrency:
-  group: ak-exec-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.issue.number }}-${{ github.event_name == 'workflow_dispatch' && inputs.command || 'cmd' }}
-  cancel-in-progress: false
+  group: ak-exec-quarantine
+  cancel-in-progress: true
 
 jobs:
-  exec:
+  noop:
     runs-on: ubuntu-latest
     steps:
+      - run: echo "ak-exec quarantined. Use KLC v2 flows."
+
       - name: Resolve inputs from event
         id: resolve
         shell: bash
