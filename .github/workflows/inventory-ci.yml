@@ -1,34 +1,34 @@
 # ========================================================================
-# inventory/ci
+# inventory/ci (보안·산출물 보강본)
 # 목적:
 #   - 저장소의 GitHub Actions 워크플로(.yml/.yaml)를 스캔해
 #     _inventory/workflows/inventory.json, inventory.csv 를 생성
 #   - (옵션) 변경이 있으면 _inventory/ 경로로 PR 발행 / 정책 허용 시 자동머지
 #
 # 트리거:
-#   - pull_request/push: 워크플로/액션/스クリپ트 변경 시 자동 실행
+#   - pull_request: 워크플로/액션/스크립트 변경 시 자동 실행 (fork PR도 '읽기'만)
+#   - push@main: 운용 브랜치에서 변경 시
 #   - workflow_dispatch: 수동 수행 + 발행/자동머지 토글 가능
 #
-# 산출물:
-#   - _inventory/workflows/inventory.json  (모니터링 UI가 바로 읽을 수 있는 스키마)
-#   - _inventory/workflows/inventory.csv   (간단 조회/엑셀 확인용)
-#   - CI 아티팩트(workflows-inventory-<run_id>)에도 업로드
+# 산출물(보장):
+#   - _inventory/workflows/inventory.json  (모니터링 UI 스키마)
+#   - _inventory/workflows/inventory.csv   (간단 조회/엑셀)
+#   - CI 아티팩트(workflows-inventory-<run_id>) 업로드
+#   - Job Summary에 파일 목록/카운트 기록
 #
-# 안전가드/정책:
-#   - 최소 권한(contents: read)
-#   - 변경이 없으면 PR 생략 (idempotent)
-#   - _inventory/ 이외 파일 변경이 감지되면 자동머지 스킵(보수적)
-#   - 저장소에서 Auto-merge 허용 안되면 자동머지 스텝이 알아서 무해하게 종료
-#
-# 참고:
-#   - 불린 입력은 문자열로 처리('true'/'false') → YAML 파서 혼동 방지
-#   - 파이썬 코드는 .github/tools/gen_inventory.py 로 분리 (파서 에러 원천 차단)
+# 보안:
+#   - 기본 permissions: read-only
+#   - publish 잡에서만 contents/pull-requests: write
+#   - checkout은 persist-credentials: false (토큰 주입 차단)
+#   - PR 자동머지는 _inventory/* 외 파일 섞이면 즉시 차단
+#   - action 버전은 @v* 표기(실 운영 시 커밋 SHA pin 권장)
 # ========================================================================
 
 name: inventory/ci
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened]
     paths:
       - '.github/workflows/**'
       - '.github/actions/**'
@@ -44,81 +44,110 @@ on:
   workflow_dispatch:
     inputs:
       publish_pr:
-        description: '인벤토리를 _inventory/ 로 PR 발행할지 여부'
+        description: '_inventory/ 로 PR 발행 여부'
         type: choice
-        options: ['true', 'false']   # ⚠️ 문자열 리터럴(불린 리터럴 사용 금지)
-        default: 'true'
+        options: ['false','true']
+        default: 'false'
       auto_merge:
-        description: '인벤토리 PR 자동 머지(저장소 정책 허용 시)'
+        description: 'PR 자동머지(정책 허용 + _inventory/* 한정)'
         type: choice
-        options: ['true', 'false']
+        options: ['false','true']
         default: 'false'
 
+# ✅ 워크플로: 서브모듈 비활성 + 최소권한 + 읽기전용
 permissions:
-  # 최소 권한 원칙: 읽기만 필요. PR 생성 단계에서만 개별 job에서 write로 상향.
-  contents: read
-
-concurrency:
-  # 같은 ref에서 중복 실행 시 이전 작업 취소 → 러너 절약/경쟁 상태 방지
-  group: inventory-${{ github.ref }}
-  cancel-in-progress: true
+  contents: read  # 보안: 읽기만
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout (read-only; no submodules)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # 히스토리 필요한 작업 대비
+          submodules: 'false'   # ⚠️ 강제 비활성 (깨진 .gitmodules라도 foreach 안탐)
+          persist-credentials: false
+
+      # (선택) 러너 하드닝 — 실 운영 시 커밋 SHA로 pin 권장
+      # - name: Harden runner (egress lock)
+      #   uses: step-security/harden-runner@v2
+      #   with:
+      #     egress-policy: audit
+
+      - name: Checkout (read-only)
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-
-      - name: Prepare requirements (pin)
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p .github/tools
-          echo 'pyyaml==6.0.2' > .github/tools/requirements.txt
+          persist-credentials: false
+          ref: ${{ github.sha }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
           cache: 'pip'
-          cache-dependency-path: .github/tools/requirements.txt  # ← 요게 핵심!
 
-      - name: Install deps
-        shell: bash
-        run: |
-          set -euo pipefail
-          pip install --disable-pip-version-check --no-input -r .github/tools/requirements.txt
-
-      - name: Generate inventory JSON/CSV
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 .github/tools/gen_inventory.py
-
-
-      - name: 'Setup Python'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-          cache: 'pip'     # pyyaml 캐시로 속도 ↑
-
-      - name: 'Install deps'
+      - name: Install deps (pin minimal)
         shell: bash
         run: |
           set -euo pipefail
           pip install --disable-pip-version-check --no-input pyyaml==6.0.2
 
-      - name: 'Generate inventory JSON/CSV'
-        # 핵심: 분리된 스크립트를 그대로 실행 → YAML 파서가 코드에 관여 X
+      - name: Prepare output dir
         shell: bash
         run: |
           set -euo pipefail
-          python3 .github/tools/gen_inventory.py
+          mkdir -p _inventory/workflows
 
-      - name: 'Upload artifact'
+      - name: Generate inventory (primary, repo script)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f ".github/tools/gen_inventory.py" ]; then
+            python3 .github/tools/gen_inventory.py
+          else
+            echo "::warning::.github/tools/gen_inventory.py not found. Will run fallback."
+          fi
+
+      - name: Fallback generator (guarantee artifacts)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -s _inventory/workflows/inventory.json ] || [ ! -s _inventory/workflows/inventory.csv ]; then
+            python3 - <<'PY'
+            import os, json, csv, glob, sys
+            try:
+              import yaml  # type: ignore
+            except Exception:
+              yaml = None
+            root = ".github/workflows"
+            rows = []
+            for p in sorted(glob.glob(os.path.join(root, "*.y*ml"))):
+                triggers = []
+                if yaml:
+                    try:
+                        with open(p, encoding="utf-8") as f:
+                            y = list(yaml.safe_load_all(f))
+                        if y:
+                            on = y[0].get("on") or {}
+                            if isinstance(on, dict):
+                                triggers = list(on.keys())
+                            elif isinstance(on, list):
+                                triggers = on
+                    except Exception:
+                        pass
+                rows.append({"path": p, "triggers": triggers})
+            os.makedirs("_inventory/workflows", exist_ok=True)
+            with open("_inventory/workflows/inventory.json","w",encoding="utf-8") as f:
+                json.dump(rows, f, ensure_ascii=False, indent=2)
+            with open("_inventory/workflows/inventory.csv","w",newline="",encoding="utf-8") as f:
+                w=csv.writer(f); w.writerow(["path","triggers"])
+                for r in rows: w.writerow([r["path"], "|".join(r["triggers"])])
+            PY
+          fi
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: workflows-inventory-${{ github.run_id }}
@@ -126,6 +155,20 @@ jobs:
             _inventory/workflows/inventory.json
             _inventory/workflows/inventory.csv
           if-no-files-found: error
+          retention-days: 7
+
+      - name: Job Summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "### workflows inventory" >> "$GITHUB_STEP_SUMMARY"
+          if [ -d _inventory/workflows ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+            ls -lah _inventory/workflows >> "$GITHUB_STEP_SUMMARY" || true
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- No directory '_inventory/workflows' found." >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     needs: build
@@ -140,24 +183,23 @@ jobs:
       pull-requests: write  # PR 생성/병합용
 
     steps:
-      - name: 'Checkout'
+      - name: Checkout (write intent)
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: 'Download inventory artifacts'
+      - name: Download inventory artifacts
         uses: actions/download-artifact@v4
         with:
           path: _inventory/_ci_artifacts
           merge-multiple: true
           pattern: workflows-inventory-*
 
-      - name: 'Stage _inventory (dedupe)'
-        # 중복을 피하기 위해 _ci_artifacts → _inventory 로 병합 후 _ci_artifacts 제거
+      - name: Stage _inventory (dedupe)
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p _inventory/workflows
+          mkdir -p _inventory
           if command -v rsync >/dev/null 2>&1; then
             rsync -a _inventory/_ci_artifacts/ _inventory/
           else
@@ -167,7 +209,7 @@ jobs:
           rm -rf _inventory/_ci_artifacts
           find _inventory -maxdepth 2 -type f -print
 
-      - name: 'Commit & open PR (only if changes)'
+      - name: Commit & open PR (only if changes)
         id: openpr
         shell: bash
         env:
@@ -176,38 +218,30 @@ jobs:
           set -euo pipefail
           git config user.name  "wf-inventory-bot"
           git config user.email "wf-inventory-bot@users.noreply.github.com"
-
           branch="bot/inventory-${GITHUB_RUN_ID}"
           git checkout -b "$branch"
-
           git add -f _inventory/*
           git rm -r --cached _inventory/_ci_artifacts 2>/dev/null || true
-
           if git diff --cached --quiet; then
             echo "No changes in _inventory → skip PR."
             exit 0
           fi
-
           git commit -m "[WF] workflows inventory (run=${GITHUB_RUN_ID})"
           git push --set-upstream origin "$branch"
-
           base="$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)"
           out="$(gh pr create --base "$base" --head "$branch" \
                  --title "[WF] workflows inventory ${GITHUB_RUN_ID}" \
                  --body "자동 생성 인벤토리(_inventory/workflows/*)")" || true
-
           pr=""
           if echo "$out" | grep -Eo '/pull/[0-9]+' >/dev/null; then
             pr="$(echo "$out" | grep -Eo '/pull/[0-9]+' | grep -Eo '[0-9]+' | tail -1)"
           else
             pr="$(gh pr view --head "$branch" --json number -q .number || true)"
           fi
-
           echo "pr=${pr}" >> "$GITHUB_OUTPUT"
           echo "Opened PR #${pr}"
 
-      - name: 'Enable auto-merge (optional/safe)'
-        # _inventory/ 외 파일이 섞인 경우는 자동머지 금지(보수적)
+      - name: Enable auto-merge (optional/safe)
         if: ${{ steps.openpr.outputs.pr && inputs.auto_merge == 'true' }}
         shell: bash
         env:
