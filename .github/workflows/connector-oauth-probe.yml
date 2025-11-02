@@ -1,15 +1,15 @@
 # ============================================================
-# Connector OAuth Probe — ChatGPT ↔ GitHub 커넥터/토큰 상태 자가진단
+# Connector OAuth Probe — GitHub/ChatGPT OAuth 토큰 상태 자가진단
 # 목적:
-#   - (선택) CHATGPT_OAUTH_TOKEN 이 제공되면, 해당 토큰으로 Private 리포 읽기 가능 여부 검사
-#   - GITHUB_TOKEN(워크플로 기본 토큰)의 권한·제한도 함께 리포트
-# 산출:
-#   - _inventory/connector-status/summary.json, status.md 로 결과 저장
+#   - GITHUB_TOKEN(워크플로 기본 토큰)과 선택적 CHATGPT_OAUTH_TOKEN의
+#     Private 리포 읽기 가능 여부를 API로 점검하고 _inventory에 리포트 생성
 # 사용법:
-#   1) 레포 시크릿 설정 (선택): CHATGPT_OAUTH_TOKEN = ChatGPT 커넥터가 발급한 OAuth 토큰
-#      - 없으면 ChatGPT 토큰 검사는 건너뜀(레포 기본 토큰만 보고)
-#   2) Actions → Run workflow (workflow_dispatch) 실행
-#   3) 결과는 아티팩트 + _inventory/connector-status/* 로 남고, 원하면 자동 PR로 반영
+#   - (선택) 리포 시크릿: CHATGPT_OAUTH_TOKEN  설정 시 ChatGPT OAuth도 검사
+#   - Actions → Run workflow → path_to_check 입력 후 실행
+# 산출:
+#   - _inventory/connector-status/summary.json, status.md  + 아티팩트
+# 주의:
+#   - YAML 파서 오류 방지: 모든 스크립트는 run: | 블록, heredoc은 단일-인용(<<'EOF')
 # ============================================================
 name: connector/oauth-probe
 
@@ -23,8 +23,7 @@ on:
         type: string
 
 permissions:
-  contents: write       # _inventory 커밋/PR 위해 필요
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: oauth-probe-${{ github.ref }}
@@ -40,84 +39,94 @@ jobs:
       CHATGPT_OAUTH_TOKEN: ${{ secrets.CHATGPT_OAUTH_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 1 }
+      - name: Checkout (shallow)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      - name: Run probes
-        id: run
+      # 1) API 호출은 bash에서 수행해 ENV로만 전달 (파이썬엔 텍스트만 넘김)
+      - name: Call APIs (HEAD/GET)
+        id: probe
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p _inventory/connector-status
-
           repo="${REPO}"
           path="${{ inputs.path_to_check }}"
           api="https://api.github.com"
 
-          j() { python3 - <<'PY' "$@"; }
-          # --- helper: HEAD/GET with token ---
           http_head() { curl -fsSLI -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $1" -H "X-GitHub-Api-Version: 2022-11-28" "$2" || true; }
-          http_get()  { curl -fsSL -H "Authorization: Bearer $1" -H "X-GitHub-Api-Version: 2022-11-28" "$2" || true; }
+          http_get()  { curl -fsSL  -H "Authorization: Bearer $1" -H "X-GitHub-Api-Version: 2022-11-28" "$2" || true; }
 
-          # ========== 1) GITHUB_TOKEN(레포 토큰) 측정 ==========
-          gt_viewer=$(curl -fsSL -X POST -H "Authorization: Bearer ${GH_BASIC}" -H "X-GitHub-Api-Version: 2022-11-28" \
-                       -H "Content-Type: application/json" "${api}/graphql" \
-                       --data '{"query":"{ viewer { login } }"}' || true)
-          gt_repo=$(http_get "${GH_BASIC}" "${api}/repos/${repo}")
-          gt_contents_code=$(http_head "${GH_BASIC}" "${api}/repos/${repo}/contents/${path}")
+          gt_viewer="$(curl -fsSL -X POST -H "Authorization: Bearer ${GH_BASIC}" -H "X-GitHub-Api-Version: 2022-11-28" -H "Content-Type: application/json" "${api}/graphql" --data '{"query":"{ viewer { login } }"}' || true)"
+          gt_repo="$(http_get "${GH_BASIC}" "${api}/repos/${repo}")"
+          gt_contents_code="$(http_head "${GH_BASIC}" "${api}/repos/${repo}/contents/${path}")"
 
-          # ========== 2) CHATGPT_OAUTH_TOKEN(선택) 측정 ==========
           ct_user=""; ct_repo=""; ct_contents_code=""
-          if [[ -n "${CHATGPT_OAUTH_TOKEN:-}" ]]; then
-            ct_user=$(http_get "${CHATGPT_OAUTH_TOKEN}" "${api}/user")
-            ct_repo=$(http_get "${CHATGPT_OAUTH_TOKEN}" "${api}/repos/${repo}")
-            ct_contents_code=$(http_head "${CHATGPT_OAUTH_TOKEN}" "${api}/repos/${repo}/contents/${path}")
+          if [ -n "${CHATGPT_OAUTH_TOKEN:-}" ]; then
+            ct_user="$(http_get "${CHATGPT_OAUTH_TOKEN}" "${api}/user")"
+            ct_repo="$(http_get "${CHATGPT_OAUTH_TOKEN}" "${api}/repos/${repo}")"
+            ct_contents_code="$(http_head "${CHATGPT_OAUTH_TOKEN}" "${api}/repos/${repo}/contents/${path}")"
           fi
 
-          # ========== 3) 요약 JSON 생성 ==========
-          j > _inventory/connector-status/summary.json <<PY
-import json, sys
-gt_viewer = json.loads('''${gt_viewer}''') if ${#gt_viewer:-0} else {}
-gt_repo   = json.loads('''${gt_repo}''')   if ${#gt_repo:-0}   else {}
-ct_user   = json.loads('''${ct_user}''')   if ${#ct_user:-0}   else {}
-ct_repo   = json.loads('''${ct_repo}''')   if ${#ct_repo:-0}   else {}
-summary = {
-  "repo": "${repo}",
-  "path_checked": "${path}",
-  "github_token": {
-    "viewer_login": gt_viewer.get("data",{}).get("viewer",{}).get("login"),
-    "repo_visibility": gt_repo.get("private"),
-    "contents_head_code": "${gt_contents_code}"
-  },
-  "chatgpt_oauth_token": {
-    "present": ${'true' if '${CHATGPT_OAUTH_TOKEN:-}' else 'false'},
-    "user_login": ct_user.get("login") if isinstance(ct_user, dict) else None,
-    "repo_visibility": ct_repo.get("private") if isinstance(ct_repo, dict) else None,
-    "contents_head_code": "${ct_contents_code}"
-  }
-}
-print(json.dumps(summary))
-PY
+          echo "repo=$repo"                       >> "$GITHUB_ENV"
+          echo "path_to_check=$path"              >> "$GITHUB_ENV"
+          printf 'gt_viewer_json<<__E__\n%s\n__E__\n' "$gt_viewer" >> "$GITHUB_ENV"
+          printf 'gt_repo_json<<__E__\n%s\n__E__\n'   "$gt_repo"   >> "$GITHUB_ENV"
+          echo "gt_contents_code=$gt_contents_code" >> "$GITHUB_ENV"
+          printf 'ct_user_json<<__E__\n%s\n__E__\n'  "$ct_user"    >> "$GITHUB_ENV"
+          printf 'ct_repo_json<<__E__\n%s\n__E__\n'  "$ct_repo"    >> "$GITHUB_ENV"
+          echo "ct_contents_code=$ct_contents_code"  >> "$GITHUB_ENV"
+          echo "has_chatgpt_token=$([ -n "${CHATGPT_OAUTH_TOKEN:-}" ] && echo true || echo false)" >> "$GITHUB_ENV"
 
-          # 사람 눈용 요약
-          python3 - <<'PY' "_inventory/connector-status/summary.json" > _inventory/connector-status/status.md
-import sys, json, pathlib
-s = json.loads(pathlib.Path(sys.argv[1]).read_text())
-def line(k,v): print(f"- {k}: {v}")
-print("# Connector OAuth Probe")
-line("repo", s["repo"])
-line("path_checked", s["path_checked"])
-gt = s["github_token"]; ct = s["chatgpt_oauth_token"]
-print("\n## GITHUB_TOKEN")
-line("viewer_login", gt.get("viewer_login"))
-line("repo.private", gt.get("repo_visibility"))
-line("contents HEAD", gt.get("contents_head_code"))
-print("\n## CHATGPT_OAUTH_TOKEN")
-line("present", ct.get("present"))
-line("user_login", ct.get("user_login"))
-line("repo.private", ct.get("repo_visibility"))
-line("contents HEAD", ct.get("contents_head_code"))
-PY
+      # 2) summary.json 생성 — heredoc 없이 순수 Python 셸
+      - name: Build summary.json
+        shell: python
+        run: |
+          import json, os, pathlib
+          def safe_load(s):
+              try:
+                  return json.loads(s) if s else {}
+              except Exception:
+                  return {}
+          outdir = pathlib.Path("_inventory/connector-status")
+          outdir.mkdir(parents=True, exist_ok=True)
+          summary = {
+              "repo": os.environ.get("repo"),
+              "path_checked": os.environ.get("path_to_check"),
+              "github_token": {
+                  "viewer_login": safe_load(os.environ.get("gt_viewer_json")).get("data",{}).get("viewer",{}).get("login"),
+                  "repo_known":   bool(safe_load(os.environ.get("gt_repo_json"))),
+                  "contents_head_code": os.environ.get("gt_contents_code"),
+              },
+              "chatgpt_oauth_token": {
+                  "present": os.environ.get("has_chatgpt_token") == "true",
+                  "user_login": safe_load(os.environ.get("ct_user_json")).get("login"),
+                  "repo_known": bool(safe_load(os.environ.get("ct_repo_json"))),
+                  "contents_head_code": os.environ.get("ct_contents_code"),
+              },
+          }
+          (outdir / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+
+      # 3) status.md 생성 — 역시 순수 Python 셸
+      - name: Build status.md
+        shell: python
+        run: |
+          import json, pathlib
+          p = pathlib.Path("_inventory/connector-status/summary.json")
+          s = json.loads(p.read_text(encoding="utf-8"))
+          gt = s["github_token"]; ct = s["chatgpt_oauth_token"]
+          md = []
+          md += ["# Connector OAuth Probe"]
+          md += [f"- repo: {s['repo']}"]
+          md += [f"- path_checked: {s['path_checked']}"]
+          md += ["", "## GITHUB_TOKEN"]
+          md += [f"- viewer_login: {gt.get('viewer_login')}"]
+          md += [f"- contents HEAD: {gt.get('contents_head_code')}"]
+          md += ["", "## CHATGPT_OAUTH_TOKEN"]
+          md += [f"- present: {ct.get('present')}"]
+          md += [f"- user_login: {ct.get('user_login')}"]
+          md += [f"- contents HEAD: {ct.get('contents_head_code')}"]
+          pathlib.Path("_inventory/connector-status/status.md").write_text("\n".join(md), encoding="utf-8")
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -125,40 +134,3 @@ PY
           name: connector-status-${{ github.run_id }}
           path: _inventory/connector-status
           if-no-files-found: error
-
-  publish:
-    needs: probe
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 1 }
-      - uses: actions/download-artifact@v4
-        with:
-          path: _inventory/_ci_artifacts
-          merge-multiple: true
-          pattern: connector-status-*
-      - name: Stage & dedupe
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p _inventory
-          rsync -a _inventory/_ci_artifacts/ _inventory/
-          rm -rf _inventory/_ci_artifacts
-          find _inventory -maxdepth 2 -type f -print
-      - name: Commit & PR (inventory only)
-        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
-        shell: bash
-        run: |
-          set -e
-          git config user.name  "connector-probe-bot"
-          git config user.email "connector-probe-bot@users.noreply.github.com"
-          branch="bot/connector-probe-${{ github.run_id }}"
-          git checkout -b "$branch"
-          git add -f _inventory/*
-          git diff --cached --quiet && { echo "No changes → skip PR."; exit 0; }
-          git commit -m "[PROBE] connector status snapshot (run=${{ github.run_id }})"
-          git push origin "$branch"
-          base="${GITHUB_BASE_REF:-${{ github.event.repository.default_branch || 'main' }}}"
-          gh pr create --base "$base" --head "$branch" --title "[PROBE] connector status ${{ github.run_id }}" --body "자동 생성된 커넥터 상태 보고서(_inventory/connector-status)."
-          # auto-merge는 정책 허용 시 수동/자동 선택
