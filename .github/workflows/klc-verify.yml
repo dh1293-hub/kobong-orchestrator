@@ -1,13 +1,18 @@
 name: KLC Verify
+
 on:
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
-  klc-verify:
-    runs-on: windows-latest
+  noop:
+    runs-on: ubuntu-latest
     steps:
+      - run: echo "Legacy KLC disabled. Use 'KLC / Nightly Aggregate v2'."
+
       - name: Checkout
         uses: actions/checkout@v4
 
