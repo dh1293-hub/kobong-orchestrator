@@ -1,0 +1,19 @@
+name: "Feature Request (Auto-Dev)"
+description: "요구사항을 간단히 적어주세요"
+title: "[feat] <한 줄 요약>"
+labels: ["type:feature"]
+body:
+  - type: input
+    attributes: { label: 문제, description: "무엇이 불편/부족한가?" }
+    validations: { required: true }
+  - type: input
+    attributes: { label: 목표, description: "무엇을 달성하면 완료인가?" }
+    validations: { required: true }
+  - type: textarea
+    attributes: { label: 입출력, description: "입력/출력/예시" }
+    validations: { required: true }
+  - type: textarea
+    attributes: { label: 성공 기준, description: "테스트/검증 기준" }
+    validations: { required: true }
+  - type: textarea
+    attributes: { label: 제약, description: "성능/보안/호환성 등" }
