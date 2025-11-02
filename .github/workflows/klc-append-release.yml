@@ -1,18 +1,32 @@
+# =========================================
+# KLC Append Release (주석 강화본)
+# 목적  : 릴리즈(Release) 노트에 'KLC 요약 1줄'을 멱등하게 추가
+# 트리거: 1) release: published   2) workflow_dispatch(tag 입력 선택)
+# 권한  : contents: write (릴리즈 노트 수정 최소 권한)
+# 멱등  : 센티넬 주석(<!-- __G5_SENTINEL:KLC_SUMMARY_v1 -->)로 중복 방지
+# 의존  : GitHub CLI(gh) 사전 탑재(ubuntu-latest 기본 제공)
+# 산출물: - 릴리즈 노트에 "KLC | <trace> | exitCode=0 | anchor=release-append"
+#        - Job Summary(GITHUB_STEP_SUMMARY)에 PASS/SKIP 요약
+# 관련  : 프로젝트 릴리즈 운용 표준(KLC 1행 로그 규칙)
+# =========================================
 name: KLC Append Release
 
 on:
   release:
-    types: [published]
-  workflow_dispatch:
+    types: [published]   # 릴리즈가 '발행' 상태가 되면 자동 실행
+  workflow_dispatch:      # 수동 실행 시, tag를 직접 지정 가능
     inputs:
       tag:
         description: Tag to edit (optional)
         required: false
         type: string
 
+# 릴리즈 노트 수정에 필요한 최소 권한만 부여
 permissions:
   contents: write
 
+# 중복 실행 방지: 같은 그룹 실행 중이면 이전 실행을 취소
+# (여러 태그 동시 배포를 병렬 허용하려면 group에 ref_name 포함 고려; 아래 '개선 참고' 참고)
 concurrency:
   group: klc-append-release
   cancel-in-progress: true
@@ -20,20 +34,23 @@ concurrency:
 jobs:
   append:
     runs-on: ubuntu-latest
+    timeout-minutes: 5   # 안전 가드: 비정상 대기/정체 방지
     env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # gh 인증 토큰
+      REPO: ${{ github.repository }}          # owner/repo
       SENTINEL: "<!-- __G5_SENTINEL:KLC_SUMMARY_v1 -->"
+
     steps:
+      # 1) 멱등 가드: 이미 센티넬이 붙어 있으면 skip
       - name: Idempotency guard (skip if already appended)
         id: guard
         env:
-          TAG_FROM_EVENT: ${{ github.event.release.tag_name }}
-          TAG_INPUT: ${{ inputs.tag }}
+          TAG_FROM_EVENT: ${{ github.event.release.tag_name }}  # release 트리거 시 태그
+          TAG_INPUT: ${{ inputs.tag }}                          # 수동 실행 시 입력 태그
         shell: bash
         run: |
           set -euo pipefail
-          # 1) 어떤 태그로 작업할지 결정 (이벤트→입력→최신 릴리즈→최근 태그)
+          # --- 태그 결정 순서: 이벤트 태그 → 입력 → 최신 릴리즈 → 최근 태그 ---
           tag="${TAG_FROM_EVENT:-}"
           if [ -z "$tag" ] && [ -n "${TAG_INPUT:-}" ]; then tag="$TAG_INPUT"; fi
           if [ -z "$tag" ]; then
@@ -49,20 +66,21 @@ jobs:
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-          # 2) 릴리즈 존재 확인(+본문 조회) — repo를 명시(-R)하여 .git 의존 제거
+          # 릴리즈 존재 확인(+본문 조회). -R 로 repo를 명시하여 .git 의존 제거
           if ! gh release view -R "$REPO" "$tag" >/dev/null 2>&1; then
             echo "::error::release '$tag' not found in $REPO"; exit 1
           fi
           body="$(gh release view -R "$REPO" "$tag" --json body -q .body || echo '')"
 
-          # 3) 이미 붙어 있으면 Skip (멱등)
+          # 이미 센티넬이 존재하면 SKIP (멱등)
           if echo "$body" | grep -q "$SENTINEL"; then
-            echo "skip=true"  >> "$GITHUB_OUTPUT"
             printf "### KLC append\n- Tag: \`%s\`\n- Result: **SKIP** (sentinel exists)\n" "$tag" >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true"  >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
 
+      # 2) KLC 1행 생성: 추적용 trace(uuid) + 고정 anchor
       - name: Generate KLC line
         if: steps.guard.outputs.skip != 'true'
         id: gen
@@ -75,6 +93,7 @@ jobs:
           echo "KLC_LINE=$line" >> "$GITHUB_ENV"
           echo "$line"
 
+      # 3) 릴리즈 노트에 KLC 1행 + 센티넬을 안전하게 추가
       - name: Append to release notes
         if: steps.guard.outputs.skip != 'true'
         shell: bash
@@ -89,6 +108,7 @@ jobs:
           } >> klc-release-append.md
           gh release edit -R "$REPO" "$tag" --notes-file klc-release-append.md
 
+      # 4) 실행 요약
       - name: Summary
         shell: bash
         run: |
