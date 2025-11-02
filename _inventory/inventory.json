@@ -1,10 +1,10 @@
 {
   "schema": "kobong.inventory.workflows",
   "schema_version": "1.0.0",
-  "generated_at": "2025-11-02T01:28:57Z",
+  "generated_at": "2025-11-02T02:36:52Z",
   "generated_by": "inventory-ci",
   "repo": "dh1293-hub/kobong-orchestrator",
-  "count": 35,
+  "count": 36,
   "workflows": [
     {
       "path": ".github/workflows/ak-apply.yml",
@@ -303,7 +303,8 @@
       "workflow": "connector/oauth-probe",
       "triggers": [],
       "permissions": {
-        "contents": "read"
+        "contents": "write",
+        "pull-requests": "write"
       },
       "concurrency": {
         "group": "oauth-probe-${{ github.ref }}",
@@ -313,7 +314,7 @@
         {
           "job": "probe",
           "runs_on": "ubuntu-latest",
-          "timeout": 5,
+          "timeout": 8,
           "uses": null
         }
       ],
@@ -750,6 +751,28 @@
           "job": "publish",
           "runs_on": "windows-latest",
           "timeout": null,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/wf-inventory-publisher.yml",
+      "workflow": "WF / Inventory Publisher (single PR, no spam)",
+      "triggers": [],
+      "permissions": {
+        "contents": "write",
+        "pull-requests": "write"
+      },
+      "concurrency": {
+        "group": "wf-inventory-${{ github.ref }}",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "publish",
+          "runs_on": "windows-latest",
+          "timeout": 10,
           "uses": null
         }
       ],
