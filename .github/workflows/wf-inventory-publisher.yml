@@ -118,30 +118,35 @@ jobs:
         if: steps.diff.outputs.changed == 'true'
         shell: pwsh
         env:
-          BOT_BRANCH: bot/wf-inventory          # ← 고정 브랜치(항상 이것만 사용)
+          BOT_BRANCH: bot/wf-inventory
         run: |
           $ErrorActionPreference = 'Stop'
-
-          git config user.name  "wf-allround-bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
+      
+          # 최신 main을 기준으로 고정 브랜치 생성/이동 (rebase pull 없이)
           git fetch origin main
           git checkout -B $env:BOT_BRANCH origin/main
-          git pull --rebase origin main
-
+      
+          git config user.name  "wf-allround-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      
           git add _inventory/workflows.csv _inventory/workflows.json
           git commit -m "[WF] _inventory snapshot [skip ci]" | Out-Null
           git push -f origin $env:BOT_BRANCH
-
-          # 기존 열린 PR 재사용(없으면 생성)
+      
+          # PR 재사용(있으면 사용, 없으면 생성)
           $pr = gh pr list --search "head:$env:BOT_BRANCH state:open" --json number --jq ".[0].number"
           if (-not $pr) {
-            gh pr create --head $env:BOT_BRANCH --base main `
-              --title "[WF] _inventory snapshot" `
-              --body  "자동 생성된 인벤토리 스냅샷입니다. (_inventory/workflows.*)"
+            $pr = gh pr create --head $env:BOT_BRANCH --base main `
+                  --title "[WF] _inventory snapshot" `
+                  --body  "자동 생성된 인벤토리 스냅샷입니다. (_inventory/workflows.*)"
           } else {
             Write-Host "Reuse PR #$pr"
           }
+      
+          # 선택 사항: Auto-merge 시도하되 실패해도 통과
+          gh pr merge --squash --auto $pr
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "Auto-merge 미설정이거나 불가, 계속 진행합니다."; 
+            $global:LASTEXITCODE = 0
+          }
 
-          # (선택) 자동 스쿼시 머지: 리포지토리에서 Allow auto-merge 켜진 경우에만 동작
-          try { gh pr merge --squash --auto $pr } catch { Write-Host "auto-merge not enabled or not allowed; skip" }
