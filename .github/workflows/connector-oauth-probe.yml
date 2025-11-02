@@ -22,9 +22,12 @@ on:
         default: ".github/workflows"
         type: string
 
+# ✅ PR 만들고 푸시해야 하므로 쓰기 권한 필요
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
+# ✅ 같은 ref에서 중복 실행 방지 (레이스/충돌 예방)
 concurrency:
   group: oauth-probe-${{ github.ref }}
   cancel-in-progress: true
@@ -32,7 +35,7 @@ concurrency:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     env:
       REPO: ${{ github.repository }}
       GH_BASIC: ${{ github.token }}
@@ -44,16 +47,15 @@ jobs:
         with:
           fetch-depth: 1
 
-      # 1) API 호출은 bash에서 수행해 ENV로만 전달 (파이썬엔 텍스트만 넘김)
+      # --- (1) API 호출: GITHUB_TOKEN / (선택) CHATGPT_OAUTH_TOKEN 상태 조사 ---
       - name: Call APIs (HEAD/GET)
-        id: probe
+        id: call
         shell: bash
         run: |
           set -euo pipefail
           repo="${REPO}"
           path="${{ inputs.path_to_check }}"
           api="https://api.github.com"
-
           http_head() { curl -fsSLI -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $1" -H "X-GitHub-Api-Version: 2022-11-28" "$2" || true; }
           http_get()  { curl -fsSL  -H "Authorization: Bearer $1" -H "X-GitHub-Api-Version: 2022-11-28" "$2" || true; }
 
@@ -78,16 +80,14 @@ jobs:
           echo "ct_contents_code=$ct_contents_code"  >> "$GITHUB_ENV"
           echo "has_chatgpt_token=$([ -n "${CHATGPT_OAUTH_TOKEN:-}" ] && echo true || echo false)" >> "$GITHUB_ENV"
 
-      # 2) summary.json 생성 — heredoc 없이 순수 Python 셸
+      # --- (2) 결과물 생성: _inventory/connector-status/{summary.json,status.md} ---
       - name: Build summary.json
         shell: python
         run: |
           import json, os, pathlib
           def safe_load(s):
-              try:
-                  return json.loads(s) if s else {}
-              except Exception:
-                  return {}
+              try: return json.loads(s) if s else {}
+              except Exception: return {}
           outdir = pathlib.Path("_inventory/connector-status")
           outdir.mkdir(parents=True, exist_ok=True)
           summary = {
@@ -107,7 +107,6 @@ jobs:
           }
           (outdir / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
 
-      # 3) status.md 생성 — 역시 순수 Python 셸
       - name: Build status.md
         shell: python
         run: |
@@ -128,9 +127,68 @@ jobs:
           md += [f"- contents HEAD: {ct.get('contents_head_code')}"]
           pathlib.Path("_inventory/connector-status/status.md").write_text("\n".join(md), encoding="utf-8")
 
-      - name: Upload artifact
+      - name: Upload artifact (for browsing)
         uses: actions/upload-artifact@v4
         with:
           name: connector-status-${{ github.run_id }}
           path: _inventory/connector-status
           if-no-files-found: error
+
+      # --- (3) 변경 감지: _inventory/connector-status/ 만 디프 ---
+      - name: Detect changes
+        id: diff
+        shell: bash
+        run: |
+          set -e
+          git add -N _inventory/connector-status || true
+          if git diff --quiet -- _inventory/connector-status; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --- (4) 자동 PR 발행 (변경 있을 때만) ---
+      - name: Commit & open PR (connector-status only)
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BR="bot/connector-status-${GITHUB_RUN_ID}"
+          # 최신 main 기준으로 안전하게 커밋
+          git config user.name  "wf-allround-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B "$BR" origin/main
+          git pull --rebase origin main
+
+          # connector-status 두 파일만 스테이지 (다른 _inventory 산출물은 보존)
+          git add _inventory/connector-status/summary.json _inventory/connector-status/status.md
+
+          # 정말 변경됐는지 최종 확인
+          if git diff --cached --quiet; then
+            echo "No staged changes; skip PR."
+            exit 0
+          fi
+
+          git commit -m "[WF] connector oauth probe: update connector-status [skip ci]"
+          git push -f origin "$BR"
+
+          # 같은 prefix 의 이전 봇 PR 있으면 정리(단일 라이터 정책)
+          gh pr list --search "head:bot/connector-status- state:open" --json number,headRefName \
+            | jq -r '.[].number' | grep -v '^$' | while read -r n; do
+                # 현재 브랜치 PR이 이미 있으면 패스
+                cur=$(gh pr view "$n" --json headRefName -q .headRefName || echo "")
+                if [ "$cur" != "$BR" ]; then gh pr close -d "$n"; fi
+              done
+
+          # PR 생성(이미 있으면 본문만 갱신)
+          gh pr create \
+            --head "$BR" \
+            --base "main" \
+            --title "Connector OAuth status snapshot (${GITHUB_RUN_ID})" \
+            --body  "This PR updates **_inventory/connector-status/** (summary.json, status.md)."
+
+          # (선택) 자동 머지 활성화: 리포 설정에서 Allow auto-merge 켠 경우에만 유효
+          gh pr merge --squash --auto || true
