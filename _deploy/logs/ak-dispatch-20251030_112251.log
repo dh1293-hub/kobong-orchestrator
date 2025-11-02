@@ -1,0 +1,6 @@
+[11:22:51] == ak-dispatch start: Command='help' Pr='' Sha=''
+[11:22:51] == ak-dispatch start: Command='scan' Pr='' Sha=''
+[11:22:51] SCAN: begin
+[11:22:51] SCAN: end
+[11:22:51] No issues found.
+KLC|ak-dispatch|cmd=scan|ok=0|warn=0|fail=0|sha=|run=|attempt=
