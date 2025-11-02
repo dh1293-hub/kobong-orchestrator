@@ -1,0 +1,53 @@
+# =========================================
+# 이름 : KLC / Nightly Aggregate (UNIFIED)
+# 용도 : 하루치 KLC 로그 집계 → 요약 + 아티팩트 (모니터링 단일화)
+# 트리거 : 매일 00:00 KST (15:00 UTC), 수동 실행 지원
+# 권한 : contents:read, actions:read
+# 산출물 : out/*.jsonl (압축 업로드, 보존 7일), Step Summary
+# 의존 : 없음
+# 주의 : 기존 v2 파일은 삭제하거나 keep 1개만 유지하세요.
+# =========================================
+name: KLC / Nightly Aggregate
+on:
+  schedule:
+    - cron: "0 15 * * *"
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: "쓰기 없는 리포트"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: klc-nightly
+  cancel-in-progress: true
+
+jobs:
+  agg:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1 }
+
+      # TODO: 실제 KLC 수집로직으로 교체. 지금은 동작 확인용 목 더미.
+      - name: Aggregate (mock)
+        run: |
+          mkdir -p out
+          echo '{"traceId":"nightly","exitCode":0,"durationMs":1234,"anchorHash":"'${GITHUB_SHA}'","component":"demo","message":"ok"}' > out/klc.jsonl
+
+      - name: Summary
+        run: |
+          echo "### ✅ KLC Nightly Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Files: $(ls -1 out | wc -l)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload artifacts (7 days)
+        uses: actions/upload-artifact@v4
+        with:
+          name: klc-nightly-${{ github.run_id }}
+          path: out
+          retention-days: 7
