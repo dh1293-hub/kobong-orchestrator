@@ -11,36 +11,20 @@
 # =========================================
 name: KLC Append Release
 
+
 on:
-  release:
-    types: [published]   # 릴리즈가 '발행' 상태가 되면 자동 실행
-  workflow_dispatch:      # 수동 실행 시, tag를 직접 지정 가능
-    inputs:
-      tag:
-        description: Tag to edit (optional)
-        required: false
-        type: string
+  workflow_dispatch: {}
 
-# 릴리즈 노트 수정에 필요한 최소 권한만 부여
 permissions:
-  contents: write
-
-# 중복 실행 방지: 같은 그룹 실행 중이면 이전 실행을 취소
-# (여러 태그 동시 배포를 병렬 허용하려면 group에 ref_name 포함 고려; 아래 '개선 참고' 참고)
-concurrency:
-  group: klc-append-release
-  cancel-in-progress: true
+  contents: read
+  actions: read
 
 jobs:
-  append:
+  noop:
     runs-on: ubuntu-latest
-    timeout-minutes: 5   # 안전 가드: 비정상 대기/정체 방지
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # gh 인증 토큰
-      REPO: ${{ github.repository }}          # owner/repo
-      SENTINEL: "<!-- __G5_SENTINEL:KLC_SUMMARY_v1 -->"
-
     steps:
+      - run: echo "Legacy KLC disabled. Use 'KLC / Nightly Aggregate v2'."
+
       # 1) 멱등 가드: 이미 센티넬이 붙어 있으면 skip
       - name: Idempotency guard (skip if already appended)
         id: guard
