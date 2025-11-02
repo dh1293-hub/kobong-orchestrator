@@ -199,27 +199,52 @@ jobs:
           merge-multiple: true
           pattern: workflows-inventory-*
 
-      - name: Stage _inventory (dedupe)
+# ▼ 기존 "Download artifacts" 다음 스텝을 이 블록으로 교체
+      - name: Stage & normalize inventory (make SSOT)
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p _inventory
-          rsync -a _inventory/_ci_artifacts/ _inventory/ 2>/dev/null || cp -R _inventory/_ci_artifacts/* _inventory/ || true
-          rm -rf _inventory/_ci_artifacts
-          find _inventory -maxdepth 2 -type f -print
+          ART_DIR="_inventory/_ci_artifacts"
+          SSOT_DIR="_inventory/workflows"
+          mkdir -p "$SSOT_DIR"
+      
+          # 1) 아티팩트 모두 모으기
+          if [ -d "$ART_DIR" ]; then
+            rsync -a "$ART_DIR"/ _inventory/ 2>/dev/null || cp -R "$ART_DIR"/* _inventory/ || true
+            rm -rf "$ART_DIR"
+          fi
+      
+          # 2) 어디에 있든 표준명으로 통일(SSOT: _inventory/workflows/index.*)
+          mv -f _inventory/workflows.json            "$SSOT_DIR/index.json"  2>/dev/null || true
+          mv -f _inventory/workflows.csv             "$SSOT_DIR/index.csv"   2>/dev/null || true
+          mv -f _inventory/inventory.json            "$SSOT_DIR/index.json"  2>/dev/null || true
+          mv -f _inventory/inventory.csv             "$SSOT_DIR/index.csv"   2>/dev/null || true
+          mv -f _inventory/index.json                "$SSOT_DIR/index.json"  2>/dev/null || true
+          mv -f _inventory/index.csv                 "$SSOT_DIR/index.csv"   2>/dev/null || true
+          mv -f _inventory/workflows/inventory.json  "$SSOT_DIR/index.json"  2>/dev/null || true
+          mv -f _inventory/workflows/inventory.csv   "$SSOT_DIR/index.csv"   2>/dev/null || true
+          mv -f _inventory/workflows/workflows.json  "$SSOT_DIR/index.json"  2>/dev/null || true
+          mv -f _inventory/workflows/workflows.csv   "$SSOT_DIR/index.csv"   2>/dev/null || true
+      
+          # 3) 최소 보장(비어있지 않게)
+          [ -s "$SSOT_DIR/index.json" ] || echo "[]" > "$SSOT_DIR/index.json"
+          [ -s "$SSOT_DIR/index.csv"  ] || echo "path,triggers" > "$SSOT_DIR/index.csv"
+      
+          # 4) 루트 레거시 파일 제거 + 재유입 방지
+          rm -f _inventory/workflows.json _inventory/workflows.csv _inventory/index.json _inventory/index.csv || true
+          touch .gitignore
+          { echo "_inventory/workflows.json"; echo "_inventory/workflows.csv"; echo "_inventory/index.json"; echo "_inventory/index.csv"; } >> .gitignore
+          sort -u .gitignore -o .gitignore
+      
+          # 5) 가시성
+          echo "### publish normalize (SSOT)" >> "$GITHUB_STEP_SUMMARY"
+          echo "#### _inventory/workflows" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          ls -lah "$SSOT_DIR" >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
 
       # --- push 인증: origin URL에 토큰 주입(128 인증 실패 방지) ---
-      - name: Configure authenticated remote
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          git config user.name  "wf-inventory-bot"
-          git config user.email "wf-inventory-bot@users.noreply.github.com"
-          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
       - name: Commit & open/update single PR
         id: openpr
         shell: bash
@@ -227,21 +252,41 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          git config user.name  "wf-inventory-bot"
+          git config user.email "wf-inventory-bot@users.noreply.github.com"
+      
           branch="bot/wf-inventory"
           git checkout -B "$branch"
-          git add -f _inventory/workflows/index.json _inventory/workflows/index.csv .gitignore
-          # 변경 없으면 스킵(노이즈 방지)
+      
+          # 존재하는 파일 자동 선택(둘 다 없으면 친절히 메시지)
+          ADD=""
+          for p in \
+            "_inventory/workflows/index.json" "_inventory/workflows/index.csv" \
+            "_inventory/index.json" "_inventory/index.csv" ; do
+            [ -f "$p" ] && ADD="$ADD $p"
+          done
+          if [ -z "$ADD" ]; then
+            echo "::error::no inventory files found after normalize"; exit 0
+          fi
+      
+          git add -f $ADD .gitignore
+      
           if git diff --cached --quiet; then
-            echo "No changes → skip PR."; exit 0; fi
+            echo "No changes → skip PR."; exit 0
+          fi
+      
           git commit -m "[WF] workflows inventory → index.(json|csv) (canonicalize & dedupe)"
           git push -f --set-upstream origin "$branch"
+      
           base="$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)"
           gh pr create --base "$base" --head "$branch" \
             --title "[WF] workflows inventory (canonical index.*)" \
             --body  "SSOT: _inventory/workflows/index.json,csv" \
           || true
+      
           pr="$(gh pr view --head "$branch" --json number -q .number || echo '')"
           echo "pr=${pr}" >> "$GITHUB_OUTPUT"
+
 
       # --- Auto-merge: 정책 허용 시 요청, 불가해도 실패 처리하지 않음 ---
       - name: Enable auto-merge (optional; non-fatal)
@@ -252,7 +297,7 @@ jobs:
         run: |
           set -euo pipefail
           pr="${{ steps.openpr.outputs.pr }}"
-          # 인벤토리 외 변경 섞이면 자동머지 금지
+          [ -z "$pr" ] && echo "no PR" && exit 0
           files="$(gh pr view "$pr" --json files -q '.files[].path')"
           echo "$files" | grep -v '^_inventory/' >/dev/null && { echo "::notice::skip automerge (non-inventory changes)"; exit 0; }
           auto="$(gh repo view --json autoMergeAllowed -q .autoMergeAllowed || echo false)"
