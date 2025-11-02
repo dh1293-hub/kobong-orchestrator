@@ -1,3 +1,9 @@
+## Docs
+- [ARCHITECTURE](docs/ARCHITECTURE.md)
+- [OPERATIONS](docs/OPERATIONS.md) · [KLC SPEC](docs/KLC_SPEC.md) · [DRIVER CONTRACT](docs/DRIVER_CONTRACT.md)
+
+
+
 [![CI](https://github.com/dh1293-hub/kobong-orchestrator/actions/workflows/ci.yml/badge.svg)](https://github.com/dh1293-hub/kobong-orchestrator/actions/workflows/ci.yml)
 
 ![License](https://img.shields.io/github/license/dh1293-hub/kobong-orchestrator)
