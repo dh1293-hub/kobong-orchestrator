@@ -1,16 +1,19 @@
-# 목적: 빠른 가드(actionlint + 스모크 자리)
 name: Protect / Basic
 on:
-  pull_request: { branches: [ main ] }
-permissions: { contents: read }
-concurrency: { group: protect-${{ github.ref }}, cancel-in-progress: true }
+  pull_request:
+    branches: [ main ]
+permissions:
+  contents: read
+concurrency:
+  group: protect-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 1 }   # 얕은 체크아웃으로 속도↑
+        with:
+          fetch-depth: 1
       - name: actionlint
         uses: docker://rhysd/actionlint:latest
-      # TODO: 언어별 초간단 린트/스모크 1분 내 종료 목표
