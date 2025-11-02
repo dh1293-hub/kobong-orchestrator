@@ -85,12 +85,23 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          git add -N _inventory/workflows.csv _inventory/workflows.json | Out-Null
-          if (git diff --quiet -- _inventory/workflows.csv _inventory/workflows.json) {
-            "changed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+      
+          # 경로 고정
+          $paths = @('_inventory/workflows.csv','_inventory/workflows.json')
+      
+          # 인텐트 추가(신규 파일도 diff에 잡히도록)
+          git add -N $paths | Out-Null
+      
+          # 안전한 비교: --name-only 는 항상 exit 0 → 스텝 실패 안 함
+          $changedList = git diff --name-only -- $paths
+          if ([string]::IsNullOrWhiteSpace($changedList)) {
+            'changed=false' | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host 'No inventory changes.'
           } else {
-            "changed=true"  | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            'changed=true'  | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Changed: $changedList"
           }
+
 
       # 5) 산출물 업로드(검토용)
       - name: Upload artifact
