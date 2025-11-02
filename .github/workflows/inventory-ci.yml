@@ -75,78 +75,63 @@ jobs:
       #   with:
       #     egress-policy: audit
 
-      - name: Checkout (read-only)
+      # (기존) Checkout 스텝은 보안·안정 위해 이렇게 유지 권장
+      - name: Checkout (read-only; no submodules)
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          persist-credentials: false
-          ref: ${{ github.sha }}
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-          cache: 'pip'
-
-      - name: Install deps (pin minimal)
-        shell: bash
-        run: |
-          set -euo pipefail
-          pip install --disable-pip-version-check --no-input pyyaml==6.0.2
-
+          submodules: 'false'         # 깨진 submodule 회피
+          persist-credentials: false  # 토큰 주입 차단
+      
+      # (기존) 파이썬/의존 설치 후, 반드시 출력 폴더를 미리 생성
       - name: Prepare output dir
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p _inventory/workflows
-
-      - name: Generate inventory (primary, repo script)
+      
+      # (기존) 생성기 실행 — 실패해도 다음 단계에서 정규화로 커버
+      - name: Generate inventory (repo script)
         shell: bash
         run: |
           set -euo pipefail
           if [ -f ".github/tools/gen_inventory.py" ]; then
-            python3 .github/tools/gen_inventory.py
+            python3 .github/tools/gen_inventory.py || true
           else
-            echo "::warning::.github/tools/gen_inventory.py not found. Will run fallback."
+            echo "::warning::.github/tools/gen_inventory.py not found."
           fi
-
-      - name: Fallback generator (guarantee artifacts)
+      
+      # ✅ 추가: "산출물 정규화(이동·리네임)" — 양쪽 네이밍 모두 흡수
+      - name: Normalize inventory outputs (compat shim)
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -s _inventory/workflows/inventory.json ] || [ ! -s _inventory/workflows/inventory.csv ]; then
-            python3 - <<'PY'
-            import os, json, csv, glob, sys
-            try:
-              import yaml  # type: ignore
-            except Exception:
-              yaml = None
-            root = ".github/workflows"
-            rows = []
-            for p in sorted(glob.glob(os.path.join(root, "*.y*ml"))):
-                triggers = []
-                if yaml:
-                    try:
-                        with open(p, encoding="utf-8") as f:
-                            y = list(yaml.safe_load_all(f))
-                        if y:
-                            on = y[0].get("on") or {}
-                            if isinstance(on, dict):
-                                triggers = list(on.keys())
-                            elif isinstance(on, list):
-                                triggers = on
-                    except Exception:
-                        pass
-                rows.append({"path": p, "triggers": triggers})
-            os.makedirs("_inventory/workflows", exist_ok=True)
-            with open("_inventory/workflows/inventory.json","w",encoding="utf-8") as f:
-                json.dump(rows, f, ensure_ascii=False, indent=2)
-            with open("_inventory/workflows/inventory.csv","w",newline="",encoding="utf-8") as f:
-                w=csv.writer(f); w.writerow(["path","triggers"])
-                for r in rows: w.writerow([r["path"], "|".join(r["triggers"])])
-            PY
+          mkdir -p _inventory/workflows
+      
+          # 1) 루트 생성물 → 하위 폴더/표준명으로 이동
+          if [ -s "_inventory/workflows.json" ] && [ ! -s "_inventory/workflows/inventory.json" ]; then
+            mv -f "_inventory/workflows.json" "_inventory/workflows/inventory.json"
           fi
-
+          if [ -s "_inventory/workflows.csv" ] && [ ! -s "_inventory/workflows/inventory.csv" ]; then
+            mv -f "_inventory/workflows.csv" "_inventory/workflows/inventory.csv"
+          fi
+      
+          # 2) 혹시 하위 폴더에 workflows.json/csv 이름으로 나온 경우도 표준명으로 정리
+          if [ -s "_inventory/workflows/workflows.json" ] && [ ! -s "_inventory/workflows/inventory.json" ]; then
+            mv -f "_inventory/workflows/workflows.json" "_inventory/workflows/inventory.json"
+          fi
+          if [ -s "_inventory/workflows/workflows.csv" ] && [ ! -s "_inventory/workflows/inventory.csv" ]; then
+            mv -f "_inventory/workflows/workflows.csv" "_inventory/workflows/inventory.csv"
+          fi
+      
+          # 3) 최종 보장: 없으면 경고를 남겨 디버깅 힌트 제공
+          if [ ! -s "_inventory/workflows/inventory.json" ] || [ ! -s "_inventory/workflows/inventory.csv" ]; then
+            echo "::warning::normalized outputs not found. check generator."
+            ls -lah _inventory || true
+            ls -lah _inventory/workflows || true
+          fi
+      
+      # ✅ 업로드는 '표준 경로'를 우선, 루트 경로는 보조로 포함 (이중 안전망)
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -154,21 +139,28 @@ jobs:
           path: |
             _inventory/workflows/inventory.json
             _inventory/workflows/inventory.csv
+            _inventory/workflows.json
+            _inventory/workflows.csv
           if-no-files-found: error
           retention-days: 7
-
+      
+      # ✅ Summary에서 루트/하위 모두 출력해 가시성↑
       - name: Job Summary
         shell: bash
         run: |
-          set -euo pipefail
-          echo "### workflows inventory" >> "$GITHUB_STEP_SUMMARY"
-          if [ -d _inventory/workflows ]; then
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
-            ls -lah _inventory/workflows >> "$GITHUB_STEP_SUMMARY" || true
-            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "- No directory '_inventory/workflows' found." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### workflows inventory (after normalize)"
+            echo ""
+            echo "#### _inventory/"
+            echo '```'
+            ls -lah _inventory || true
+            echo '```'
+            echo "#### _inventory/workflows/"
+            echo '```'
+            ls -lah _inventory/workflows || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
 
   publish:
     needs: build
