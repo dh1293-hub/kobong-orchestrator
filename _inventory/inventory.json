@@ -1,10 +1,10 @@
 {
   "schema": "kobong.inventory.workflows",
   "schema_version": "1.0.0",
-  "generated_at": "2025-11-02T00:20:38Z",
+  "generated_at": "2025-11-02T01:28:57Z",
   "generated_by": "inventory-ci",
   "repo": "dh1293-hub/kobong-orchestrator",
-  "count": 34,
+  "count": 35,
   "workflows": [
     {
       "path": ".github/workflows/ak-apply.yml",
@@ -293,6 +293,27 @@
           "job": "check",
           "runs_on": "ubuntu-latest",
           "timeout": 15,
+          "uses": null
+        }
+      ],
+      "__parse_error__": null
+    },
+    {
+      "path": ".github/workflows/connector-oauth-probe.yml",
+      "workflow": "connector/oauth-probe",
+      "triggers": [],
+      "permissions": {
+        "contents": "read"
+      },
+      "concurrency": {
+        "group": "oauth-probe-${{ github.ref }}",
+        "cancel-in-progress": true
+      },
+      "jobs": [
+        {
+          "job": "probe",
+          "runs_on": "ubuntu-latest",
+          "timeout": 5,
           "uses": null
         }
       ],
