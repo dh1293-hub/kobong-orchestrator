@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-11-02 00:14:58+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-11-02 01:20:03+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -226,6 +226,24 @@ CI: WebUI 스모크 (가벼운 안전망) — B안(인라인)
 5) logs/ 를 아티팩트 업로드     ← 로컬 액션 publish-logs 대체
 - 강화점: 경로 필터, npm 캐시, 타임아웃(15분), 동시성 취소, 실패 시 워크스페이스 트리 덤프
 =========================================
+```
+
+## `.github/workflows/connector-oauth-probe.yml`
+
+```text
+============================================================
+Connector OAuth Probe — ChatGPT ↔ GitHub 커넥터/토큰 상태 자가진단
+목적:
+- (선택) CHATGPT_OAUTH_TOKEN 이 제공되면, 해당 토큰으로 Private 리포 읽기 가능 여부 검사
+- GITHUB_TOKEN(워크플로 기본 토큰)의 권한·제한도 함께 리포트
+산출:
+- _inventory/connector-status/summary.json, status.md 로 결과 저장
+사용법:
+1) 레포 시크릿 설정 (선택): CHATGPT_OAUTH_TOKEN = ChatGPT 커넥터가 발급한 OAuth 토큰
+- 없으면 ChatGPT 토큰 검사는 건너뜀(레포 기본 토큰만 보고)
+2) Actions → Run workflow (workflow_dispatch) 실행
+3) 결과는 아티팩트 + _inventory/connector-status/* 로 남고, 원하면 자동 PR로 반영
+============================================================
 ```
 
 ## `.github/workflows/contracts-ci.yml`
