@@ -1,0 +1,22 @@
+name: Build & Test (smoke)
+on:
+  pull_request:
+    branches: [ main ]
+permissions:
+  contents: read
+concurrency:
+  group: bt-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  bt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Build/Test (placeholder)
+        run: |
+          echo "TODO: driver build/test --klc ./logs/klc.jsonl"
+      - name: Summary
+        run: echo "### Build/Test Summary" >> $GITHUB_STEP_SUMMARY
