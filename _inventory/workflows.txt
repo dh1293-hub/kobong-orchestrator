@@ -1,4 +1,4 @@
-# GENERATED @ 2025-10-31 22:12:21+00:00  (repo=/home/runner/work/kobong-orchestrator/kobong-orchestrator)
+# GENERATED @ 2025-11-02 04:48:52+00:00  (repo=/home/runner/work/kobong-orchestrator/kobong-orchestrator)
 # RULES: block+inline comments excluded, files-only, .github/workflows only, flat, exclude=inventory-ci.yml
 
 .github/workflows/ak-apply.yml
@@ -40,24 +40,23 @@
 
 .github/workflows/ci.yml
 
-.github/workflows/contracts-ci.yml
+.github/workflows/connector-oauth-probe.yml
 
-.github/workflows/dispatch-on-release.yml
+.github/workflows/contracts-ci.yml
+  - .config/contracts.json
+  - .github/workflows/contracts-ci.yml
 
 .github/workflows/guard-flush-queue.yml
 
 .github/workflows/guard-logs-ignored.yml
 
 .github/workflows/guard-readme-badge.yml
+  - .github/workflows/guard-readme-badge.yml
   - README.md
-
-.github/workflows/guard-sentinel.yml
 
 .github/workflows/health-smoke.yml
 
 .github/workflows/housekeeping-smoke.yml
-  - .github/workflows/housekeeping-smoke.yml
-  - scripts/g5/housekeeping-smoke.ps1
 
 .github/workflows/klc-append-release.yml
 
@@ -94,7 +93,14 @@
 .github/workflows/weekly-housekeeping.yml
 
 .github/workflows/wf-allround-tester.yml
+  - _inventory/workflows.csv
+  - _inventory/workflows.json
   - scripts/g5/wf-allround-tester.ps1
+  - scripts/g5/wf-inventory.ps1
+
+.github/workflows/wf-inventory-publisher.yml
+  - _inventory/workflows.csv
+  - _inventory/workflows.json
   - scripts/g5/wf-inventory.ps1
 
 .github/workflows/xp-summary-artifact.yml
