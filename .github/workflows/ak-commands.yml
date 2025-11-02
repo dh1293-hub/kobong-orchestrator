@@ -1,43 +1,24 @@
-# =========================================================
-# 파일 용도 : ChatOps 수동 실행기 (/ak ...)
-# 트리거   : PR 코멘트(issue_comment) 또는 Actions 수동(workflow_dispatch)
-# 동작 흐름 : 입력 파싱 → PR 헤드 체크아웃 → scripts/g5 하이드레이트(main) → 디스패치 실행
-# 산출물   : PR 코멘트(시작/요약) + Artifact: logs/ak7.jsonl
-# 주의     : checkout.ref는 1회만 지정, 콜론이 있는 step name은 모두 인용(따옴표)
-# =========================================================
-name: ak-commands
-
-"on":
-  issue_comment:
-    types: [created]
-  workflow_dispatch:
-    inputs:
-      pr:
-        description: "Pull request number"
-        required: true
-      command:
-        description: "ak subcommand (help|test|scan|fixloop)"
-        required: true
-      rawargs:
-        description: "Optional raw args for the command"
-        required: false
-        default: ""
+# DEPRECATED / QUARANTINE STUB
+# 목적: 기존 ak-commands 워크플로우의 자동 트리거를 모두 비활성화하고
+#      CI 소음을 제거하기 위해 수동 실행만 허용한다.
+# 주의: 필요 시 PR에서 "Run workflow"로만 실행 가능.
+name: AK / Commands (quarantined)
+on:
+  workflow_dispatch: {}
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
-  checks: write
 
-# steps.outputs는 job-level에서 사용할 수 없으므로 event 컨텍스트만 사용
 concurrency:
-  group: ak-commands-${{ github.repository }}-${{ github.event_name == 'workflow_dispatch' && inputs.pr || github.event.issue.number || github.event.pull_request.number }}-${{ github.event_name == 'workflow_dispatch' && inputs.command || 'cmd' }}
-  cancel-in-progress: false
+  group: ak-commands-quarantine
+  cancel-in-progress: true
 
 jobs:
-  run-ak:
+  noop:
     runs-on: ubuntu-latest
     steps:
+      - run: echo "ak-commands quarantined. Use KLC v2 flows."
+
       - name: "Resolve inputs"
         id: resolve
         shell: bash
