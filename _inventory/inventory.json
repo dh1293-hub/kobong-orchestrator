@@ -1,7 +1,7 @@
 {
   "schema": "kobong.inventory.workflows",
   "schema_version": "1.0.0",
-  "generated_at": "2025-11-02T02:54:45Z",
+  "generated_at": "2025-11-02T04:48:54Z",
   "generated_by": "inventory-ci",
   "repo": "dh1293-hub/kobong-orchestrator",
   "count": 36,
@@ -489,7 +489,7 @@
         {
           "job": "append",
           "runs_on": "ubuntu-latest",
-          "timeout": null,
+          "timeout": 5,
           "uses": null
         }
       ],
@@ -765,7 +765,7 @@
         "pull-requests": "write"
       },
       "concurrency": {
-        "group": "wf-inventory-${{ github.ref }}",
+        "group": "wf-inventory-publisher",
         "cancel-in-progress": true
       },
       "jobs": [

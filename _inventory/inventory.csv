@@ -33,5 +33,5 @@ path,workflow,triggers,permissions.keys,concurrency.group,concurrency.cancel,job
 .github/workflows/weekly-auto-release-smoke.yml,Weekly Auto Release Smoke,,contents,weekly-auto-release-smoke,True,1,
 .github/workflows/weekly-housekeeping.yml,Weekly Housekeeping,,"actions,contents",,,1,
 .github/workflows/wf-allround-tester.yml,WF Allround Tester,,"actions,checks,contents,pull-requests,statuses",wf-allround-${{ github.ref }},False,3,
-.github/workflows/wf-inventory-publisher.yml,"WF / Inventory Publisher (single PR, no spam)",,"contents,pull-requests",wf-inventory-${{ github.ref }},True,1,
+.github/workflows/wf-inventory-publisher.yml,"WF / Inventory Publisher (single PR, no spam)",,"contents,pull-requests",wf-inventory-publisher,True,1,
 .github/workflows/xp-summary-artifact.yml,xp-summary-artifact,,"contents,pull-requests",xp-summary-${{ github.ref }},False,1,
