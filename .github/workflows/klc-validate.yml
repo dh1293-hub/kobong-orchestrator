@@ -1,13 +1,16 @@
 name: CI · KLC v1.3 validate
 on:
-  pull_request:
-  workflow_dispatch:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
-  klc:
-    runs-on: windows-latest
+  noop:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - run: echo "Legacy KLC disabled. Use 'KLC / Nightly Aggregate v2'."
 
       - name: Emit KLC lines (make context + inventory)
         shell: pwsh
