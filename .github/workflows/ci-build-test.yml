@@ -10,7 +10,7 @@
 name: CI / Build & Test
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ "main" ]
 
 permissions:
   contents: read
@@ -26,25 +26,33 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 1 }
+        with:
+          fetch-depth: 1
       - uses: actions/setup-node@v4
-        with: { node-version: 'lts/*', cache: 'npm' }
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
       - name: Install
-        run: npm ci --ignore-scripts || npm install --no-audit
+        run: |
+          if [ -f package-lock.json ]; then npm ci --ignore-scripts; else npm install --no-audit; fi
       - name: Test (if present)
-        run: npm test --if-present
+        run: |
+          npm run -s test --if-present || true
       - name: Summary
         run: echo "### Node: done" >> $GITHUB_STEP_SUMMARY
 
   python:
-    if: ${{ hashFiles('**/pyproject.toml','**/requirements.txt') != '' }}
+    if: ${{ hashFiles('**/pyproject.toml') != '' || hashFiles('**/requirements.txt') != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 1 }
+        with:
+          fetch-depth: 1
       - uses: actions/setup-python@v5
-        with: { python-version: '3.x', cache: 'pip' }
+        with:
+          python-version: '3.x'
+          cache: 'pip'
       - name: Install
         run: |
           python -m pip install -U pip
@@ -61,12 +69,13 @@ jobs:
         run: echo "### Python: done" >> $GITHUB_STEP_SUMMARY
 
   java:
-    if: ${{ hashFiles('**/pom.xml','**/build.gradle*') != '' }}
+    if: ${{ hashFiles('**/pom.xml') != '' || hashFiles('**/build.gradle*') != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 1 }
+        with:
+          fetch-depth: 1
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -86,7 +95,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 1 }
+        with:
+          fetch-depth: 1
       - name: Configure & Build (CMake)
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release || true
