@@ -65,15 +65,39 @@ concurrency:
 
 jobs:
   build:
-    # 파이썬 + 깔끔한 파일 IO를 위해 ubuntu-latest 사용 (윈도우 의존성 없음)
     runs-on: ubuntu-latest
-    timeout-minutes: 8
-
     steps:
-      - name: 'Checkout'
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1   # 충분(히스토리 불필요)
+          fetch-depth: 1
+
+      - name: Prepare requirements (pin)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .github/tools
+          echo 'pyyaml==6.0.2' > .github/tools/requirements.txt
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: 'pip'
+          cache-dependency-path: .github/tools/requirements.txt  # ← 요게 핵심!
+
+      - name: Install deps
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install --disable-pip-version-check --no-input -r .github/tools/requirements.txt
+
+      - name: Generate inventory JSON/CSV
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/tools/gen_inventory.py
+
 
       - name: 'Setup Python'
         uses: actions/setup-python@v5
