@@ -1,0 +1,252 @@
+# ========================================================================
+# inventory/ci — 워크플로 인벤토리 생성·게시 (보강판)
+# 목적:
+#   1) .github/workflows/*.y*ml 스캔 → 인벤토리 산출
+#   2) 산출물 SSOT 고정: _inventory/workflows/index.json, index.csv
+#   3) (옵션) 단일 PR로 반영, Auto-merge는 정책 허용 시에만
+# 보안/안정:
+#   - 기본 read-only, 게시 단계에서만 write 상승
+#   - checkout@v4: build=read-only, publish=push 직전 토큰 주입
+#   - submodules:false 로 깨진 .gitmodules 회피
+#   - Setup-Python: cache 미사용 + 3.11 고정(캐시 키 파일 요구 회피)
+# ========================================================================
+
+name: inventory/ci
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - "scripts/g5/**"
+      - ".github/workflows/inventory-ci.yml"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - "scripts/g5/**"
+      - ".github/workflows/inventory-ci.yml"
+  workflow_dispatch:
+    inputs:
+      publish_pr:
+        description: '인벤토리를 PR로 반영'
+        type: choice
+        options: ['false','true']
+        default: 'false'
+      auto_merge:
+        description: '정책 허용 시 자동 병합'
+        type: choice
+        options: ['false','true']
+        default: 'false'
+
+# 기본 권한: 읽기 전용(잡별로 상향)
+permissions:
+  contents: read
+  actions: read
+
+# ref별 직렬화(스팸 PR/경합 방지)
+concurrency:
+  group: inv-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # --- 소스 읽기: read-only / submodule 완전 비활성 ---
+      - name: Checkout (read-only; no submodules)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+          persist-credentials: false
+
+      # --- Python 준비: 캐시 OFF + 3.11 고정(캐시 키 파일 요구 제거) ---
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # --- 의존 설치(최소 pin) ---
+      - name: Install deps (pyyaml)
+        run: |
+          python -m pip install --upgrade --disable-pip-version-check pyyaml==6.0.2
+
+      # --- 출력 디렉터리 보장 ---
+      - name: Prepare output dir
+        run: mkdir -p _inventory/workflows
+
+      # --- 1차: 저장소 스크립트로 생성(있으면) ---
+      - name: Generate inventory (repo script)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f ".github/tools/gen_inventory.py" ]; then
+            python .github/tools/gen_inventory.py || echo "::warning::generator returned non-zero"
+          else
+            echo "::notice::.github/tools/gen_inventory.py not found; will fallback."
+          fi
+
+      # --- 2차 폴백: 항상 산출물 보장(루트 레거시 이름으로 임시 생성) ---
+      - name: Fallback generator (always produce)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -s _inventory/workflows.json ] && [ ! -s _inventory/workflows/inventory.json ]; then
+            python - <<'PY'
+            import os, glob, json, csv
+            try:
+              import yaml
+            except Exception:
+              yaml = None
+            rows=[]
+            for p in sorted(glob.glob(".github/workflows/*.y*ml")):
+              triggers=[]
+              if yaml:
+                try:
+                  y=list(yaml.safe_load_all(open(p,encoding="utf-8"))); d=y[0] if y else {}
+                  on=d.get("on") or {}
+                  if isinstance(on, dict): triggers=list(on.keys())
+                  elif isinstance(on, list): triggers=on
+                except Exception: pass
+              rows.append({"path": p, "triggers": triggers})
+            os.makedirs("_inventory", exist_ok=True)
+            open("_inventory/workflows.json","w",encoding="utf-8").write(json.dumps(rows,ensure_ascii=False,indent=2))
+            with open("_inventory/workflows.csv","w",newline="",encoding="utf-8") as f:
+              w=csv.writer(f); w.writerow(["path","triggers"])
+              [w.writerow([r["path"], "|".join(r["triggers"])]) for r in rows]
+            PY
+          fi
+
+      # --- 표준 경로/이름으로 정규화: SSOT=index.(json|csv) ---
+      - name: Normalize outputs (→ _inventory/workflows/index.*)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _inventory/workflows
+          mv -f _inventory/workflows.json           _inventory/workflows/index.json  2>/dev/null || true
+          mv -f _inventory/workflows.csv            _inventory/workflows/index.csv   2>/dev/null || true
+          mv -f _inventory/workflows/inventory.json _inventory/workflows/index.json  2>/dev/null || true
+          mv -f _inventory/workflows/inventory.csv  _inventory/workflows/index.csv   2>/dev/null || true
+          mv -f _inventory/workflows/workflows.json _inventory/workflows/index.json  2>/dev/null || true
+          mv -f _inventory/workflows/workflows.csv  _inventory/workflows/index.csv   2>/dev/null || true
+          # 비어 있지 않도록 최소 보장
+          [ -s _inventory/workflows/index.json ] || echo "[]" > _inventory/workflows/index.json
+          [ -s _inventory/workflows/index.csv  ] || echo "path,triggers" > _inventory/workflows/index.csv
+          # 루트 레거시 제거 + 재유입 방지
+          rm -f _inventory/workflows.json _inventory/workflows.csv || true
+          touch .gitignore
+          { echo "_inventory/workflows.json"; echo "_inventory/workflows.csv"; } >> .gitignore
+          sort -u .gitignore -o .gitignore
+
+      # --- 가시성: Summary에 파일 목록 ---
+      - name: Job Summary
+        shell: bash
+        run: |
+          {
+            echo "### workflows inventory"
+            echo "#### _inventory/workflows"
+            echo '```'
+            ls -lah _inventory/workflows || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # --- 아티팩트 업로드 ---
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflows-inventory-${{ github.run_id }}
+          path: |
+            _inventory/workflows/index.json
+            _inventory/workflows/index.csv
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    # push(main) 또는 수동+publish_pr=true 에서만 게시
+    if: >
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_pr == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # read-only 체크아웃(토큰 보존 X) — push 직전에 원격에 토큰 주입
+      - name: Checkout (no creds)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: _inventory/_ci_artifacts
+          merge-multiple: true
+          pattern: workflows-inventory-*
+
+      - name: Stage _inventory (dedupe)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _inventory
+          rsync -a _inventory/_ci_artifacts/ _inventory/ 2>/dev/null || cp -R _inventory/_ci_artifacts/* _inventory/ || true
+          rm -rf _inventory/_ci_artifacts
+          find _inventory -maxdepth 2 -type f -print
+
+      # --- push 인증: origin URL에 토큰 주입(128 인증 실패 방지) ---
+      - name: Configure authenticated remote
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name  "wf-inventory-bot"
+          git config user.email "wf-inventory-bot@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Commit & open/update single PR
+        id: openpr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          branch="bot/wf-inventory"
+          git checkout -B "$branch"
+          git add -f _inventory/workflows/index.json _inventory/workflows/index.csv .gitignore
+          # 변경 없으면 스킵(노이즈 방지)
+          if git diff --cached --quiet; then
+            echo "No changes → skip PR."; exit 0; fi
+          git commit -m "[WF] workflows inventory → index.(json|csv) (canonicalize & dedupe)"
+          git push -f --set-upstream origin "$branch"
+          base="$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)"
+          gh pr create --base "$base" --head "$branch" \
+            --title "[WF] workflows inventory (canonical index.*)" \
+            --body  "SSOT: _inventory/workflows/index.json,csv" \
+          || true
+          pr="$(gh pr view --head "$branch" --json number -q .number || echo '')"
+          echo "pr=${pr}" >> "$GITHUB_OUTPUT"
+
+      # --- Auto-merge: 정책 허용 시 요청, 불가해도 실패 처리하지 않음 ---
+      - name: Enable auto-merge (optional; non-fatal)
+        if: ${{ steps.openpr.outputs.pr && inputs.auto_merge == 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pr="${{ steps.openpr.outputs.pr }}"
+          # 인벤토리 외 변경 섞이면 자동머지 금지
+          files="$(gh pr view "$pr" --json files -q '.files[].path')"
+          echo "$files" | grep -v '^_inventory/' >/dev/null && { echo "::notice::skip automerge (non-inventory changes)"; exit 0; }
+          auto="$(gh repo view --json autoMergeAllowed -q .autoMergeAllowed || echo false)"
+          [ "$auto" != "true" ] && { echo "::notice::automerge disabled by repo policy"; exit 0; }
+          gh pr merge "$pr" --squash --auto || echo "::notice::automerge request failed (non-fatal)"
