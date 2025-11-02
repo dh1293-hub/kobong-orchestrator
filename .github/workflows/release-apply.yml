@@ -1,0 +1,56 @@
+# =========================================
+# 이름 : Release / Apply (DRYRUN→APPLY)
+# 용도 : 운영 반영(배포) 수동 실행. DRYRUN으로 검증 후 APPLY.
+# 트리거 : workflow_dispatch
+# 권한 : contents:read (필요 시 확장)
+# 산출물 : Step Summary 로그
+# 의존 : scripts/g5/Start-ORCH.ps1 / Stop-ORCH.ps1 (선택)
+# 주의 : 실제 배포 명령은 환경에 맞게 TODO 구간 채우기.
+# =========================================
+name: Release / Apply
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "대상 환경 (예: prod / staging)"
+        required: true
+        default: "prod"
+      action:
+        description: "실행 단계"
+        type: choice
+        options: [ DRYRUN, APPLY ]
+        default: DRYRUN
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.environment }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: windows-latest   # Or linux. PowerShell 7 사용 가능.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1 }
+
+      - name: DRYRUN / APPLY
+        shell: pwsh
+        run: |
+          Write-Host "##[group]Release ${{ inputs.action }} for ${{ inputs.environment }}"
+          # TODO: 실제 배포 명령 연결 (예시)
+          if ("${{ inputs.action }}" -eq "DRYRUN") {
+            # pwsh -NoProfile -File .\scripts\g5\Start-ORCH.ps1 -DryRun
+            Write-Host "DRYRUN only. Validate /health here."
+          } else {
+            # pwsh -NoProfile -File .\scripts\g5\Start-ORCH.ps1 -DryRun:$false
+            Write-Host "APPLY. Execute real deployment."
+          }
+          Write-Host "##[endgroup]"
+      - name: Summary
+        shell: pwsh
+        run: |
+          Add-Content $env:GITHUB_STEP_SUMMARY "### Release ${{
+            inputs.action }} → ${{ inputs.environment }} (OK)"
