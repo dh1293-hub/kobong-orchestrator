@@ -12,7 +12,7 @@ path,workflow,triggers,permissions.keys,concurrency.group,concurrency.cancel,job
 .github/workflows/ak-workflow-inventory.yml,AK • Workflow Inventory,,"contents,pull-requests",,,1,
 .github/workflows/auto-github-release.yml,auto-github-release,,"actions,contents",release-${{ github.event.inputs.tag || github.ref_name || github.run_id }},False,1,
 .github/workflows/ci.yml,ci/webui,,contents,ci-webui-${{ github.ref }},True,1,
-.github/workflows/connector-oauth-probe.yml,connector/oauth-probe,,contents,oauth-probe-${{ github.ref }},True,1,
+.github/workflows/connector-oauth-probe.yml,connector/oauth-probe,,"contents,pull-requests",oauth-probe-${{ github.ref }},True,1,
 .github/workflows/contracts-ci.yml,Contracts CI,,contents,contracts-${{ github.ref }},True,1,
 .github/workflows/guard-flush-queue.yml,guard/flush-queue,,"actions,contents",flush-queue-${{ github.ref }},True,1,
 .github/workflows/guard-logs-ignored.yml,guard/logs-ignored (flex),,contents,guard-logs-${{ github.ref }},True,1,
