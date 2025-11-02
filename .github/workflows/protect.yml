@@ -1,0 +1,37 @@
+# =========================================
+# 이름 : Protect / Lint & Policy
+# 용도 : PR에 대한 빠른 가드(actionlint 등) — 지금은 "경고 수집만" (실패 X)
+# 트리거 : pull_request (main)
+# 권한 : contents: read (최소)
+# 산출물 : Step Summary에 경고 요약
+# 의존 : 없음 (docker pull rhysd/actionlint)
+# 주의 : 레거시 워크플로 경고가 많으므로 warn-only.
+#        레거시 정리 후 continue-on-error를 false로 바꿔 엄격 모드로 전환.
+# =========================================
+name: Protect / Lint & Policy
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protect-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 1 }
+
+      - name: actionlint (warn-only)
+        uses: docker://rhysd/actionlint:latest
+        continue-on-error: true
+
+      - name: Write summary
+        run: |
+          echo "### Protect: actionlint finished (warn-only)" >> $GITHUB_STEP_SUMMARY
