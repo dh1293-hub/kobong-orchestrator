@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-11-02 02:54:48+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-11-02 03:54:39+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -378,6 +378,22 @@ Housekeeping Smoke — 레포 위생(비밀/대용량/금지 확장자) 초경�
 커스터마이즈(수동 실행):
 - mode(enforce/report), max_mb, exclude_globs(멀티라인)
 ============================================================
+```
+
+## `.github/workflows/klc-append-release.yml`
+
+```text
+=========================================
+KLC Append Release (주석 강화본)
+목적  : 릴리즈(Release) 노트에 'KLC 요약 1줄'을 멱등하게 추가
+트리거: 1) release: published   2) workflow_dispatch(tag 입력 선택)
+권한  : contents: write (릴리즈 노트 수정 최소 권한)
+멱등  : 센티넬 주석(<!-- __G5_SENTINEL:KLC_SUMMARY_v1 -->)로 중복 방지
+의존  : GitHub CLI(gh) 사전 탑재(ubuntu-latest 기본 제공)
+산출물: - 릴리즈 노트에 "KLC | <trace> | exitCode=0 | anchor=release-append"
+- Job Summary(GITHUB_STEP_SUMMARY)에 PASS/SKIP 요약
+관련  : 프로젝트 릴리즈 운용 표준(KLC 1행 로그 규칙)
+=========================================
 ```
 
 ## `.github/workflows/post-release-canary.yml`
