@@ -1,4 +1,4 @@
-# GENERATED @ 2025-11-02 04:48:52+00:00  (repo=/home/runner/work/kobong-orchestrator/kobong-orchestrator)
+# GENERATED @ 2025-11-02 17:19:02+00:00  (repo=/home/runner/work/kobong-orchestrator/kobong-orchestrator)
 # RULES: block+inline comments excluded, files-only, .github/workflows only, flat, exclude=inventory-ci.yml
 
 .github/workflows/ak-apply.yml
@@ -34,7 +34,6 @@
 
 .github/workflows/ak-workflow-inventory.yml
   - _inventory/workflows.txt
-  - .github/workflows/inventory-ci.yml
 
 .github/workflows/auto-github-release.yml
 
