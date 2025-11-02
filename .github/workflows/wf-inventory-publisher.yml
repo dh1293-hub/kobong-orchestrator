@@ -149,4 +149,18 @@ jobs:
             Write-Host "Auto-merge 미설정이거나 불가, 계속 진행합니다."; 
             $global:LASTEXITCODE = 0
           }
+      - name: Close duplicate open PRs (keep newest)
+        if: always()
+        shell: pwsh
+        run: |
+          $list = gh pr list --search "repo:${{ github.repository }} is:open in:title _inventory snapshot" `
+                  --json number,createdAt --limit 100 | ConvertFrom-Json |
+                  Sort-Object createdAt -Descending
+          if ($list.Count -gt 1) {
+            $keep = $list[0].number
+            $dups = $list | Select-Object -Skip 1
+            foreach ($p in $dups) {
+              gh pr close $p.number -c "Superseded by #$keep"
+            }
+          }
 
