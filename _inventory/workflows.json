@@ -9,8 +9,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/ak-auto.yml",
@@ -22,8 +21,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/ak-commands.yml",
@@ -35,8 +33,7 @@
     "has_push": false,
     "has_issue_comment": true,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/ak-dispatch.yml",
@@ -48,8 +45,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/ak-exec.yml",
@@ -61,8 +57,7 @@
     "has_push": false,
     "has_issue_comment": true,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/ak-loop.yml",
@@ -74,8 +69,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/ak-run.yml",
@@ -87,8 +81,7 @@
     "has_push": false,
     "has_issue_comment": true,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/ak-script-headers.yml",
@@ -100,8 +93,7 @@
     "has_push": true,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/ak-selftest.yml",
@@ -113,8 +105,7 @@
     "has_push": true,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/ak-workflow-headers.yml",
@@ -126,8 +117,7 @@
     "has_push": true,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/ak-workflow-inventory.yml",
@@ -139,8 +129,7 @@
     "has_push": true,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/auto-github-release.yml",
@@ -152,8 +141,7 @@
     "has_push": true,
     "has_issue_comment": false,
     "has_release": true,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/ci.yml",
@@ -165,8 +153,7 @@
     "has_push": true,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/connector-oauth-probe.yml",
@@ -178,8 +165,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/contracts-ci.yml",
@@ -191,8 +177,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/guard-flush-queue.yml",
@@ -204,8 +189,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/guard-logs-ignored.yml",
@@ -217,8 +201,7 @@
     "has_push": true,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/guard-readme-badge.yml",
@@ -230,8 +213,7 @@
     "has_push": true,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/health-smoke.yml",
@@ -243,8 +225,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/housekeeping-smoke.yml",
@@ -256,8 +237,7 @@
     "has_push": true,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/inventory-ci.yml",
@@ -269,8 +249,7 @@
     "has_push": true,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/klc-append-release.yml",
@@ -282,8 +261,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": true,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/klc-nightly-aggregate.yml",
@@ -295,8 +273,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": true,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": true
   },
   {
     "path": ".github/workflows/klc-validate.yml",
@@ -308,8 +285,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/klc-verify.yml",
@@ -321,8 +297,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/lint-actions.yml",
@@ -334,8 +309,7 @@
     "has_push": true,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/post-release-canary.yml",
@@ -347,8 +321,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": true,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/protect-manual.yml",
@@ -360,8 +333,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/psanalyze.yml",
@@ -373,8 +345,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/release-docs.yml",
@@ -386,8 +357,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": true,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/release-one.yml",
@@ -399,8 +369,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": true,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/weekly-auto-release-smoke.yml",
@@ -412,8 +381,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": true,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": true
   },
   {
     "path": ".github/workflows/weekly-housekeeping.yml",
@@ -425,8 +393,7 @@
     "has_push": false,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": true,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": true
   },
   {
     "path": ".github/workflows/wf-allround-tester.yml",
@@ -438,21 +405,19 @@
     "has_push": true,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/wf-inventory-publisher.yml",
     "name": "WF / Inventory Publisher (single PR, no spam)",
     "permissions": "contents: write",
-    "concurrency": "group: wf-inventory-${{ github.ref }}",
+    "concurrency": "group: wf-inventory-publisher   # ref별이 아닌 고정 그룹 → 중복 실행 강제 차단",
     "has_workflow_dispatch": true,
     "has_pull_request": false,
     "has_push": true,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   },
   {
     "path": ".github/workflows/xp-summary-artifact.yml",
@@ -464,7 +429,6 @@
     "has_push": true,
     "has_issue_comment": false,
     "has_release": false,
-    "has_schedule": false,
-    "updated_utc": "2025-11-02T02:54:47Z"
+    "has_schedule": false
   }
 ]
