@@ -1,6 +1,6 @@
 # Workflow Header Comments
 
-> Generated @ 2025-11-02 03:54:39+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
+> Generated @ 2025-11-02 04:48:48+00:00 (`.github/workflows only, exclude=inventory-ci.yml`)
 
 ## `.github/workflows/ak-apply.yml`
 
@@ -434,6 +434,15 @@ YAML 작성 규칙:
 - 탭(\t) 금지, 들여쓰기는 스페이스 2칸
 - 셸 스크립트는 반드시 run: | (블록 스칼라) 사용
 - run: | 아래의 #은 PowerShell 주석(실행되지 않음)
+```
+
+## `.github/workflows/wf-inventory-publisher.yml`
+
+```text
+WF / Inventory Publisher (single PR, no spam)
+- .github/workflows/ 하위가 바뀌면 _inventory/* 를 재생성하고
+'bot/wf-inventory' 단일 브랜치에서 PR 1개만 재사용합니다.
+- Auto-merge는 리포 설정(Allow auto-merge)이 켜져 있어야 실제 자동 병합됩니다.
 ```
 
 ## `.github/workflows/xp-summary-artifact.yml`
