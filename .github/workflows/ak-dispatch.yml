@@ -9,54 +9,24 @@
 #   * concurrency 취소, timeout, Job Summary, PR 코멘트 실패 무해화, 전역 pwsh 고정
 # ===========================================
 
-name: ak-dispatch
-
+# DEPRECATED / QUARANTINE STUB
+name: AK / Dispatch (quarantined)
 on:
-  workflow_dispatch:
-    inputs:
-      cmd:
-        description: 'AK command (예: /ak scan | /ak test | /ak rewrite | /ak fix | /ak help)'
-        type: choice
-        required: true
-        options:
-          - '/ak scan'
-          - '/ak test'
-          - '/ak rewrite'
-          - '/ak fix'
-          - '/ak help'
-      pr:
-        description: 'PR 번호 (선택: 코멘트 대상)'
-        required: false
-        type: string
-        default: ''
-      sha:
-        description: '대상 커밋 SHA (미입력 시 현재 SHA)'
-        required: false
-        type: string
-        default: ''
+  workflow_dispatch: {}
 
 permissions:
   contents: read
-  pull-requests: write
-  issues: write
 
 concurrency:
-  group: ak-dispatch-${{ github.ref }}
+  group: ak-dispatch-quarantine
   cancel-in-progress: true
 
 jobs:
-  run:
-    runs-on:
-      - self-hosted
-      - ghmon-safe
-
-    timeout-minutes: 30
-
-    defaults:
-      run:
-        shell: pwsh
-
+  noop:
+    runs-on: ubuntu-latest
     steps:
+      - run: echo "ak-dispatch quarantined. Use KLC v2 flows."
+
       - name: Announce version
         run: |
           Write-Host 'AK-DISPATCH :: v2 (commented-safe)'
