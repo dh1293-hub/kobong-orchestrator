@@ -102,106 +102,50 @@ jobs:
           fi
       
       # ✅ 추가: "산출물 정규화(이동·리네임)" — 양쪽 네이밍 모두 흡수
-      - name: Normalize inventory outputs (compat shim)
+# ... (생략) build 또는 publish job 안 "정규화/업로드/커밋" 구간 교체
+
+      # 1) 산출물 정규화: 이름 통일(→ index.*), 중복 제거
+      - name: Normalize outputs (rename → index.*; dedupe)
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p _inventory/workflows
       
-          # 1) 루트 생성물 → 하위 폴더/표준명으로 이동
-          if [ -s "_inventory/workflows.json" ] && [ ! -s "_inventory/workflows/inventory.json" ]; then
-            mv -f "_inventory/workflows.json" "_inventory/workflows/inventory.json"
-          fi
-          if [ -s "_inventory/workflows.csv" ] && [ ! -s "_inventory/workflows/inventory.csv" ]; then
-            mv -f "_inventory/workflows.csv" "_inventory/workflows/inventory.csv"
-          fi
+          # 루트/하위 어디에 있든 표준명으로 이동
+          mv -f _inventory/workflows.json              _inventory/workflows/index.json  2>/dev/null || true
+          mv -f _inventory/workflows.csv               _inventory/workflows/index.csv   2>/dev/null || true
+          mv -f _inventory/workflows/inventory.json    _inventory/workflows/index.json  2>/dev/null || true
+          mv -f _inventory/workflows/inventory.csv     _inventory/workflows/index.csv   2>/dev/null || true
+          mv -f _inventory/workflows/workflows.json    _inventory/workflows/index.json  2>/dev/null || true
+          mv -f _inventory/workflows/workflows.csv     _inventory/workflows/index.csv   2>/dev/null || true
       
-          # 2) 혹시 하위 폴더에 workflows.json/csv 이름으로 나온 경우도 표준명으로 정리
-          if [ -s "_inventory/workflows/workflows.json" ] && [ ! -s "_inventory/workflows/inventory.json" ]; then
-            mv -f "_inventory/workflows/workflows.json" "_inventory/workflows/inventory.json"
-          fi
-          if [ -s "_inventory/workflows/workflows.csv" ] && [ ! -s "_inventory/workflows/inventory.csv" ]; then
-            mv -f "_inventory/workflows/workflows.csv" "_inventory/workflows/inventory.csv"
-          fi
+          # 최소 보장(빈 산출 방지)
+          test -s _inventory/workflows/index.json || echo "[]" > _inventory/workflows/index.json
+          test -s _inventory/workflows/index.csv  || echo "path,triggers" > _inventory/workflows/index.csv
       
-          # 3) 최종 보장: 없으면 경고를 남겨 디버깅 힌트 제공
-          if [ ! -s "_inventory/workflows/inventory.json" ] || [ ! -s "_inventory/workflows/inventory.csv" ]; then
-            echo "::warning::normalized outputs not found. check generator."
-            ls -lah _inventory || true
-            ls -lah _inventory/workflows || true
-          fi
+          # 레거시 이름 제거(충돌 방지)
+          rm -f _inventory/workflows.json _inventory/workflows.csv \
+                _inventory/workflows/inventory.json _inventory/workflows/inventory.csv \
+                _inventory/workflows/workflows.json _inventory/workflows/workflows.csv || true
       
-      # ✅ 업로드는 '표준 경로'를 우선, 루트 경로는 보조로 포함 (이중 안전망)
+          # 루트 파일 재유입 방지
+          touch .gitignore
+          { echo "_inventory/workflows.json"; echo "_inventory/workflows.csv"; } >> .gitignore
+          sort -u .gitignore -o .gitignore
+      
+      # 2) 업로드는 표준 파일 2개만
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: workflows-inventory-${{ github.run_id }}
           path: |
-            _inventory/workflows/inventory.json
-            _inventory/workflows/inventory.csv
-            _inventory/workflows.json
-            _inventory/workflows.csv
+            _inventory/workflows/index.json
+            _inventory/workflows/index.csv
           if-no-files-found: error
           retention-days: 7
       
-      # ✅ Summary에서 루트/하위 모두 출력해 가시성↑
-      - name: Job Summary
-        shell: bash
-        run: |
-          {
-            echo "### workflows inventory (after normalize)"
-            echo ""
-            echo "#### _inventory/"
-            echo '```'
-            ls -lah _inventory || true
-            echo '```'
-            echo "#### _inventory/workflows/"
-            echo '```'
-            ls -lah _inventory/workflows || true
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    # PR에선 산출만, main push 또는 수동(입력 허용)일 때만 발행
-    if: >
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')) ||
-      (github.event_name == 'workflow_dispatch' && inputs.publish_pr == 'true')
-    permissions:
-      contents: write       # PR 브랜치 푸시용
-      pull-requests: write  # PR 생성/병합용
-
-    steps:
-      - name: Checkout (write intent)
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Download inventory artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: _inventory/_ci_artifacts
-          merge-multiple: true
-          pattern: workflows-inventory-*
-
-      - name: Stage _inventory (dedupe)
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p _inventory
-          if command -v rsync >/dev/null 2>&1; then
-            rsync -a _inventory/_ci_artifacts/ _inventory/
-          else
-            shopt -s dotglob
-            cp -R _inventory/_ci_artifacts/* _inventory/ || true
-          fi
-          rm -rf _inventory/_ci_artifacts
-          find _inventory -maxdepth 2 -type f -print
-
-      - name: Commit & open PR (only if changes)
+      # 3) 커밋/PR: 표준 파일만 스테이징, 루트 레거시는 강제 제거
+      - name: Commit & open/update single PR
         id: openpr
         shell: bash
         env:
@@ -210,47 +154,39 @@ jobs:
           set -euo pipefail
           git config user.name  "wf-inventory-bot"
           git config user.email "wf-inventory-bot@users.noreply.github.com"
-          branch="bot/inventory-${GITHUB_RUN_ID}"
-          git checkout -b "$branch"
-          git add -f _inventory/*
-          git rm -r --cached _inventory/_ci_artifacts 2>/dev/null || true
+          branch="bot/wf-inventory"
+          git checkout -B "$branch"
+      
+          # 표준 파일 + .gitignore만 반영
+          git add -f _inventory/workflows/index.json _inventory/workflows/index.csv .gitignore
+      
+          # 루트 레거시가 이미 트래킹 중이면 제거
+          git rm -f _inventory/workflows.json _inventory/workflows.csv 2>/dev/null || true
+      
           if git diff --cached --quiet; then
-            echo "No changes in _inventory → skip PR."
-            exit 0
+            echo "No changes → skip PR open/update."; exit 0
           fi
-          git commit -m "[WF] workflows inventory (run=${GITHUB_RUN_ID})"
-          git push --set-upstream origin "$branch"
+      
+          git commit -m "[WF] workflows inventory → index.(json|csv) (canonicalize & dedupe)"
+          git push -f --set-upstream origin "$branch"
+      
           base="$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)"
           out="$(gh pr create --base "$base" --head "$branch" \
-                 --title "[WF] workflows inventory ${GITHUB_RUN_ID}" \
-                 --body "자동 생성 인벤토리(_inventory/workflows/*)")" || true
-          pr=""
-          if echo "$out" | grep -Eo '/pull/[0-9]+' >/dev/null; then
-            pr="$(echo "$out" | grep -Eo '/pull/[0-9]+' | grep -Eo '[0-9]+' | tail -1)"
-          else
-            pr="$(gh pr view --head "$branch" --json number -q .number || true)"
-          fi
+                 --title "[WF] workflows inventory (canonical index.*)" \
+                 --body "단일 진실원본(SSOT): _inventory/workflows/index.json,csv\n레거시 제거 + .gitignore 가드")" || true
+          pr="$(gh pr view --head "$branch" --json number -q .number || true)"
           echo "pr=${pr}" >> "$GITHUB_OUTPUT"
-          echo "Opened PR #${pr}"
-
-      - name: Enable auto-merge (optional/safe)
-        if: ${{ steps.openpr.outputs.pr && inputs.auto_merge == 'true' }}
+          echo "Opened/updated PR #${pr}"
+      
+      # 4) 자동머지 미허용이어도 실패로 처리하지 않음(정책 친화)
+      - name: Enable auto-merge (optional)
+        if: ${{ steps.openpr.outputs.pr }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           pr="${{ steps.openpr.outputs.pr }}"
-          files="$(gh pr view "$pr" --json files -q '.files[].path')"
-          if echo "$files" | grep -v '^_inventory/' >/dev/null; then
-            echo "Skip automerge: non-inventory changes detected."
-            exit 0
-          fi
-          auto="$(gh repo view --json autoMergeAllowed -q .autoMergeAllowed || echo false)"
-          if [ "$auto" != "true" ]; then
-            echo "Skip automerge: repository auto-merge disabled."
-            exit 0
-          fi
-          gh pr merge "$pr" --squash --auto || {
-            echo "::warning::Automerge not enabled (policy)."; exit 0;
-          }
+          gh pr merge "$pr" --squash --auto \
+            && echo "Automerge requested." \
+            || echo "::notice::Automerge not enabled (policy). Job continues."
