@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-bt-${{ github.head_ref || github.ref }}
+  group: ci-bt-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -65,10 +65,9 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const present = '${{ steps.detect.outputs.present }}' === 'true';
-            await core.summary
-              .addHeading('Node', 3)
-              .addRaw(present ? 'Ran install/test.' : 'No package.json found. Skipped.')
+            const p = '${{ steps.detect.outputs.present }}' === 'true';
+            await core.summary.addHeading('Node', 3)
+              .addRaw(p ? 'Ran install/test.' : 'No package.json found. Skipped.')
               .write()
 
   python:
@@ -114,10 +113,9 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const present = '${{ steps.detect.outputs.present }}' === 'true';
-            await core.summary
-              .addHeading('Python', 3)
-              .addRaw(present ? 'Ran install/test.' : 'No pyproject/requirements found. Skipped.')
+            const p = '${{ steps.detect.outputs.present }}' === 'true';
+            await core.summary.addHeading('Python', 3)
+              .addRaw(p ? 'Ran install/test.' : 'No pyproject/requirements found. Skipped.')
               .write()
 
   java:
@@ -153,10 +151,9 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const present = '${{ steps.detect.outputs.present }}' === 'true';
-            await core.summary
-              .addHeading('Java', 3)
-              .addRaw(present ? 'Ran build/test.' : 'No pom.xml/gradle files found. Skipped.')
+            const p = '${{ steps.detect.outputs.present }}' === 'true';
+            await core.summary.addHeading('Java', 3)
+              .addRaw(p ? 'Ran build/test.' : 'No pom.xml/gradle files found. Skipped.')
               .write()
 
   cpp:
@@ -191,8 +188,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const present = '${{ steps.detect.outputs.present }}' === 'true';
-            await core.summary
-              .addHeading('C++', 3)
-              .addRaw(present ? 'Ran cmake/ctest.' : 'No CMakeLists.txt found. Skipped.')
+            const p = '${{ steps.detect.outputs.present }}' === 'true';
+            await core.summary.addHeading('C++', 3)
+              .addRaw(p ? 'Ran cmake/ctest.' : 'No CMakeLists.txt found. Skipped.')
               .write()
