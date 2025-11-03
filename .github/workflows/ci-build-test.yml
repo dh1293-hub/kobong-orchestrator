@@ -7,7 +7,7 @@
 # 의존 : 표준 툴체인(actions/setup-*)
 # 주의 : 프로젝트에 없는 언어는 자동 스킵. 5~15분 내 종료 목표.
 # =========================================
-name: CI / Build & Test
+name: CI
 on:
   pull_request:
     branches:
