@@ -1,4 +1,4 @@
-15) SECURITY.md 템플릿 (복붙 사용)
+15) SECURITY.md 템플릿
 
 아래 전체를 저장소의 루트 / .github/ / docs/ 중 한 곳에 SECURITY.md 파일로 추가하세요.
 
